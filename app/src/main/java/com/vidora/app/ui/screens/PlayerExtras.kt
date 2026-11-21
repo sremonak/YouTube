@@ -706,3 +706,43 @@ fun LiveChatPanel(url: String, initialToken: String, modifier: Modifier = Modifi
         }
     }
 }
+
+/** "Stats for nerds": live codec / resolution / bitrate / buffer / dropped-frame info. */
+@OptIn(ExperimentalMaterial3Api::class)
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+@Composable
+fun StatsSheet(onDismiss: () -> Unit) {
+    val player = com.vidora.app.Graph.player.exoPlayer
+    var tick by androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    androidx.compose.runtime.LaunchedEffect(Unit) { while (true) { kotlinx.coroutines.delay(1000); tick++ } }
+    val rows = androidx.compose.runtime.remember(tick) {
+        val v = player.videoFormat
+        val a = player.audioFormat
+        val size = player.videoSize
+        val counters = player.videoDecoderCounters
+        fun kbps(b: Int) = if (b > 0) "${b / 1000} kbps" else "—"
+        buildList {
+            add("Video" to (v?.let { "${size.width.takeIf { it > 0 } ?: it.width}×${size.height.takeIf { it > 0 } ?: it.height}" + (if (it.frameRate > 0) " @ ${it.frameRate.toInt()} fps" else "") } ?: "Audio only"))
+            add("Video codec" to (v?.let { listOfNotNull(it.codecs, it.sampleMimeType).firstOrNull() } ?: "—"))
+            add("Video bitrate" to (v?.let { kbps(maxOf(it.bitrate, it.averageBitrate, it.peakBitrate)) } ?: "—"))
+            add("Audio codec" to (a?.let { listOfNotNull(it.codecs, it.sampleMimeType).firstOrNull() } ?: "—"))
+            add("Audio" to (a?.let { "${it.sampleRate} Hz · ${it.channelCount} ch · ${kbps(maxOf(it.bitrate, it.averageBitrate, it.peakBitrate))}" } ?: "—"))
+            add("Audio track" to (a?.language ?: "default"))
+            add("Buffer" to "%.1f s".format((player.bufferedPosition - player.currentPosition).coerceAtLeast(0) / 1000f))
+            add("Dropped frames" to (counters?.let { "${it.droppedBufferCount} / ${it.renderedOutputBufferCount}" } ?: "—"))
+            add("Speed" to "${player.playbackParameters.speed}×")
+            add("Volume" to "${(player.volume * 100).toInt()} %")
+        }
+    }
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Text("Stats for nerds", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
+        Column(Modifier.padding(horizontal = 24.dp).padding(bottom = 32.dp).navigationBarsPadding()) {
+            rows.forEach { (k, v) ->
+                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                    Text(k, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(130.dp))
+                    Text(v, style = MaterialTheme.typography.bodyMedium, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+                }
+            }
+        }
+    }
+}

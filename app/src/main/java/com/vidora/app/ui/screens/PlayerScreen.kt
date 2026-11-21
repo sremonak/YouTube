@@ -36,6 +36,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Audiotrack
 import androidx.compose.material.icons.rounded.Bedtime
@@ -127,7 +128,7 @@ import com.vidora.app.ui.components.VideoCard
 import com.vidora.app.util.Format
 import kotlinx.coroutines.delay
 
-private enum class Sheet { NONE, QUALITY, SPEED, SLEEP, QUEUE, CAPTIONS, AUDIO, EQ, COMMENTS, PLAYLIST }
+private enum class Sheet { NONE, QUALITY, SPEED, SLEEP, QUEUE, CAPTIONS, AUDIO, EQ, COMMENTS, PLAYLIST, STATS }
 
 @Composable
 fun PlayerScreen(
@@ -221,6 +222,7 @@ fun PlayerScreen(
         Sheet.QUALITY -> QualitySheet(state) { sheet = Sheet.NONE }
         Sheet.SPEED -> SpeedSheet(state.speed) { sheet = Sheet.NONE }
         Sheet.SLEEP -> SleepSheet(state) { sheet = Sheet.NONE }
+        Sheet.STATS -> StatsSheet { sheet = Sheet.NONE }
         Sheet.QUEUE -> QueueSheet(state, actions) { sheet = Sheet.NONE }
         Sheet.CAPTIONS -> CaptionsSheet(state) { sheet = Sheet.NONE }
         Sheet.AUDIO -> AudioTrackSheet(state) { sheet = Sheet.NONE }
@@ -457,6 +459,7 @@ private fun LazyListScope.detailsSection(
             item { ActionChip(stringResource(R.string.chip_loop), if (state.loop) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat, selected = state.loop) { Graph.player.toggleLoop() } }
             item { ActionChip(if (state.sleepTimerEndsAt > 0 || state.sleepAtEnd) "Sleep on" else "Sleep", Icons.Rounded.Bedtime, selected = state.sleepTimerEndsAt > 0 || state.sleepAtEnd) { openSheet(Sheet.SLEEP) } }
             item { ActionChip("PiP", Icons.Rounded.PictureInPictureAlt) { activity.enterPip() } }
+            item { ActionChip("Stats", Icons.Rounded.Info) { openSheet(Sheet.STATS) } }
             item {
                 ActionChip(stringResource(R.string.chip_share), Icons.Rounded.Share) {
                     val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, item.url).putExtra(Intent.EXTRA_SUBJECT, item.title)

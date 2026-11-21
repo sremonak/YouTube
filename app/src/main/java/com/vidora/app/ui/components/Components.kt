@@ -1,5 +1,8 @@
 package com.vidora.app.ui.components
 
+import androidx.compose.foundation.border
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.composed
 import androidx.compose.ui.res.stringResource
 import com.vidora.app.R
 import com.vidora.app.data.Community
@@ -150,7 +153,7 @@ fun VideoCard(original: VideoItem, actions: VideoActions, modifier: Modifier = M
         val h = history.history.firstOrNull { it.video.url == item.url }
         if (h != null && item.duration > 0) h.positionMs / 1000f / item.duration else 0f
     }
-    val clickModifier = modifier.combinedClickable(onClick = { actions.open(original) }, onLongClick = { menu = true })
+    val clickModifier = modifier.dpadFocusRing().combinedClickable(onClick = { actions.open(original) }, onLongClick = { menu = true })
 
     if (compact) {
         Row(clickModifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
@@ -274,7 +277,7 @@ fun ChannelRow(channel: ChannelItem, onClick: () -> Unit, modifier: Modifier = M
 @Composable
 fun PlaylistCard(playlist: PlaylistItem, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val corner = LocalDesign.current.corner
-    Column(modifier.combinedClickableCompat(onClick).padding(horizontal = 12.dp, vertical = 8.dp)) {
+    Column(modifier.dpadFocusRing().combinedClickableCompat(onClick).padding(horizontal = 12.dp, vertical = 8.dp)) {
         Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(corner.dp)).background(MaterialTheme.colorScheme.surfaceContainerHighest)) {
             AsyncImage(playlist.thumbnail, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             Row(
@@ -432,4 +435,21 @@ fun SectionHeader(title: String, modifier: Modifier = Modifier, action: (@Compos
         Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
         action?.invoke()
     }
+}
+
+/**
+ * Visible focus ring for D-pad / keyboard navigation (Android TV, Chromebooks, hardware keyboards).
+ * Touch users never see it because touch doesn't move focus.
+ */
+fun Modifier.dpadFocusRing(): Modifier = composed {
+    var focused by remember { mutableStateOf(false) }
+    val color = MaterialTheme.colorScheme.primary
+    this
+        .onFocusChanged { focused = it.isFocused }
+        .then(
+            if (focused) Modifier
+                .border(3.dp, color, RoundedCornerShape(LocalDesign.current.corner.dp + 4.dp))
+                .background(color.copy(alpha = 0.08f), RoundedCornerShape(LocalDesign.current.corner.dp + 4.dp))
+            else Modifier
+        )
 }
