@@ -85,6 +85,18 @@ class LibraryStore(context: Context, private val scope: CoroutineScope) {
         else d.copy(subscriptions = (d.subscriptions + channel).sortedBy { it.name.lowercase() })
     }
 
+    /** Merges channels (e.g. imported from the YouTube account); returns how many were new. */
+    fun importSubscriptions(channels: List<ChannelItem>): Int {
+        var added = 0
+        mutate { d ->
+            val known = d.subscriptions.map { it.url }.toHashSet()
+            val fresh = channels.filter { known.add(it.url) }
+            added = fresh.size
+            d.copy(subscriptions = (d.subscriptions + fresh).sortedBy { it.name.lowercase() })
+        }
+        return added
+    }
+
     // search history
     fun addSearch(query: String) = mutate { d ->
         val q = query.trim()

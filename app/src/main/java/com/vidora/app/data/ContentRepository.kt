@@ -2,6 +2,7 @@ package com.vidora.app.data
 
 import android.os.Build
 import android.util.LruCache
+import com.vidora.app.Graph
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.schabi.newpipe.extractor.Image
@@ -38,6 +39,7 @@ enum class SearchFilter(val label: String, val id: String?) {
 
 /** Home feed sections. kioskId == null means "personalised mix". */
 enum class HomeSection(val label: String, val kioskId: String?) {
+    ACCOUNT("Recommended", null),
     FOR_YOU("For you", null),
     LIVE("Live", "live"),
     MUSIC("Music", "trending_music"),
@@ -64,7 +66,7 @@ class ContentRepository {
             filter.id?.let { listOf(it) } ?: emptyList(),
             ""
         )
-        val info = SearchInfo.getInfo(service, handler)
+        val info = authFallback { SearchInfo.getInfo(service, handler) }
         PageResult(info.relatedItems.mapNotNull(::toEntry), nextSearch(handler, info.nextPage))
     }
 
@@ -107,7 +109,7 @@ class ContentRepository {
                 if (now - time < 30 * 60_000) return@io details
             }
         }
-        val info = StreamInfo.getInfo(service, url)
+        val info = authFallback { StreamInfo.getInfo(service, url) }
         val details = info.toDetails()
         streamCache.put(url, now to details)
         details
@@ -194,7 +196,7 @@ class ContentRepository {
     // ---------------------------------------------------------------- channel
 
     suspend fun channel(url: String): ChannelDetails = io {
-        val info = ChannelInfo.getInfo(service, url)
+        val info = authFallback { ChannelInfo.getInfo(service, url) }
         val channel = ChannelItem(
             url = info.url,
             name = info.name,
@@ -244,7 +246,7 @@ class ContentRepository {
     // ---------------------------------------------------------------- playlist
 
     suspend fun playlist(url: String): PlaylistDetails = io {
-        val info = PlaylistInfo.getInfo(service, url)
+        val info = authFallback { PlaylistInfo.getInfo(service, url) }
         PlaylistDetails(
             playlist = PlaylistItem(info.url, info.name, info.thumbnails.best(), info.uploaderName, info.streamCount),
             description = runCatching { info.description?.content().orEmpty() }.getOrDefault(""),
@@ -310,6 +312,29 @@ class ContentRepository {
     }
 
     private suspend fun <T> io(block: suspend () -> T): T = withContext(Dispatchers.IO) { block() }
+
+    /**
+     * Runs an extractor call anonymously first; if YouTube refuses it (age restriction,
+     * "confirm you're not a bot", private/members content…) and the user is signed in,
+     * transparently retries with the account attached.
+     */
+    private fun <T> authFallback(block: () -> T): T {
+        val account = Graph.account
+        return try {
+            block()
+        } catch (t: Throwable) {
+            if (!account.isSignedIn || !useAccountForRestricted) throw t
+            try {
+                account.withAuth(block)
+            } catch (second: Throwable) {
+                second.addSuppressed(t)
+                throw second
+            }
+        }
+    }
+
+    @Volatile
+    var useAccountForRestricted: Boolean = true
 
     companion object {
         /** True when the device can mux WebM (VP9 + Opus) downloads. */

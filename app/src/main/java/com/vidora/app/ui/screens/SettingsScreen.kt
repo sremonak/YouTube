@@ -29,6 +29,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.AlertDialog
@@ -50,6 +51,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -72,6 +74,8 @@ import com.vidora.app.data.AudioPreference
 import com.vidora.app.data.FeedLayout
 import com.vidora.app.data.SponsorCategories
 import com.vidora.app.data.ThemeMode
+import com.vidora.app.ui.Routes
+import com.vidora.app.ui.components.Avatar
 import com.vidora.app.util.IconManager
 import com.vidora.app.util.LauncherCatalog
 import kotlinx.coroutines.launch
@@ -88,6 +92,8 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
     val context = LocalContext.current
     fun update(block: (AppSettings) -> AppSettings) = scope.launch { Graph.settings.update(block) }
     var dialog by remember { mutableStateOf<String?>(null) }
+    val account by Graph.account.session.collectAsState()
+    var importing by remember { mutableStateOf(false) }
 
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         uri ?: return@rememberLauncherForActivityResult
@@ -109,6 +115,70 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
             colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
         )
         LazyColumn(contentPadding = PaddingValues(bottom = 120.dp), modifier = Modifier.fillMaxWidth()) {
+            // ------------------------------------------------------------ account
+            item { Header("Account") }
+            item {
+                val session = account
+                if (session == null) {
+                    ListItem(
+                        leadingContent = { Icon(Icons.Rounded.AccountCircle, null, Modifier.size(40.dp), tint = MaterialTheme.colorScheme.primary) },
+                        headlineContent = { Text("Sign in with YouTube") },
+                        supportingContent = { Text("Removes sign-in restrictions (age-restricted, \"not a bot\" checks) and adds your recommendations, subscriptions, likes & history") },
+                        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.background),
+                        modifier = Modifier.clickable { nav.navigate(Routes.LOGIN) }
+                    )
+                } else {
+                    ListItem(
+                        leadingContent = {
+                            if (session.avatar != null) Avatar(session.avatar, 40)
+                            else Icon(Icons.Rounded.AccountCircle, null, Modifier.size(40.dp), tint = MaterialTheme.colorScheme.primary)
+                        },
+                        headlineContent = { Text(session.name ?: "Signed in") },
+                        supportingContent = { Text(session.handle ?: "YouTube account connected") },
+                        trailingContent = { TextButton(onClick = { dialog = "signout" }) { Text("Sign out") } },
+                        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.background),
+                    )
+                }
+            }
+            if (account != null) {
+                item {
+                    ClickRow("Your YouTube library", "Recommended · Subscriptions feed · Liked · Watch later · History") {
+                        nav.navigate(Routes.LIBRARY) { launchSingleTop = true }
+                    }
+                }
+                item {
+                    ClickRow(
+                        if (importing) "Importing subscriptions…" else "Import YouTube subscriptions",
+                        "Copy the channels you follow into Vidora's subscriptions"
+                    ) {
+                        if (importing) return@ClickRow
+                        importing = true
+                        scope.launch {
+                            val result = runCatching { Graph.library.importSubscriptions(Graph.accountApi.subscriptions()) }
+                            importing = false
+                            Toast.makeText(
+                                context,
+                                result.fold({ "Imported $it new channels" }, { "Import failed: ${it.message}" }),
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    }
+                }
+                item {
+                    SwitchRow("Use account for restricted videos", "Retry age-restricted / blocked videos with your account", s.useAccountForRestricted) { v ->
+                        update { it.copy(useAccountForRestricted = v) }
+                    }
+                }
+                item {
+                    ClickRow("Refresh account info", "Update name and picture") {
+                        scope.launch {
+                            runCatching { Graph.accountApi.accountInfo() }
+                                .onSuccess { it?.let(Graph.account::save); Toast.makeText(context, "Account updated", Toast.LENGTH_SHORT).show() }
+                                .onFailure { Toast.makeText(context, it.message ?: "Failed", Toast.LENGTH_LONG).show() }
+                        }
+                    }
+                }
+            }
             // ------------------------------------------------------------ appearance
             item { Header("Appearance") }
             item {
@@ -259,7 +329,7 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
                     Column(Modifier.padding(16.dp)) {
                         Text("${s.displayName} ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         Text(
-                            "Ad-free · background play · downloads · no account, no tracking. " +
+                            "Ad-free · background play · downloads · optional sign-in, no tracking. " +
                                 "Powered by the open-source NewPipe Extractor (GPLv3), Media3/ExoPlayer and SponsorBlock.",
                             style = MaterialTheme.typography.bodySmall
                         )
@@ -270,6 +340,13 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
     }
 
     when (dialog) {
+        "signout" -> AlertDialog(
+            onDismissRequest = { dialog = null },
+            title = { Text("Sign out?") },
+            text = { Text("Your YouTube session will be removed from this device. Local library and downloads stay.") },
+            confirmButton = { TextButton(onClick = { Graph.account.signOut(); dialog = null }) { Text("Sign out") } },
+            dismissButton = { TextButton(onClick = { dialog = null }) { Text("Cancel") } },
+        )
         "name" -> TextDialog("App display name", s.displayName, onDismiss = { dialog = null }) { v -> update { it.copy(displayName = v.take(24)) } }
         "quality" -> ChoiceDialog("Default video quality", QualityOptions.map { it to "${it}p" }, s.defaultQuality, { dialog = null }) { v -> update { it.copy(defaultQuality = v) } }
         "dlquality" -> ChoiceDialog("Default download quality", QualityOptions.map { it to "${it}p" }, s.downloadQuality, { dialog = null }) { v -> update { it.copy(downloadQuality = v) } }

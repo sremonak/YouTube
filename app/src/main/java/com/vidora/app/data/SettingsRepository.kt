@@ -77,6 +77,7 @@ data class AppSettings(
     val saveSearchHistory: Boolean = true,
     val hideShorts: Boolean = false,
     val onboardingDone: Boolean = false,
+    val useAccountForRestricted: Boolean = true,
 )
 
 class SettingsRepository(private val context: Context) {
@@ -110,6 +111,7 @@ class SettingsRepository(private val context: Context) {
         val searchHistory = booleanPreferencesKey("search_history")
         val hideShorts = booleanPreferencesKey("hide_shorts")
         val onboarding = booleanPreferencesKey("onboarding")
+        val useAccount = booleanPreferencesKey("use_account")
     }
 
     val flow: Flow<AppSettings> = context.dataStore.data.map { p -> p.toSettings() }
@@ -145,6 +147,7 @@ class SettingsRepository(private val context: Context) {
             saveSearchHistory = this[K.searchHistory] ?: d.saveSearchHistory,
             hideShorts = this[K.hideShorts] ?: d.hideShorts,
             onboardingDone = this[K.onboarding] ?: d.onboardingDone,
+            useAccountForRestricted = this[K.useAccount] ?: d.useAccountForRestricted,
         )
     }
 
@@ -179,6 +182,7 @@ class SettingsRepository(private val context: Context) {
             p[K.searchHistory] = s.saveSearchHistory
             p[K.hideShorts] = s.hideShorts
             p[K.onboarding] = s.onboardingDone
+            p[K.useAccount] = s.useAccountForRestricted
         }
     }
 

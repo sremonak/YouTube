@@ -156,6 +156,7 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
         val first = settings == AppSettings() && s != settings
         settings = s
         exoPlayer.skipSilenceEnabled = s.skipSilence
+        Graph.repository.useAccountForRestricted = s.useAccountForRestricted
         if (first && _state.value.current == null) {
             _state.value = _state.value.copy(audioOnly = s.audioOnlyDefault, speed = s.defaultSpeed)
         }

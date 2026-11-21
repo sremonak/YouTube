@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
@@ -28,6 +29,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -41,6 +43,8 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.vidora.app.Graph
+import com.vidora.app.account.AccountFeed
+import com.vidora.app.ui.components.Avatar
 import com.vidora.app.data.AppSettings
 import com.vidora.app.data.Entry
 import com.vidora.app.data.HomeSection
@@ -55,12 +59,16 @@ import com.vidora.app.ui.theme.BrandTitle
 @Composable
 fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSettings) {
     val scope = rememberCoroutineScope()
-    var section by rememberSaveable { mutableStateOf(HomeSection.FOR_YOU) }
-    val pages = remember { HashMap<HomeSection, Paged>() }
+    val session by Graph.account.session.collectAsState()
+    val signedIn = session != null
+    var section by rememberSaveable { mutableStateOf(if (Graph.account.isSignedIn) HomeSection.ACCOUNT else HomeSection.FOR_YOU) }
+    if (!signedIn && section == HomeSection.ACCOUNT) section = HomeSection.FOR_YOU
+    val sections = remember(signedIn) { HomeSection.entries.filter { signedIn || it != HomeSection.ACCOUNT } }
+    val pages = remember(signedIn) { HashMap<HomeSection, Paged>() }
     val paged = pages.getOrPut(section) { Paged(scope) { loadSection(section) } }
     val gridState = rememberLazyGridState()
 
-    LaunchedEffect(section) {
+    LaunchedEffect(section, signedIn) {
         if (paged.items.isEmpty() && !paged.loading) paged.load()
         gridState.scrollToItem(0)
     }
@@ -86,6 +94,11 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
             actions = {
                 IconButton(onClick = { nav.navigate(Routes.search()) }) { Icon(Icons.Rounded.Search, "Search") }
                 IconButton(onClick = { nav.navigate(Routes.SETTINGS) }) { Icon(Icons.Rounded.Settings, "Settings") }
+                IconButton(onClick = { nav.navigate(if (signedIn) Routes.SETTINGS else Routes.LOGIN) }) {
+                    val avatar = session?.avatar
+                    if (avatar != null) Avatar(avatar, 30)
+                    else Icon(Icons.Rounded.AccountCircle, if (signedIn) "Account" else "Sign in")
+                }
             },
             colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
         )
@@ -94,7 +107,7 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.padding(bottom = 4.dp)
         ) {
-            items(HomeSection.entries) { s ->
+            items(sections) { s ->
                 FilterChip(
                     selected = s == section,
                     onClick = { section = s },
@@ -118,6 +131,7 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
 /** "For you" is built locally from the user's own history & searches — no account, no tracking. */
 private suspend fun loadSection(section: HomeSection): PageResult {
     section.kioskId?.let { return Graph.repository.kiosk(it) }
+    if (section == HomeSection.ACCOUNT) return Graph.accountApi.feed(AccountFeed.RECOMMENDED)
     val lib = Graph.library.data.value
     val seeds = buildList {
         addAll(lib.searchHistory.take(5))

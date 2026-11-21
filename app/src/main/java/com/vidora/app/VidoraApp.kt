@@ -7,6 +7,8 @@ import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
+import com.vidora.app.account.AccountApi
+import com.vidora.app.account.AccountManager
 import com.vidora.app.data.ContentRepository
 import com.vidora.app.data.LibraryStore
 import com.vidora.app.data.NetworkDownloader
@@ -49,6 +51,8 @@ object Graph {
     val repository by lazy { ContentRepository() }
     val sponsorBlock by lazy { SponsorBlock(http) }
     val player by lazy { PlayerManager(app, appScope) }
+    val account by lazy { AccountManager(app, appScope) }
+    val accountApi by lazy { AccountApi() }
 
     fun init(application: Application) {
         app = application

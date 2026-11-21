@@ -1,5 +1,6 @@
 package com.vidora.app.data
 
+import com.vidora.app.Graph
 import okhttp3.OkHttpClient
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.schabi.newpipe.extractor.downloader.Downloader
@@ -28,6 +29,26 @@ class NetworkDownloader private constructor(private val client: OkHttpClient) : 
             values.forEach { builder.addHeader(name, it) }
         }
 
+        // Signed-in mode: attach the account session to youtube.com requests (only when the
+        // repository explicitly asks for it, e.g. to unlock a restricted video).
+        val account = Graph.account
+        val host = runCatching { java.net.URI(request.url()).host }.getOrNull().orEmpty()
+        if (account.authActiveOnThisThread() && host in ACCOUNT_HOSTS) {
+            val auth = account.authHeaders()
+            val existingCookie = request.headers().entries
+                .firstOrNull { it.key.equals("Cookie", true) }?.value?.joinToString("; ")
+            // SAPISIDHASH is only valid for web-family clients; other InnerTube clients just get cookies.
+            val clientName = request.headers().entries
+                .firstOrNull { it.key.equals("X-YouTube-Client-Name", true) }?.value?.firstOrNull()
+            val webClient = clientName == null || clientName in WEB_CLIENT_NAMES
+            auth.forEach { (k, v) ->
+                when {
+                    k == "Cookie" -> builder.header("Cookie", listOfNotNull(existingCookie, v).joinToString("; "))
+                    webClient -> builder.header(k, v)
+                }
+            }
+        }
+
         client.newCall(builder.build()).execute().use { response ->
             if (response.code == 429) {
                 throw ReCaptchaException("reCaptcha challenge requested", request.url())
@@ -44,6 +65,9 @@ class NetworkDownloader private constructor(private val client: OkHttpClient) : 
     }
 
     companion object {
+        private val WEB_CLIENT_NAMES = setOf("1", "62", "67")
+        private val ACCOUNT_HOSTS = setOf("www.youtube.com", "m.youtube.com", "music.youtube.com", "youtube.com")
+
         const val USER_AGENT =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0"
 

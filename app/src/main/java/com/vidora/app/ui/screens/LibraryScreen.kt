@@ -19,7 +19,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.AccountCircle
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.DeleteSweep
+import androidx.compose.material.icons.rounded.ThumbUp
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Settings
@@ -48,6 +51,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.vidora.app.Graph
+import com.vidora.app.account.AccountFeed
 import com.vidora.app.data.VideoItem
 import com.vidora.app.ui.Routes
 import com.vidora.app.ui.components.EmptyState
@@ -60,6 +64,7 @@ import com.vidora.app.ui.components.VideoCard
 @Composable
 fun LibraryScreen(nav: NavHostController, actions: VideoActions) {
     val library by Graph.library.data.collectAsState()
+    val session by Graph.account.session.collectAsState()
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
             title = { Text("Library") },
@@ -95,8 +100,30 @@ fun LibraryScreen(nav: NavHostController, actions: VideoActions) {
             item { LibraryRow(Icons.Rounded.Favorite, "Liked videos", "${library.favorites.size} videos") { nav.navigate(Routes.list("liked")) } }
             item { LibraryRow(Icons.Rounded.WatchLater, "Watch later", "${library.watchLater.size} videos") { nav.navigate(Routes.list("later")) } }
             item { LibraryRow(Icons.Rounded.Subscriptions, "Subscriptions", "${library.subscriptions.size} channels") { nav.navigate(Routes.SUBS) } }
+
+            // ---------------------------------------------------------- YouTube account
+            item { SectionHeader(if (session != null) "YouTube account · ${session?.name ?: "signed in"}" else "YouTube account") }
+            if (session == null) {
+                item {
+                    LibraryRow(Icons.Rounded.AccountCircle, "Sign in with YouTube", "Unlock restricted videos and your own feeds") {
+                        nav.navigate(Routes.LOGIN)
+                    }
+                }
+            } else {
+                items(AccountFeed.entries, key = { "acc:" + it.name }) { feed ->
+                    LibraryRow(feed.icon(), feed.label, "From your YouTube account") { nav.navigate(Routes.accountFeed(feed.name)) }
+                }
+            }
         }
     }
+}
+
+private fun AccountFeed.icon(): ImageVector = when (this) {
+    AccountFeed.RECOMMENDED -> Icons.Rounded.AutoAwesome
+    AccountFeed.SUBSCRIPTIONS -> Icons.Rounded.Subscriptions
+    AccountFeed.LIKED -> Icons.Rounded.ThumbUp
+    AccountFeed.WATCH_LATER -> Icons.Rounded.WatchLater
+    AccountFeed.HISTORY -> Icons.Rounded.History
 }
 
 @Composable

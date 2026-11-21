@@ -59,7 +59,9 @@ import com.vidora.app.data.AppSettings
 import com.vidora.app.data.VideoItem
 import com.vidora.app.download.DownloadStatus
 import com.vidora.app.ui.components.VideoActions
+import com.vidora.app.ui.screens.AccountFeedScreen
 import com.vidora.app.ui.screens.ChannelScreen
+import com.vidora.app.ui.screens.LoginScreen
 import com.vidora.app.ui.screens.DownloadsScreen
 import com.vidora.app.ui.screens.HomeScreen
 import com.vidora.app.ui.screens.LibraryScreen
@@ -82,11 +84,14 @@ object Routes {
     const val PLAYLIST = "playlist/{url}"
     const val SETTINGS = "settings"
     const val LIST = "list/{kind}"
+    const val LOGIN = "login"
+    const val ACCOUNT_FEED = "account/{feed}"
 
     fun search(q: String = "") = "search?q=" + Uri.encode(q)
     fun channel(url: String) = "channel/" + Uri.encode(url)
     fun playlist(url: String) = "playlist/" + Uri.encode(url)
     fun list(kind: String) = "list/$kind"
+    fun accountFeed(feed: String) = "account/$feed"
 }
 
 private data class TopDest(val route: String, val label: String, val icon: ImageVector, val selectedIcon: ImageVector)
@@ -140,8 +145,8 @@ fun AppRoot(activity: MainActivity, settings: AppSettings) {
     }
 
     val isTop = topDestinations.any { it.route == route }
-    val showMini = playerState.current != null && route != Routes.PLAYER
-    val showNav = route != Routes.PLAYER
+    val showMini = playerState.current != null && route != Routes.PLAYER && route != Routes.LOGIN
+    val showNav = route != Routes.PLAYER && route != Routes.LOGIN
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
@@ -198,6 +203,10 @@ fun AppRoot(activity: MainActivity, settings: AppSettings) {
                     }
                     composable(Routes.PLAYLIST, arguments = listOf(navArgument("url") { type = NavType.StringType })) { entry ->
                         PlaylistScreen(nav, actions, Uri.decode(entry.arguments?.getString("url").orEmpty()))
+                    }
+                    composable(Routes.LOGIN) { LoginScreen(nav) }
+                    composable(Routes.ACCOUNT_FEED, arguments = listOf(navArgument("feed") { type = NavType.StringType })) { entry ->
+                        AccountFeedScreen(nav, actions, entry.arguments?.getString("feed").orEmpty())
                     }
                     composable(Routes.LIST, arguments = listOf(navArgument("kind") { type = NavType.StringType })) { entry ->
                         VideoListScreen(nav, actions, entry.arguments?.getString("kind").orEmpty())
