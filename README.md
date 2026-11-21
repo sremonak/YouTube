@@ -18,11 +18,20 @@ design — no tracking, everything stored on your device. Signing in with a YouT
 | **Background play** | Keeps playing with the screen off or the app closed. Notification, lock-screen, Bluetooth & headset controls (Media3 `MediaSessionService`). Video decoding pauses in the background to save battery. |
 | **Picture-in-picture** | Auto-PiP when leaving the app (Android 12+ seamless auto-enter) or manual PiP button. |
 | **Downloads** | Download **video** (144p → 4K) or **audio only** (M4A/AAC or WebM/Opus, every bitrate) with size estimates. High-resolution video+audio is merged on-device losslessly using `MediaMuxer` (no FFmpeg, small APK). Resumable 8 MB chunks, progress notifications, Wi-Fi-only option, retry/cancel, open/share/delete. Files go to `Movies/Vidora` and `Music/Vidora`. Offline playback inside the app. |
-| **Player** | Quality picker, audio-only mode, speed 0.25×–3×, loop, sleep timer, skip silence, chapters, resume where you left off, queue (play next / add to queue / shuffle), autoplay next, fullscreen with auto-rotate. |
+| **Player** | Quality picker, audio-only mode, speed 0.25×–3×, loop, sleep timer, skip silence, chapters, resume where you left off, queue (play next / add to queue / shuffle, **remembered across restarts**), autoplay next, fullscreen with auto-rotate. |
+| **Gestures** | Double-tap ±10 s, hold for 2× speed, swipe brightness/volume in fullscreen, pinch to zoom/fill, **seek-bar preview thumbnails** while scrubbing. |
+| **Captions & audio** | Caption picker (manual + auto-generated), **auto-translate** into your language, text size, `.vtt` download. **Audio-language picker** for dubbed / multi-audio videos (remembers your choice). **Equalizer**, bass boost and volume boost. |
+| **Comments** | Comments with replies, pinned and creator-hearted badges, tappable timestamps that seek the video. |
+| **Shorts** | Full-screen vertical swipe player (or turn it off to open Shorts in the normal player). |
+| **Community** | **Return YouTube Dislike** counts, **DeArrow** clickbait-free titles & thumbnails (opt-in). |
+| **Filters** | Block channels ("Don't recommend channel") and keywords, hide watched videos, hide Shorts — applied to every feed. |
 | **SponsorBlock** | Automatically skips sponsors, intros, self-promo, etc. — choose which categories. |
 | **Discover** | Home feed (personal "For you" mix built locally from your history, Live, Music, Gaming, Podcasts, Movies), search with suggestions & history, filters (videos/channels/playlists/music), channels with tabs, playlists with Play-all/Shuffle. |
-| **Library (local)** | Subscriptions + subscription feed, history, liked videos, watch later — all private, no login. Export/Import backup as JSON. |
-| **YouTube sign-in (optional)** | Sign in on Google's own page inside the app to unlock age-restricted videos, get past "confirm you're not a bot" blocks, and see your **Recommended**, **Subscriptions feed**, **Liked**, **Watch later** and **History** — still with no ads. One-tap import of your YouTube subscriptions. |
+| **Library (local)** | Subscriptions + subscription feed, **subscription groups**, history, liked videos, watch later, **your own playlists** (create, rename, reorder, share, download all) — all private, no login. Export/Import backup as JSON. **Import subscriptions** from NewPipe / LibreTube / FreeTube / Google Takeout CSV / OPML, export as NewPipe JSON. |
+| **Notifications** | Optional new-video notifications for your subscriptions (checked every 1–24 h through fast channel RSS feeds, no login needed). |
+| **Platform** | Home-screen **now-playing widget**, **Quick Settings tile**, **Android Auto** browsing (Continue watching, Liked, Watch later, Playlists, Trending music), **Android TV** launcher entry. English + **বাংলা** (per-app language on Android 13+). |
+| **Reliability** | Local **PoToken (BotGuard)** generation like NewPipe, so fewer "not a bot" / HTTP 403 errors; expired stream links are refreshed automatically after long pauses; **in-app updater** from GitHub Releases; crash reporter that opens a pre-filled GitHub issue (no telemetry). |
+| **YouTube sign-in (optional)** | Sign in on Google's own page inside the app to unlock age-restricted videos, get past "confirm you're not a bot" blocks, and see your **Recommended**, **Subscriptions feed**, **Liked**, **Watch later** and **History** — still with no ads. One-tap import of your YouTube subscriptions. Likes, dislikes and subscriptions made in Vidora can be **synced to your account** (toggle). |
 | **Customisation** | Theme (System/Light/Dark/AMOLED black), Material You dynamic colour, 8 accent colours, corner roundness slider, card or compact-list layout, avatars on/off, custom in-app display name, **6 launcher icons × 4 launcher names** switchable from Settings. |
 | **Responsive** | Phones, foldables and tablets: bottom bar on phones, navigation rail + side-by-side player on large screens, adaptive grids, edge-to-edge. |
 | **Open links** | Share any YouTube link to Vidora, or open `youtube.com` / `youtu.be` links with it. |
@@ -106,7 +115,10 @@ app/src/main/java/com/vidora/app/
 │   ├── ContentRepository.kt        search, kiosks, streams, channels, playlists (NewPipe Extractor)
 │   ├── NetworkDownloader.kt        OkHttp transport for the extractor
 │   ├── SettingsRepository.kt       DataStore-backed settings
-│   ├── LibraryStore.kt             local history / likes / watch later / subscriptions (JSON)
+│   ├── LibraryStore.kt             local history / likes / watch later / subscriptions / playlists / groups (JSON)
+│   ├── SubscriptionImport.kt       NewPipe / LibreTube / FreeTube / Takeout CSV / OPML import, NewPipe export
+│   ├── Community.kt                Return YouTube Dislike + DeArrow clients
+│   ├── ContentFilter.kt            blocked channels / keywords / watched / Shorts
 │   └── SponsorBlock.kt             SponsorBlock API client
 ├── account/
 │   ├── AccountManager.kt           session state, SAPISIDHASH auth headers, sign-out
@@ -114,20 +126,26 @@ app/src/main/java/com/vidora/app/
 │   └── SecureStore.kt              Android Keystore AES-GCM encrypted storage
 ├── player/
 │   ├── PlayerManager.kt            single ExoPlayer, quality/audio-only/queue/sleep/SponsorBlock
-│   ├── PlaybackService.kt          MediaSessionService → background playback + notification
+│   ├── PlaybackService.kt          MediaLibraryService → background playback, notification, Android Auto
+│   ├── AutoLibrary.kt              browse tree for Android Auto / Wear
+│   ├── AudioEffects.kt             equalizer, bass boost, loudness enhancer
+│   ├── SessionStore.kt             queue persistence
 │   └── StreamInterceptor.kt        client-matching headers for googlevideo requests
+├── potoken/                        BotGuard PoToken generator (WebView, ported from NewPipe, GPLv3)
+├── notify/                         RSS feed parser + new-video WorkManager job
+├── remote/                         home-screen widget, Quick Settings tile, remote control
 ├── download/
 │   ├── Downloads.kt                quality choices + WorkManager queue
 │   ├── DownloadWorker.kt           chunked, resumable downloader (foreground worker)
 │   ├── Muxer.kt                    lossless video+audio merge (MediaMuxer)
 │   └── Storage.kt                  MediaStore publishing (Movies/Vidora, Music/Vidora)
 ├── ui/                             Compose screens, theme, components, download sheet
-└── util/                           formatting, launcher icon switching
+└── util/                           formatting, launcher icon switching, updater, crash reporter
 tools/gen_icons.py                  generates launcher icons + activity-aliases
 ```
 
 **Tech:** Kotlin 2.3, Jetpack Compose (Material 3), Media3 ExoPlayer 1.9, WorkManager, DataStore,
-Coil, OkHttp, kotlinx.serialization, NewPipe Extractor 0.27.1. Min SDK 26 (Android 8.0), target SDK 36.
+Coil, OkHttp, kotlinx.serialization, NewPipe Extractor 0.27.1. Min SDK 26 (Android 8.0), target SDK 36. Unit tests: `./gradlew testDebugUnitTest`.
 
 ### Adding launcher icons / names
 Edit `ICONS` / `NAMES` in `tools/gen_icons.py`, then run `python3 tools/gen_icons.py` — it rewrites
@@ -164,6 +182,15 @@ Licensed under **GPL-3.0** (see `LICENSE`), as required by NewPipe Extractor.
   - সেশন Android Keystore দিয়ে এনক্রিপ্ট করে শুধু ফোনেই রাখা হয় এবং শুধু youtube.com-এ পাঠানো হয়। Sign out করলে সব মুছে যায়।
   - WebView-এ Google লগইন ব্লক করলে "Paste cookies" অপশন ব্যবহার করুন।
 - 📱 **রেসপন্সিভ** — ফোন, ট্যাবলেট, ফোল্ডেবল সব স্ক্রিনে মানিয়ে যায়।
+- 👆 **জেসচার** — ডাবল-ট্যাপে ±১০ সেকেন্ড, চেপে ধরলে ২× স্পিড, ফুলস্ক্রিনে সোয়াইপ করে ব্রাইটনেস/ভলিউম, পিঞ্চ-জুম, সিক-বারে প্রিভিউ থাম্বনেইল।
+- 💬 **ক্যাপশন ও অডিও ভাষা** — সাবটাইটেল বাছাই, অটো-অনুবাদ, ডাবিং করা ভিডিওর অডিও ভাষা বদল, ইকুয়ালাইজার ও বেস/ভলিউম বুস্ট।
+- 🗨️ **কমেন্ট** (রিপ্লাই সহ), 👎 **ডিসলাইক সংখ্যা** (Return YouTube Dislike), **DeArrow** (ক্লিকবেইট-মুক্ত টাইটেল)।
+- 📱 **Shorts** — ফুলস্ক্রিন ভার্টিকাল সোয়াইপ প্লেয়ার।
+- 🚫 **ফিল্টার** — চ্যানেল বা শব্দ ব্লক, দেখা ভিডিও লুকানো।
+- 🗂 **নিজের প্লেলিস্ট** ও **সাবস্ক্রিপশন গ্রুপ**; NewPipe/LibreTube/Takeout থেকে সাবস্ক্রিপশন ইমপোর্ট।
+- 🔔 **নতুন ভিডিও নোটিফিকেশন**, হোম-স্ক্রিন **উইজেট**, **Quick Settings টাইল**, **Android Auto** ও **Android TV**।
+- 🛡 **PoToken**, এক্সপায়ার্ড লিঙ্ক অটো-রিফ্রেশ, **অ্যাপের ভেতর থেকেই আপডেট**, ক্র্যাশ রিপোর্ট।
+- 🇧🇩 **বাংলা ভাষা** — Android 13+-এ Settings → Apps → Vidora → Language থেকে বাংলা বেছে নিন।
 
 **APK পাওয়ার উপায়:** GitHub-এর **Actions** ট্যাবে গিয়ে সর্বশেষ "Build APK" রান থেকে `Vidora-x.y.z` আর্টিফ্যাক্ট ডাউনলোড করুন, অথবা `v1.0.0` ট্যাগ পুশ করলে Releases-এ APK চলে আসবে।
 

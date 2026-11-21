@@ -72,3 +72,39 @@ Priority: **P0** = keeps the app working, **P1** = premium features users notice
 3. **Sprint 3 (content):** comments, Return YouTube Dislike, DeArrow, Shorts player, content filters.
 4. **Sprint 4 (library):** playlists, notifications, imports, signed-in actions.
 5. **Sprint 5 (polish):** Bengali localisation, Room, baseline profiles, tests, Android Auto/TV.
+
+## Status (implemented in PR #1, build `Vidora-1.0.23`+)
+
+| Item | Status |
+|---|---|
+| PoToken provider (BotGuard WebView, ported from NewPipe) | ✅ Done — Settings → Advanced shows status/toggle |
+| Stream URL expiry / 403 recovery | ✅ Done — up to 3 back-off re-extractions on HTTP errors + pre-emptive refresh when resuming after 4 h |
+| In-app updater | ✅ Done — GitHub Releases, changelog, download + install, "skip this version" |
+| Crash & error reporter | ✅ Done — dialog on next start, copy or open pre-filled GitHub issue; "Report a problem" in Settings |
+| Own release keystore | ⏳ Needs the repo owner to add the `VIDORA_KEYSTORE_B64` secret (CI already supports it) |
+| SABR streaming | ⏳ Waiting for NewPipe Extractor PR #1568; PoToken + client fallback cover today's playback |
+| Gestures (double-tap, hold 2×, swipe brightness/volume, pinch zoom) | ✅ Done |
+| Seek-bar preview thumbnails | ✅ Done |
+| Captions: picker, auto-translate, size, download | ✅ Done (`.vtt`; YouTube doesn't serve `.srt`) |
+| Audio-language picker | ✅ Done (remembered) |
+| Equalizer / bass boost / volume boost | ✅ Done — loudness normalisation via `loudnessDb` is not exposed by the extractor yet |
+| Shorts vertical player | ✅ Done |
+| Queue persistence | ✅ Done |
+| Comments (replies, pinned, hearted, timestamps) | ✅ Done |
+| Live chat | ⏳ Later |
+| Return YouTube Dislike | ✅ Done (attribution in About) |
+| DeArrow | ✅ Done (opt-in) |
+| Content filters | ✅ Done |
+| Local playlists | ✅ Done (create, rename, reorder, share, download all) |
+| Subscription groups | ✅ Done |
+| New-video notifications (RSS + WorkManager) | ✅ Done |
+| Import NewPipe / LibreTube / FreeTube / Takeout / OPML | ✅ Done (+ NewPipe-format export) |
+| Signed-in like / dislike / subscribe sync | ✅ Done (toggle); saving to a YouTube playlist ⏳ later |
+| Batch download playlist | ✅ Done; channel batch, metadata embedding, SD-card picker ⏳ later |
+| Android Auto, widget, Quick Settings tile | ✅ Done |
+| Android TV | ✅ Launcher entry + banner; full D-pad-optimised UI ⏳ later |
+| Bengali localisation | ✅ Navigation, settings sections, player actions, notifications, widget; remaining strings ⏳ ongoing |
+| OkHttp 5 | ✅ 5.1.0 (5.5.x needs compileSdk 37) |
+| Unit tests in CI | ✅ `testDebugUnitTest` (versions, PoToken base64, imports, filters, storyboards, EQ) |
+| F-Droid / fastlane metadata | ✅ `fastlane/metadata/android` |
+| Room, Baseline Profiles, Coil 3, lint/detekt, Piped proxy | ⏳ Later — need larger migrations or an emulator in CI |
