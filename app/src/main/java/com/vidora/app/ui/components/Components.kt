@@ -1,5 +1,7 @@
 package com.vidora.app.ui.components
 
+import androidx.compose.ui.res.stringResource
+import com.vidora.app.R
 import com.vidora.app.data.Community
 import com.vidora.app.data.ContentFilter
 import androidx.compose.runtime.collectAsState
@@ -223,20 +225,20 @@ private fun MoreButton(item: VideoItem, actions: VideoActions, expanded: Boolean
         Icon(Icons.Rounded.MoreVert, contentDescription = "More", modifier = Modifier.size(18.dp))
     }
     DropdownMenu(expanded = expanded, onDismissRequest = { onExpanded(false) }) {
-        DropdownMenuItem(text = { Text("Play next") }, onClick = { Graph.player.enqueue(item, playNextUp = true); onExpanded(false) })
-        DropdownMenuItem(text = { Text("Add to queue") }, onClick = { Graph.player.enqueue(item); onExpanded(false) })
+        DropdownMenuItem(text = { Text(stringResource(R.string.ui_play_next)) }, onClick = { Graph.player.enqueue(item, playNextUp = true); onExpanded(false) })
+        DropdownMenuItem(text = { Text(stringResource(R.string.ui_add_to_queue)) }, onClick = { Graph.player.enqueue(item); onExpanded(false) })
         DropdownMenuItem(
             text = { Text(if (library.watchLater.any { it.url == item.url }) "Remove from Watch later" else "Save to Watch later") },
             onClick = { Graph.library.toggleWatchLater(item); onExpanded(false) })
         DropdownMenuItem(
             text = { Text(if (library.favorites.any { it.url == item.url }) "Remove from Liked" else "Add to Liked") },
             onClick = { Graph.library.toggleFavorite(item); onExpanded(false) })
-        DropdownMenuItem(text = { Text("Save to playlist") }, onClick = { playlistSheet = true; onExpanded(false) })
-        DropdownMenuItem(text = { Text("Download") }, leadingIcon = { Icon(Icons.Rounded.Download, null) },
+        DropdownMenuItem(text = { Text(stringResource(R.string.ui_save_to_playlist)) }, onClick = { playlistSheet = true; onExpanded(false) })
+        DropdownMenuItem(text = { Text(stringResource(R.string.ui_download)) }, leadingIcon = { Icon(Icons.Rounded.Download, null) },
             onClick = { actions.download(item); onExpanded(false) })
         item.uploaderUrl?.let { url ->
-            DropdownMenuItem(text = { Text("Go to channel") }, onClick = { actions.openChannel(url); onExpanded(false) })
-            DropdownMenuItem(text = { Text("Don't recommend channel") }, onClick = {
+            DropdownMenuItem(text = { Text(stringResource(R.string.ui_go_to_channel)) }, onClick = { actions.openChannel(url); onExpanded(false) })
+            DropdownMenuItem(text = { Text(stringResource(R.string.ui_don_t_recommend_channel)) }, onClick = {
                 onExpanded(false)
                 scope.launch {
                     Graph.settings.update { it.copy(blockedChannels = it.blockedChannels + ContentFilter.encodeChannel(url, item.uploader.orEmpty())) }
@@ -332,7 +334,7 @@ fun EntryGrid(
                 ErrorState(paged.error ?: "", onRetry = { paged.load() })
             }
             paged.items.isEmpty() && !paged.loading -> item(span = { GridItemSpan(maxLineSpan) }) {
-                EmptyState("Nothing here yet", "Try another search or category.")
+                EmptyState(stringResource(R.string.ui_nothing_here_yet), stringResource(R.string.ui_try_another_search_or_category))
             }
         }
         items(visible, key = { it.key }, span = { e ->
@@ -399,10 +401,10 @@ fun ErrorState(message: String, onRetry: () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Icon(Icons.Rounded.CloudOff, null, Modifier.size(56.dp), tint = MaterialTheme.colorScheme.primary)
         Spacer(Modifier.height(12.dp))
-        Text("Something went wrong", style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.ui_something_went_wrong), style = MaterialTheme.typography.titleMedium)
         Text(message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 4)
         Spacer(Modifier.height(16.dp))
-        FilledTonalButton(onClick = onRetry) { Text("Try again") }
+        FilledTonalButton(onClick = onRetry) { Text(stringResource(R.string.ui_try_again)) }
     }
 }
 

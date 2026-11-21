@@ -1,5 +1,7 @@
 package com.vidora.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.vidora.app.R
 import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -133,7 +135,7 @@ fun ShortsScreen(nav: NavHostController, actions: VideoActions) {
                     }
                     if (state.loading) CircularProgressIndicator(Modifier.align(Alignment.Center), color = Color.White)
                     state.error?.let {
-                        Text("Couldn't play this short", color = Color.White, modifier = Modifier.align(Alignment.Center))
+                        Text(stringResource(R.string.ui_couldn_t_play_this_short), color = Color.White, modifier = Modifier.align(Alignment.Center))
                     }
                 } else {
                     AsyncImage(item.thumbnail, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())

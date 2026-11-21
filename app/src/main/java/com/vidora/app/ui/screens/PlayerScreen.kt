@@ -297,7 +297,7 @@ private fun VideoSurface(modifier: Modifier, state: PlayerUiState, showControls:
                 AsyncImage(state.current.thumbnail, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize(), alpha = 0.35f)
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Rounded.Audiotrack, null, tint = Color.White, modifier = Modifier.size(48.dp))
-                    Text("Audio only mode", color = Color.White, style = MaterialTheme.typography.labelLarge)
+                    Text(stringResource(R.string.ui_audio_only_mode), color = Color.White, style = MaterialTheme.typography.labelLarge)
                     Spacer(Modifier.height(8.dp))
                     IconButton(
                         onClick = { Graph.player.togglePlay() },
@@ -320,10 +320,10 @@ private fun VideoSurface(modifier: Modifier, state: PlayerUiState, showControls:
         }
         state.error?.let { err ->
             Column(Modifier.background(Color.Black.copy(alpha = 0.7f)).padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Playback failed", color = Color.White, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.ui_playback_failed), color = Color.White, fontWeight = FontWeight.Bold)
                 Text(err, color = Color.White.copy(alpha = 0.8f), maxLines = 3, style = MaterialTheme.typography.bodySmall)
                 Spacer(Modifier.height(8.dp))
-                Button(onClick = { Graph.player.retry() }) { Text("Retry") }
+                Button(onClick = { Graph.player.retry() }) { Text(stringResource(R.string.ui_retry)) }
             }
         }
     }
@@ -547,7 +547,7 @@ private fun QualitySheet(state: PlayerUiState, onDismiss: () -> Unit) {
         .map { (_, list) -> list.firstOrNull { it.codec?.startsWith("avc") == true } ?: list.first() }
         .sortedByDescending { it.height * 1000 + it.fps }
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        Text("Video quality", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
+        Text(stringResource(R.string.ui_video_quality), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
         LazyColumn(Modifier.navigationBarsPadding(), contentPadding = PaddingValues(bottom = 24.dp)) {
             items(options) { opt ->
                 ListItem(
@@ -559,8 +559,8 @@ private fun QualitySheet(state: PlayerUiState, onDismiss: () -> Unit) {
             }
             item {
                 ListItem(
-                    headlineContent = { Text("Audio only") },
-                    supportingContent = { Text("Saves data · keeps playing with the screen off") },
+                    headlineContent = { Text(stringResource(R.string.ui_audio_only)) },
+                    supportingContent = { Text(stringResource(R.string.ui_saves_data_keeps_playing_with_the_screen)) },
                     leadingContent = { RadioButton(selected = state.audioOnly, onClick = null) },
                     modifier = Modifier.clickable { Graph.player.setAudioOnly(true); onDismiss() }
                 )
@@ -574,7 +574,7 @@ private fun QualitySheet(state: PlayerUiState, onDismiss: () -> Unit) {
 private fun SpeedSheet(current: Float, onDismiss: () -> Unit) {
     val speeds = listOf(0.25f, 0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f, 2.5f, 3f)
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        Text("Playback speed", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
+        Text(stringResource(R.string.ui_playback_speed), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
         LazyColumn(Modifier.navigationBarsPadding(), contentPadding = PaddingValues(bottom = 24.dp)) {
             items(speeds) { s ->
                 ListItem(
@@ -593,18 +593,18 @@ private fun SleepSheet(state: PlayerUiState, onDismiss: () -> Unit) {
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) { while (true) { delay(1000); now = System.currentTimeMillis() } }
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        Text("Sleep timer", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
+        Text(stringResource(R.string.ui_sleep_timer), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
         if (state.sleepTimerEndsAt > 0) {
             val left = ((state.sleepTimerEndsAt - now) / 1000).coerceAtLeast(0)
             Text("Pausing in ${Format.duration(left)}", color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 24.dp))
         }
         if (state.sleepAtEnd) {
-            Text("Stopping when this video ends", color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 24.dp))
+            Text(stringResource(R.string.ui_stopping_when_this_video_ends), color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 24.dp))
         }
         LazyColumn(Modifier.navigationBarsPadding(), contentPadding = PaddingValues(bottom = 24.dp)) {
             item {
                 ListItem(
-                    headlineContent = { Text("End of current video") },
+                    headlineContent = { Text(stringResource(R.string.ui_end_of_current_video)) },
                     modifier = Modifier.clickable { Graph.player.setSleepAtEnd(); onDismiss() }
                 )
             }
@@ -622,7 +622,7 @@ private fun SleepSheet(state: PlayerUiState, onDismiss: () -> Unit) {
 @Composable
 private fun QueueSheet(state: PlayerUiState, actions: VideoActions, onDismiss: () -> Unit) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        Text("Queue", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
+        Text(stringResource(R.string.ui_queue), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
         LazyColumn(Modifier.navigationBarsPadding(), contentPadding = PaddingValues(bottom = 24.dp)) {
             itemsIndexed(state.queue, key = { _, v -> v.url }) { index, v ->
                 val isCurrent = index == state.queueIndex

@@ -1,5 +1,7 @@
 package com.vidora.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.vidora.app.R
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -72,7 +74,7 @@ fun PlaylistScreen(nav: NavHostController, actions: VideoActions, url: String) {
                 Column(Modifier.statusBarsPadding().padding(bottom = 8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") }
-                        Text("Playlist", style = MaterialTheme.typography.titleMedium)
+                        Text(stringResource(R.string.ui_playlist), style = MaterialTheme.typography.titleMedium)
                     }
                     Text(d.playlist.name, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(horizontal = 16.dp))
                     Text(
@@ -89,13 +91,13 @@ fun PlaylistScreen(nav: NavHostController, actions: VideoActions, url: String) {
                         Button(onClick = {
                             videos.firstOrNull()?.let { Graph.player.play(it, videos); nav.navigate(Routes.PLAYER) }
                         }, modifier = Modifier.weight(1f)) {
-                            Icon(Icons.Rounded.PlayArrow, null); Spacer(Modifier.width(6.dp)); Text("Play all")
+                            Icon(Icons.Rounded.PlayArrow, null); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.ui_play_all))
                         }
                         FilledTonalButton(onClick = {
                             val shuffled = videos.shuffled()
                             shuffled.firstOrNull()?.let { Graph.player.play(it, shuffled); nav.navigate(Routes.PLAYER) }
                         }, modifier = Modifier.weight(1f)) {
-                            Icon(Icons.Rounded.Shuffle, null); Spacer(Modifier.width(6.dp)); Text("Shuffle")
+                            Icon(Icons.Rounded.Shuffle, null); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.ui_shuffle))
                         }
                         var batch by remember { mutableStateOf(false) }
                         IconButton(onClick = { batch = true }, enabled = videos.isNotEmpty()) { Icon(Icons.Rounded.Download, "Download all") }

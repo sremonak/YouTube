@@ -60,26 +60,26 @@ fun FiltersScreen(nav: NavHostController) {
         LazyColumn(contentPadding = PaddingValues(bottom = 120.dp)) {
             item {
                 ListItem(
-                    headlineContent = { Text("Hide Shorts") },
+                    headlineContent = { Text(stringResource(R.string.ui_hide_shorts)) },
                     trailingContent = { Switch(s.hideShorts, { v -> update { it.copy(hideShorts = v) } }) }
                 )
                 ListItem(
-                    headlineContent = { Text("Hide watched videos") },
-                    supportingContent = { Text("Videos you've watched at least 90% of") },
+                    headlineContent = { Text(stringResource(R.string.ui_hide_watched_videos)) },
+                    supportingContent = { Text(stringResource(R.string.ui_videos_you_ve_watched_at_least_90_of)) },
                     trailingContent = { Switch(s.hideWatched, { v -> update { it.copy(hideWatched = v) } }) }
                 )
             }
             item {
-                Text("Blocked keywords", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp))
-                Text("Videos whose titles contain these words are hidden everywhere.", style = MaterialTheme.typography.bodySmall,
+                Text(stringResource(R.string.ui_blocked_keywords), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp))
+                Text(stringResource(R.string.ui_videos_whose_titles_contain_these_words), style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp))
                 Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(keyword, { keyword = it }, singleLine = true, label = { Text("Keyword") }, modifier = Modifier.weight(1f))
+                    OutlinedTextField(keyword, { keyword = it }, singleLine = true, label = { Text(stringResource(R.string.ui_keyword)) }, modifier = Modifier.weight(1f))
                     Spacer(Modifier.width(8.dp))
                     FilledTonalButton(enabled = keyword.isNotBlank(), onClick = {
                         val k = keyword.trim(); keyword = ""
                         update { it.copy(blockedKeywords = it.blockedKeywords + k) }
-                    }) { Text("Add") }
+                    }) { Text(stringResource(R.string.ui_add)) }
                 }
             }
             items(s.blockedKeywords.sorted(), key = { "k:$it" }) { k ->
@@ -89,9 +89,9 @@ fun FiltersScreen(nav: NavHostController) {
                 )
             }
             item {
-                Text("Blocked channels", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp))
+                Text(stringResource(R.string.ui_blocked_channels), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp))
                 if (s.blockedChannels.isEmpty()) {
-                    Text("Use “Don't recommend channel” in any video's ⋮ menu.", style = MaterialTheme.typography.bodySmall,
+                    Text(stringResource(R.string.ui_use_don_t_recommend_channel_in_any_video), style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp))
                 }
             }

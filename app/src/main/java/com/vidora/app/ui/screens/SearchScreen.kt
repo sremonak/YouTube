@@ -1,5 +1,7 @@
 package com.vidora.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.vidora.app.R
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -113,7 +115,7 @@ fun SearchScreen(nav: NavHostController, actions: VideoActions, initialQuery: St
             TextField(
                 value = text,
                 onValueChange = { text = it; editing = true },
-                placeholder = { Text("Search videos, channels, music…") },
+                placeholder = { Text(stringResource(R.string.ui_search_videos_channels_music)) },
                 singleLine = true,
                 leadingIcon = { Icon(Icons.Rounded.Search, null) },
                 trailingIcon = {

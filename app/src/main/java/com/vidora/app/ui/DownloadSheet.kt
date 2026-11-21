@@ -1,5 +1,7 @@
 package com.vidora.app.ui
 
+import androidx.compose.ui.res.stringResource
+import com.vidora.app.R
 import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -92,7 +94,7 @@ fun DownloadSheet(video: VideoItem, onDismiss: () -> Unit) {
                 Thumbnail(video, Modifier.width(112.dp))
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
-                    Text("Download", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                    Text(stringResource(R.string.ui_download), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                     Text(video.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
             }
@@ -109,17 +111,17 @@ fun DownloadSheet(video: VideoItem, onDismiss: () -> Unit) {
                             selected = tab == 0, onClick = { tab = 0; selected = videoChoices.firstOrNull() },
                             shape = SegmentedButtonDefaults.itemShape(0, 2),
                             icon = { Icon(Icons.Rounded.Movie, null, Modifier.size(18.dp)) }
-                        ) { Text("Video") }
+                        ) { Text(stringResource(R.string.ui_video)) }
                         SegmentedButton(
                             selected = tab == 1, onClick = { tab = 1; selected = audioChoices.firstOrNull() },
                             shape = SegmentedButtonDefaults.itemShape(1, 2),
                             icon = { Icon(Icons.Rounded.Audiotrack, null, Modifier.size(18.dp)) }
-                        ) { Text("Audio only") }
+                        ) { Text(stringResource(R.string.ui_audio_only)) }
                     }
                     Spacer(Modifier.height(8.dp))
                     val list: List<DownloadChoice> = if (tab == 0) videoChoices else audioChoices
                     if (list.isEmpty()) {
-                        Text("No downloadable streams found.", modifier = Modifier.padding(24.dp))
+                        Text(stringResource(R.string.ui_no_downloadable_streams_found), modifier = Modifier.padding(24.dp))
                     }
                     LazyColumn(Modifier.heightIn(max = 380.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         items(list) { choice ->

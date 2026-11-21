@@ -1,5 +1,7 @@
 package com.vidora.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.vidora.app.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -107,7 +109,7 @@ fun ChannelScreen(nav: NavHostController, actions: VideoActions, url: String) {
                                     Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                                         androidx.compose.material3.AssistChip(
                                             onClick = { Graph.player.play(loadedVideos.first(), loadedVideos); nav.navigate(com.vidora.app.ui.Routes.PLAYER) },
-                                            label = { Text("Play all") },
+                                            label = { Text(stringResource(R.string.ui_play_all)) },
                                             leadingIcon = { Icon(Icons.Rounded.PlayArrow, null, Modifier.size(18.dp)) }
                                         )
                                         Spacer(Modifier.width(8.dp))
@@ -159,8 +161,8 @@ private fun ChannelHeader(d: ChannelDetails, onBack: () -> Unit) {
         }
         Spacer(Modifier.height(12.dp))
         val modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
-        if (subscribed) FilledTonalButton(onClick = { Graph.library.toggleSubscription(d.channel) }, modifier = modifier) { Text("Subscribed") }
-        else Button(onClick = { Graph.library.toggleSubscription(d.channel) }, modifier = modifier) { Text("Subscribe") }
+        if (subscribed) FilledTonalButton(onClick = { Graph.library.toggleSubscription(d.channel) }, modifier = modifier) { Text(stringResource(R.string.ui_subscribed)) }
+        else Button(onClick = { Graph.library.toggleSubscription(d.channel) }, modifier = modifier) { Text(stringResource(R.string.ui_subscribe)) }
         Spacer(Modifier.height(8.dp))
     }
 }

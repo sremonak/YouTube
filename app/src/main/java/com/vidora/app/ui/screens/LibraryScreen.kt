@@ -96,21 +96,21 @@ fun LibraryScreen(nav: NavHostController, actions: VideoActions) {
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
                     ) {
                         Text(
-                            "Incognito is on — nothing you watch or search is saved.",
+                            stringResource(R.string.ui_incognito_is_on_nothing_you_watch_or_sea),
                             style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(12.dp)
                         )
                     }
                 }
             }
             item {
-                SectionHeader("Recently watched") {
-                    TextButton(onClick = { nav.navigate(Routes.list("history")) }) { Text("See all") }
+                SectionHeader(stringResource(R.string.ui_recently_watched)) {
+                    TextButton(onClick = { nav.navigate(Routes.list("history")) }) { Text(stringResource(R.string.ui_see_all)) }
                 }
             }
             item {
                 val recent = library.history.take(12)
                 if (recent.isEmpty()) {
-                    Text("Videos you watch will show up here.", style = MaterialTheme.typography.bodyMedium,
+                    Text(stringResource(R.string.ui_videos_you_watch_will_show_up_here), style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                 } else {
                     LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -134,8 +134,8 @@ fun LibraryScreen(nav: NavHostController, actions: VideoActions) {
             // ---------------------------------------------------------- local playlists
             item {
                 var creating by remember { mutableStateOf(false) }
-                SectionHeader("Playlists") {
-                    TextButton(onClick = { creating = true }) { Text("New") }
+                SectionHeader(stringResource(R.string.ui_playlists)) {
+                    TextButton(onClick = { creating = true }) { Text(stringResource(R.string.ui_new)) }
                 }
                 if (creating) {
                     com.vidora.app.ui.components.NameDialog("New playlist", "", "Create", onDismiss = { creating = false }) { name ->
@@ -146,7 +146,7 @@ fun LibraryScreen(nav: NavHostController, actions: VideoActions) {
             }
             if (library.playlists.isEmpty()) {
                 item {
-                    Text("Create playlists from any video's ⋮ menu → Save to playlist.", style = MaterialTheme.typography.bodyMedium,
+                    Text(stringResource(R.string.ui_create_playlists_from_any_video_s_menu_s), style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
                 }
             }
@@ -208,7 +208,7 @@ fun VideoListScreen(nav: NavHostController, actions: VideoActions, kind: String)
             navigationIcon = { IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") } },
             actions = {
                 if (videos.isNotEmpty()) {
-                    TextButton(onClick = { Graph.player.play(videos.first(), videos); nav.navigate(Routes.PLAYER) }) { Text("Play all") }
+                    TextButton(onClick = { Graph.player.play(videos.first(), videos); nav.navigate(Routes.PLAYER) }) { Text(stringResource(R.string.ui_play_all)) }
                 }
                 if (kind == "history" && videos.isNotEmpty()) {
                     IconButton(onClick = { confirmClear = true }) { Icon(Icons.Rounded.DeleteSweep, "Clear history") }
@@ -217,7 +217,7 @@ fun VideoListScreen(nav: NavHostController, actions: VideoActions, kind: String)
             colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
         )
         if (videos.isEmpty()) {
-            EmptyState("Nothing here yet", "Videos you add will appear here.")
+            EmptyState(stringResource(R.string.ui_nothing_here_yet), stringResource(R.string.ui_videos_you_add_will_appear_here))
         } else {
             LazyColumn(contentPadding = PaddingValues(bottom = 120.dp)) {
                 items(videos, key = { it.url }) { v -> VideoCard(v, actions, compact = true) }
@@ -227,10 +227,10 @@ fun VideoListScreen(nav: NavHostController, actions: VideoActions, kind: String)
     if (confirmClear) {
         AlertDialog(
             onDismissRequest = { confirmClear = false },
-            title = { Text("Clear watch history?") },
-            text = { Text("This removes all watched videos and resume positions.") },
-            confirmButton = { TextButton(onClick = { Graph.library.clearHistory(); confirmClear = false }) { Text("Clear") } },
-            dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("Cancel") } }
+            title = { Text(stringResource(R.string.ui_clear_watch_history)) },
+            text = { Text(stringResource(R.string.ui_this_removes_all_watched_videos_and_resu)) },
+            confirmButton = { TextButton(onClick = { Graph.library.clearHistory(); confirmClear = false }) { Text(stringResource(R.string.ui_clear)) } },
+            dismissButton = { TextButton(onClick = { confirmClear = false }) { Text(stringResource(R.string.ui_cancel)) } }
         )
     }
 }

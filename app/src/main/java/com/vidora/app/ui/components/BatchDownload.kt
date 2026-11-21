@@ -1,5 +1,7 @@
 package com.vidora.app.ui.components
 
+import androidx.compose.ui.res.stringResource
+import com.vidora.app.R
 import android.widget.Toast
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.AlertDialog
@@ -29,13 +31,13 @@ fun BatchDownloadDialog(videos: List<VideoItem>, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Download ${videos.size} videos?") },
-        text = { Text("Each video is saved with your default download quality. Videos already in Downloads are skipped.") },
+        text = { Text(stringResource(R.string.ui_each_video_is_saved_with_your_default_do)) },
         confirmButton = {
             Column {
-                TextButton(onClick = { start(audioOnly = false) }) { Text("Video") }
-                TextButton(onClick = { start(audioOnly = true) }) { Text("Audio only") }
+                TextButton(onClick = { start(audioOnly = false) }) { Text(stringResource(R.string.ui_video)) }
+                TextButton(onClick = { start(audioOnly = true) }) { Text(stringResource(R.string.ui_audio_only)) }
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.ui_cancel)) } },
     )
 }

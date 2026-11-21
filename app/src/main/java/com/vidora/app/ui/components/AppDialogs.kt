@@ -1,5 +1,7 @@
 package com.vidora.app.ui.components
 
+import androidx.compose.ui.res.stringResource
+import com.vidora.app.R
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -75,10 +77,10 @@ fun CrashDialog(report: String, onDismiss: () -> Unit) {
     val context = LocalContext.current
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Vidora closed unexpectedly") },
+        title = { Text(stringResource(R.string.ui_vidora_closed_unexpectedly)) },
         text = {
             Column {
-                Text("Sharing this report helps fix the problem. It contains no personal data — only the app version, device model and error.")
+                Text(stringResource(R.string.ui_sharing_this_report_helps_fix_the_proble))
                 Spacer(Modifier.height(8.dp))
                 Text(
                     report, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace,
@@ -93,15 +95,15 @@ fun CrashDialog(report: String, onDismiss: () -> Unit) {
                     "&body=" + Uri.encode("```\n" + report.take(6000) + "\n```")
                 runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
                 onDismiss()
-            }) { Text("Report on GitHub") }
+            }) { Text(stringResource(R.string.ui_report_on_github)) }
         },
         dismissButton = {
             Column {
                 TextButton(onClick = {
                     context.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Vidora crash", report))
                     Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
-                }) { Text("Copy") }
-                TextButton(onClick = onDismiss) { Text("Dismiss") }
+                }) { Text(stringResource(R.string.ui_copy)) }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.ui_dismiss)) }
             }
         }
     )
@@ -151,8 +153,8 @@ fun UpdateDialog(info: UpdateInfo, onSkip: (() -> Unit)? = null, onDismiss: () -
         dismissButton = {
             if (progress == null) {
                 Column {
-                    if (onSkip != null) TextButton(onClick = onSkip) { Text("Skip this version") }
-                    TextButton(onClick = onDismiss) { Text("Later") }
+                    if (onSkip != null) TextButton(onClick = onSkip) { Text(stringResource(R.string.ui_skip_this_version)) }
+                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.ui_later)) }
                 }
             }
         }

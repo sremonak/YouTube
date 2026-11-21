@@ -1,5 +1,7 @@
 package com.vidora.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.vidora.app.R
 import android.Manifest
 import android.content.ActivityNotFoundException
 import android.content.Intent
@@ -100,7 +102,7 @@ fun DownloadsScreen(nav: NavHostController) {
         TopAppBar(
             title = {
                 Column {
-                    Text("Downloads")
+                    Text(stringResource(R.string.ui_downloads))
                     Text("${items.count { it.status == DownloadStatus.COMPLETED }} files · ${Format.bytes(totalSize)}",
                         style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -114,8 +116,8 @@ fun DownloadsScreen(nav: NavHostController) {
         }
         if (visible.isEmpty()) {
             EmptyState(
-                "No downloads yet",
-                "Tap Download on any video to save it as video or audio in the quality you choose. Files go to Movies/Vidora and Music/Vidora.",
+                stringResource(R.string.ui_no_downloads_yet),
+                stringResource(R.string.ui_tap_download_on_any_video_to_save_it_as),
                 Icons.Rounded.Download
             )
         } else {
@@ -138,13 +140,13 @@ fun DownloadsScreen(nav: NavHostController) {
     deleteTarget?.let { r ->
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
-            title = { Text("Delete download?") },
+            title = { Text(stringResource(R.string.ui_delete_download)) },
             text = { Text(r.video.title) },
             confirmButton = {
-                TextButton(onClick = { Downloads.delete(context, r.id, deleteFile = true); deleteTarget = null }) { Text("Delete file") }
+                TextButton(onClick = { Downloads.delete(context, r.id, deleteFile = true); deleteTarget = null }) { Text(stringResource(R.string.ui_delete_file)) }
             },
             dismissButton = {
-                TextButton(onClick = { Downloads.delete(context, r.id, deleteFile = false); deleteTarget = null }) { Text("Remove from list") }
+                TextButton(onClick = { Downloads.delete(context, r.id, deleteFile = false); deleteTarget = null }) { Text(stringResource(R.string.ui_remove_from_list)) }
             }
         )
     }
@@ -196,13 +198,13 @@ private fun DownloadRow(record: DownloadRecord, onPlay: () -> Unit, onDelete: ()
             IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.MoreVert, "More") }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                 if (record.status == DownloadStatus.COMPLETED) {
-                    DropdownMenuItem(text = { Text("Open with…") }, leadingIcon = { Icon(Icons.AutoMirrored.Rounded.OpenInNew, null) }, onClick = {
+                    DropdownMenuItem(text = { Text(stringResource(R.string.ui_open_with)) }, leadingIcon = { Icon(Icons.AutoMirrored.Rounded.OpenInNew, null) }, onClick = {
                         menu = false
                         val uri = Storage.shareableUri(context, record) ?: return@DropdownMenuItem
                         val intent = Intent(Intent.ACTION_VIEW).setDataAndType(uri, record.mime).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                         try { context.startActivity(Intent.createChooser(intent, "Open with")) } catch (_: ActivityNotFoundException) {}
                     })
-                    DropdownMenuItem(text = { Text("Share file") }, leadingIcon = { Icon(Icons.Rounded.Share, null) }, onClick = {
+                    DropdownMenuItem(text = { Text(stringResource(R.string.ui_share_file)) }, leadingIcon = { Icon(Icons.Rounded.Share, null) }, onClick = {
                         menu = false
                         val uri = Storage.shareableUri(context, record) ?: return@DropdownMenuItem
                         val intent = Intent(Intent.ACTION_SEND).setType(record.mime).putExtra(Intent.EXTRA_STREAM, uri)
@@ -210,7 +212,7 @@ private fun DownloadRow(record: DownloadRecord, onPlay: () -> Unit, onDelete: ()
                         context.startActivity(Intent.createChooser(intent, "Share"))
                     })
                 }
-                DropdownMenuItem(text = { Text("Delete") }, leadingIcon = { Icon(Icons.Rounded.Delete, null) }, onClick = { menu = false; onDelete() })
+                DropdownMenuItem(text = { Text(stringResource(R.string.ui_delete)) }, leadingIcon = { Icon(Icons.Rounded.Delete, null) }, onClick = { menu = false; onDelete() })
             }
         }
     }

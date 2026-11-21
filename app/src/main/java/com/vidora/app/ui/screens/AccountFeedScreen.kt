@@ -1,5 +1,7 @@
 package com.vidora.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.vidora.app.R
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
@@ -43,7 +45,7 @@ fun AccountFeedScreen(nav: NavHostController, actions: VideoActions, feedName: S
             actions = {
                 val videos = paged.items.filterIsInstance<Entry.Video>().map { it.video }
                 if (videos.isNotEmpty()) {
-                    TextButton(onClick = { Graph.player.play(videos.first(), videos); nav.navigate(Routes.PLAYER) }) { Text("Play all") }
+                    TextButton(onClick = { Graph.player.play(videos.first(), videos); nav.navigate(Routes.PLAYER) }) { Text(stringResource(R.string.ui_play_all)) }
                 }
             },
             colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)

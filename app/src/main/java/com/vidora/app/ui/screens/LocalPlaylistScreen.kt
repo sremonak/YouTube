@@ -1,5 +1,7 @@
 package com.vidora.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.vidora.app.R
 import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -87,18 +89,18 @@ fun LocalPlaylistScreen(nav: NavHostController, actions: VideoActions, id: Strin
             colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
         )
         if (playlist.videos.isEmpty()) {
-            EmptyState("Empty playlist", "Use “Save to playlist” on any video to add it here.")
+            EmptyState(stringResource(R.string.ui_empty_playlist), stringResource(R.string.ui_use_save_to_playlist_on_any_video_to_add))
             return@Column
         }
         Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Button(onClick = { Graph.player.play(playlist.videos.first(), playlist.videos); nav.navigate(Routes.PLAYER) }) {
-                Icon(Icons.Rounded.PlayArrow, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Play all")
+                Icon(Icons.Rounded.PlayArrow, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.ui_play_all))
             }
             FilledTonalButton(onClick = {
                 val shuffled = playlist.videos.shuffled()
                 Graph.player.play(shuffled.first(), shuffled); nav.navigate(Routes.PLAYER)
             }) {
-                Icon(Icons.Rounded.Shuffle, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Shuffle")
+                Icon(Icons.Rounded.Shuffle, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.ui_shuffle))
             }
             Spacer(Modifier.weight(1f))
             TextButton(onClick = { editing = !editing }) { Text(if (editing) "Done" else "Edit") }
@@ -132,9 +134,9 @@ fun LocalPlaylistScreen(nav: NavHostController, actions: VideoActions, id: Strin
         AlertDialog(
             onDismissRequest = { deleting = false },
             title = { Text("Delete “${playlist.name}”?") },
-            text = { Text("The videos themselves are not affected.") },
-            confirmButton = { TextButton(onClick = { deleting = false; Graph.library.deletePlaylist(id) }) { Text("Delete") } },
-            dismissButton = { TextButton(onClick = { deleting = false }) { Text("Cancel") } },
+            text = { Text(stringResource(R.string.ui_the_videos_themselves_are_not_affected)) },
+            confirmButton = { TextButton(onClick = { deleting = false; Graph.library.deletePlaylist(id) }) { Text(stringResource(R.string.ui_delete)) } },
+            dismissButton = { TextButton(onClick = { deleting = false }) { Text(stringResource(R.string.ui_cancel)) } },
         )
     }
 }

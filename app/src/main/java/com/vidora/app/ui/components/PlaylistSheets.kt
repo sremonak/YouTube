@@ -1,5 +1,7 @@
 package com.vidora.app.ui.components
 
+import androidx.compose.ui.res.stringResource
+import com.vidora.app.R
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -73,17 +75,17 @@ fun AddToPlaylistSheet(video: VideoItem, onDismiss: () -> Unit) {
         }
     }
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        Text("Save to playlist", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
+        Text(stringResource(R.string.ui_save_to_playlist), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
         LazyColumn(Modifier.navigationBarsPadding(), contentPadding = PaddingValues(bottom = 24.dp)) {
             item {
                 ListItem(
-                    headlineContent = { Text("New playlist") },
+                    headlineContent = { Text(stringResource(R.string.ui_new_playlist)) },
                     leadingContent = { Icon(Icons.Rounded.Add, null) },
                     modifier = Modifier.clickable { creating = true }
                 )
             }
             if (library.playlists.isNotEmpty() || session != null) {
-                item { Text("On this device", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)) }
+                item { Text(stringResource(R.string.ui_on_this_device), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)) }
             }
             items(library.playlists, key = { it.id }) { p ->
                 val contains = p.videos.any { it.url == video.url }
@@ -102,12 +104,12 @@ fun AddToPlaylistSheet(video: VideoItem, onDismiss: () -> Unit) {
             }
             if (session != null && videoId != null) {
                 item {
-                    Text("YouTube account", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 12.dp, bottom = 4.dp))
+                    Text(stringResource(R.string.ui_youtube_account), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 12.dp, bottom = 4.dp))
                 }
                 item {
                     ListItem(
-                        headlineContent = { Text("New YouTube playlist") },
-                        supportingContent = { Text("Private") },
+                        headlineContent = { Text(stringResource(R.string.ui_new_youtube_playlist)) },
+                        supportingContent = { Text(stringResource(R.string.ui_private)) },
                         leadingContent = { Icon(Icons.Rounded.Add, null) },
                         modifier = Modifier.clickable { creatingRemote = true }
                     )
@@ -153,8 +155,8 @@ fun NameDialog(title: String, initial: String, confirm: String, onDismiss: () ->
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
-        text = { OutlinedTextField(text, { text = it }, singleLine = true, label = { Text("Name") }) },
+        text = { OutlinedTextField(text, { text = it }, singleLine = true, label = { Text(stringResource(R.string.ui_name)) }) },
         confirmButton = { TextButton(onClick = { onConfirm(text.trim()) }, enabled = text.isNotBlank()) { Text(confirm) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.ui_cancel)) } },
     )
 }

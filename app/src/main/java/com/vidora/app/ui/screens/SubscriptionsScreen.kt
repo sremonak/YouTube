@@ -1,5 +1,7 @@
 package com.vidora.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.vidora.app.R
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -86,20 +88,20 @@ fun SubscriptionsScreen(nav: NavHostController, actions: VideoActions) {
 
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
-            title = { Text("Subscriptions") },
+            title = { Text(stringResource(R.string.ui_subscriptions)) },
             actions = { IconButton(onClick = { nav.navigate(Routes.search()) }) { Icon(Icons.Rounded.Search, "Search") } },
             colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
         )
         if (subs.isEmpty()) {
             EmptyState(
-                "No subscriptions yet",
-                "Subscribe to channels — they are stored privately on this device, no account needed.",
+                stringResource(R.string.ui_no_subscriptions_yet),
+                stringResource(R.string.ui_subscribe_to_channels_they_are_stored_pr),
                 Icons.Rounded.Subscriptions
             )
             return@Column
         }
         LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            item { FilterChip(selected = group == null, onClick = { groupId = null }, label = { Text("All") }) }
+            item { FilterChip(selected = group == null, onClick = { groupId = null }, label = { Text(stringResource(R.string.ui_all)) }) }
             items(library.groups, key = { "g:" + it.id }) { g ->
                 FilterChip(
                     selected = g.id == groupId,
@@ -108,7 +110,7 @@ fun SubscriptionsScreen(nav: NavHostController, actions: VideoActions) {
                     trailingIcon = if (g.id == groupId) ({ Icon(Icons.Rounded.Edit, "Edit group", Modifier.size(16.dp).clickable { editing = g }) }) else null,
                 )
             }
-            item { AssistChip(onClick = { creating = true }, label = { Text("New group") }, leadingIcon = { Icon(Icons.Rounded.Add, null, Modifier.size(16.dp)) }) }
+            item { AssistChip(onClick = { creating = true }, label = { Text(stringResource(R.string.ui_new_group)) }, leadingIcon = { Icon(Icons.Rounded.Add, null, Modifier.size(16.dp)) }) }
         }
         LazyRow(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             items(shownSubs, key = { it.url }) { c ->
@@ -142,9 +144,9 @@ private fun GroupEditor(initial: SubscriptionGroup?, channels: List<ChannelItem>
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.padding(horizontal = 20.dp)) {
             Text(if (initial == null) "New group" else "Edit group", style = MaterialTheme.typography.titleLarge)
-            OutlinedTextField(name, { name = it }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
+            OutlinedTextField(name, { name = it }, label = { Text(stringResource(R.string.ui_name)) }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if (initial != null) TextButton(onClick = { Graph.library.deleteGroup(initial.id); onDone(null) }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+                if (initial != null) TextButton(onClick = { Graph.library.deleteGroup(initial.id); onDone(null) }) { Text(stringResource(R.string.ui_delete), color = MaterialTheme.colorScheme.error) }
                 Spacer(Modifier.weight(1f))
                 Button(enabled = name.isNotBlank(), onClick = { onDone(Graph.library.saveGroup(initial?.id, name, selected.toList())) }) { Text("Save · ${selected.size}") }
             }

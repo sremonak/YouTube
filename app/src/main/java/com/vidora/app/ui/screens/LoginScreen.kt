@@ -1,5 +1,7 @@
 package com.vidora.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.vidora.app.R
 import android.annotation.SuppressLint
 import android.graphics.Bitmap
 import android.webkit.CookieManager
@@ -95,7 +97,7 @@ private fun Intro(onContinue: () -> Unit, onCookiesPasted: (String) -> Unit) {
         ) {
             Icon(Icons.Rounded.VerifiedUser, null, Modifier.size(72.dp), tint = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.height(16.dp))
-            Text("Sign in to your YouTube account", style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
+            Text(stringResource(R.string.ui_sign_in_to_your_youtube_account), style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
             Spacer(Modifier.height(8.dp))
             Text(
                 "Unlock age-restricted videos, fix \"confirm you're not a bot\" errors, and get your recommendations, " +
@@ -114,9 +116,9 @@ private fun Intro(onContinue: () -> Unit, onCookiesPasted: (String) -> Unit) {
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center
             )
             Spacer(Modifier.height(24.dp))
-            Button(onClick = onContinue, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text("Continue to Google sign-in") }
+            Button(onClick = onContinue, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text(stringResource(R.string.ui_continue_to_google_sign_in)) }
             Spacer(Modifier.height(8.dp))
-            TextButton(onClick = { pasteDialog = true }) { Text("Google sign-in blocked? Paste cookies instead") }
+            TextButton(onClick = { pasteDialog = true }) { Text(stringResource(R.string.ui_google_sign_in_blocked_paste_cookies_ins)) }
         }
     }
 }
@@ -136,7 +138,7 @@ private fun CookieDialog(onDismiss: () -> Unit, onSave: (String) -> Unit) {
     val valid = AccountManager.hasSessionCookies(text.trim())
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Paste YouTube cookies") },
+        title = { Text(stringResource(R.string.ui_paste_youtube_cookies)) },
         text = {
             Column {
                 Text(
@@ -153,8 +155,8 @@ private fun CookieDialog(onDismiss: () -> Unit, onSave: (String) -> Unit) {
                 )
             }
         },
-        confirmButton = { TextButton(enabled = valid, onClick = { onSave(text.trim().removePrefix("Cookie:").trim()) }) { Text("Sign in") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        confirmButton = { TextButton(enabled = valid, onClick = { onSave(text.trim().removePrefix("Cookie:").trim()) }) { Text(stringResource(R.string.ui_sign_in)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.ui_cancel)) } },
     )
 }
 
@@ -237,7 +239,7 @@ private fun SignInWebView(nav: NavHostController) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     CircularProgressIndicator()
                     Spacer(Modifier.height(12.dp))
-                    Text("Finishing sign-in…")
+                    Text(stringResource(R.string.ui_finishing_sign_in))
                 }
             }
         }
