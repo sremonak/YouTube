@@ -1,5 +1,7 @@
 package com.vidora.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.vidora.app.R
 import android.content.Intent
 import android.os.Build
 import android.widget.Toast
@@ -135,13 +137,13 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
 
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
-            title = { Text("Settings") },
+            title = { Text(stringResource(R.string.settings)) },
             navigationIcon = { IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") } },
             colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
         )
         LazyColumn(contentPadding = PaddingValues(bottom = 120.dp), modifier = Modifier.fillMaxWidth()) {
             // ------------------------------------------------------------ account
-            item { Header("Account") }
+            item { Header(stringResource(R.string.h_account)) }
             item {
                 val session = account
                 if (session == null) {
@@ -210,7 +212,7 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
                 }
             }
             // ------------------------------------------------------------ appearance
-            item { Header("Appearance") }
+            item { Header(stringResource(R.string.h_appearance)) }
             item {
                 Column(Modifier.padding(horizontal = 16.dp)) {
                     Text("Theme", style = MaterialTheme.typography.titleSmall)
@@ -267,7 +269,7 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
             item { SwitchRow("Channel avatars in feed", null, s.showChannelAvatars) { v -> update { it.copy(showChannelAvatars = v) } } }
 
             // ------------------------------------------------------------ icon & name
-            item { Header("App icon & launcher name") }
+            item { Header(stringResource(R.string.h_icon)) }
             item {
                 Column(Modifier.padding(horizontal = 16.dp)) {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -305,7 +307,7 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
             }
 
             // ------------------------------------------------------------ player
-            item { Header("Player") }
+            item { Header(stringResource(R.string.h_player)) }
             item { ClickRow("Default video quality", "${s.defaultQuality}p") { dialog = "quality" } }
             item { ClickRow("Default playback speed", "${s.defaultSpeed}x") { dialog = "speed" } }
             item { SwitchRow("Background playback", "Keep playing when the app is closed or the screen is off", s.backgroundPlay) { v -> update { it.copy(backgroundPlay = v) } } }
@@ -319,7 +321,7 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
             item { ClickRow("Equalizer & audio boost", if (s.eqEnabled || s.volumeBoost > 0) "On" else "Off") { showEq = true } }
 
             // ------------------------------------------------------------ captions & audio language
-            item { Header("Captions & audio language") }
+            item { Header(stringResource(R.string.h_captions)) }
             item { SwitchRow("Show captions by default", null, s.captionsEnabled) { v -> update { it.copy(captionsEnabled = v) } } }
             item { ClickRow("Caption language", s.captionLang.ifBlank { "Device language (${java.util.Locale.getDefault().displayLanguage})" }) { dialog = "caplang" } }
             item { SwitchRow("Auto-translate captions", "Translate into your device language when no matching track exists", s.captionTranslate) { v -> update { it.copy(captionTranslate = v) } } }
@@ -332,20 +334,20 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
             item { ClickRow("Preferred audio track", s.preferredAudioLang.ifBlank { "Original" }) { update { it.copy(preferredAudioLang = "") }; Toast.makeText(context, "Reset to original audio. Pick a dubbed track from the player to remember it.", Toast.LENGTH_LONG).show() } }
 
             // ------------------------------------------------------------ community
-            item { Header("Community features") }
+            item { Header(stringResource(R.string.h_community)) }
             item { SwitchRow("Return YouTube Dislike", "Show dislike counts from returnyoutubedislike.com", s.returnDislike) { v -> update { it.copy(returnDislike = v) } } }
             item { SwitchRow("DeArrow", "Replace clickbait titles & thumbnails with community ones (dearrow.ajay.app)", s.deArrow) { v -> update { it.copy(deArrow = v) } } }
             item { SwitchRow("Vertical Shorts player", "Swipe through Shorts full-screen", s.shortsPlayer) { v -> update { it.copy(shortsPlayer = v) } } }
             item { ClickRow("Content filters", "${s.blockedChannels.size} blocked channels · ${s.blockedKeywords.size} keywords") { nav.navigate(Routes.FILTERS) } }
 
             // ------------------------------------------------------------ notifications
-            item { Header("Notifications") }
+            item { Header(stringResource(R.string.h_notifications)) }
             item {
                 ClickRow("New video notifications", if (s.notifyHours <= 0) "Off" else "Check subscriptions every ${s.notifyHours} h") { dialog = "notify" }
             }
 
             // ------------------------------------------------------------ sponsorblock
-            item { Header("SponsorBlock") }
+            item { Header(stringResource(R.string.h_sponsorblock)) }
             item { SwitchRow("Skip sponsored segments", "Community-submitted segments from sponsor.ajay.app", s.sponsorBlock) { v -> update { it.copy(sponsorBlock = v) } } }
             if (s.sponsorBlock) {
                 item {
@@ -360,14 +362,14 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
             }
 
             // ------------------------------------------------------------ downloads
-            item { Header("Downloads") }
+            item { Header(stringResource(R.string.h_downloads)) }
             item { SwitchRow("Ask quality every time", "Choose video/audio and quality before each download", s.askDownloadQuality) { v -> update { it.copy(askDownloadQuality = v) } } }
             item { ClickRow("Default download quality", "${s.downloadQuality}p") { dialog = "dlquality" } }
             item { ClickRow("Preferred audio format", s.downloadAudioPref.label) { dialog = "audiofmt" } }
             item { SwitchRow("Download on Wi-Fi only", null, s.downloadWifiOnly) { v -> update { it.copy(downloadWifiOnly = v) } } }
 
             // ------------------------------------------------------------ content & privacy
-            item { Header("Content & privacy") }
+            item { Header(stringResource(R.string.h_content)) }
             item { ClickRow("Content country", Countries.firstOrNull { it.first == s.contentCountry }?.second ?: s.contentCountry) { dialog = "country" } }
             item { SwitchRow("Hide Shorts", null, s.hideShorts) { v -> update { it.copy(hideShorts = v) } } }
             item { ClickRow("Import subscriptions", "From NewPipe, LibreTube, FreeTube (JSON), Google Takeout (CSV) or OPML") { subsImportLauncher.launch(arrayOf("*/*")) } }
@@ -381,7 +383,7 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
             item { ClickRow("Reset all settings", null) { dialog = "reset" } }
 
             // ------------------------------------------------------------ advanced
-            item { Header("Advanced") }
+            item { Header(stringResource(R.string.h_advanced)) }
             item {
                 SwitchRow("Use PoToken (BotGuard)", "Generates YouTube integrity tokens locally to avoid playback errors. Status: ${com.vidora.app.potoken.PoTokenProviderImpl.lastStatus}", s.poToken) { v ->
                     update { it.copy(poToken = v) }
@@ -410,7 +412,7 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
             }
 
             // ------------------------------------------------------------ about
-            item { Header("About") }
+            item { Header(stringResource(R.string.h_about)) }
             item {
                 Card(
                     Modifier.fillMaxWidth().padding(16.dp),

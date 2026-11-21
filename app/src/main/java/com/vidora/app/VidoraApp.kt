@@ -95,6 +95,7 @@ class VidoraApp : Application(), ImageLoaderFactory {
             Graph.settingsState.collect { PoTokenProviderImpl.enabled = it.poToken }
         }
         NewVideosWorker.schedule(this)
+        if (com.vidora.app.remote.NowPlayingWidget.hasWidgets(this)) com.vidora.app.remote.NowPlayingWidget.observe(this)
         createChannels()
     }
 

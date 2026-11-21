@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 320x180 Android TV launcher banner -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp" android:height="180dp"
+    android:viewportWidth="320" android:viewportHeight="180">
+    <path android:pathData="M0,0h320v180h-320z">
+        <aapt:attr xmlns:aapt="http://schemas.android.com/aapt" name="android:fillColor">
+            <gradient android:type="linear" android:startX="0" android:startY="0" android:endX="320" android:endY="180">
+                <item android:offset="0" android:color="#FFFF3B5C" />
+                <item android:offset="1" android:color="#FF7A1FFF" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path android:fillColor="#33FFFFFF" android:pathData="M90,90m-46,0a46,46 0,1 1,92 0a46,46 0,1 1,-92 0" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M76,64v52c0,3 3.3,4.8 5.8,3.2l41,-26c2.4,-1.5 2.4,-5 0,-6.5l-41,-26C79.3,59.2 76,61 76,64z" />
+    <!-- "VIDORA" wordmark as simple strokes-free blocks -->
+    <path android:fillColor="#FFFFFFFF" android:pathData="M160,76h8l7,20 7,-20h8l-11,30h-8z M194,76h7v30h-7z M206,76h11c9,0 15,6 15,15s-6,15 -15,15h-11z M213,82v18h4c5,0 8,-3.5 8,-9s-3,-9 -8,-9z M236,91c0,-9 7,-15.5 15.5,-15.5S267,82 267,91s-7,15.5 -15.5,15.5S236,100 236,91z M243,91c0,5 3.6,9 8.5,9s8.5,-4 8.5,-9 -3.6,-9 -8.5,-9 -8.5,4 -8.5,9z M270,76h11c6,0 10,3.5 10,9 0,4 -2,6.8 -5.5,8l6.5,13h-8l-5.6,-12h-1.4v12h-7z M277,82v7h3.5c2.3,0 3.5,-1.3 3.5,-3.5s-1.2,-3.5 -3.5,-3.5z M300,76h7l11,30h-7.5l-2,-6h-10l-2,6h-7.5z M300.5,94h6l-3,-9.5z" />
+</vector>

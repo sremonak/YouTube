@@ -139,7 +139,21 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
 
         override fun play() {
             val s = _state.value
-            if (s.restored && s.current != null) this@PlayerManager.play(s.current, s.queue) else super.play()
+            if (s.restored && s.current != null) this@PlayerManager.play(s.current, s.queue)
+            else if (!refreshIfStale()) super.play()
+        }
+
+        // Items chosen in Android Auto / other MediaBrowsers arrive as placeholders → resolve them.
+        override fun setMediaItems(mediaItems: MutableList<MediaItem>, startIndex: Int, startPositionMs: Long) {
+            if (!routeBrowserItems(mediaItems, startIndex)) super.setMediaItems(mediaItems, startIndex, startPositionMs)
+        }
+
+        override fun setMediaItems(mediaItems: MutableList<MediaItem>, resetPosition: Boolean) {
+            if (!routeBrowserItems(mediaItems, 0)) super.setMediaItems(mediaItems, resetPosition)
+        }
+
+        override fun setMediaItem(mediaItem: MediaItem) {
+            if (!routeBrowserItems(mutableListOf(mediaItem), 0)) super.setMediaItem(mediaItem)
         }
 
         override fun hasNextMediaItem(): Boolean = true
@@ -236,6 +250,8 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
                     thumbnail = details.item.thumbnail ?: item.thumbnail,
                     uploaderAvatar = details.item.uploaderAvatar ?: item.uploaderAvatar,
                 )
+                detailsFetchedAt = System.currentTimeMillis()
+                refreshAttempts = 0
                 _state.value = _state.value.copy(
                     current = merged, details = details, loading = false,
                     subtitle = defaultSubtitle(details),
@@ -364,6 +380,7 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
         if (s.restored && s.current != null) {
             play(s.current, s.queue); return
         }
+        if (!exoPlayer.isPlaying && refreshIfStale()) return
         if (exoPlayer.isPlaying) exoPlayer.pause() else {
             if (exoPlayer.playbackState == Player.STATE_ENDED) exoPlayer.seekTo(0)
             exoPlayer.play()
@@ -535,21 +552,23 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
                 PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
                 PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
                 PlaybackException.ERROR_CODE_IO_INVALID_HTTP_CONTENT_TYPE,
-            ) && !refreshing
+            ) && !refreshing && refreshAttempts < 3
         ) {
             refreshing = true
+            refreshAttempts++
             val position = exoPlayer.currentPosition
             scope.launch(Dispatchers.Main) {
+                if (refreshAttempts > 1) delay(1_500L * refreshAttempts) // back off on repeated 403s
                 runCatching {
                     val fresh = Graph.repository.stream(details.item.url, forceRefresh = true)
-                    _state.value = _state.value.copy(details = fresh)
+                    detailsFetchedAt = System.currentTimeMillis()
+                    _state.value = _state.value.copy(details = fresh, error = null)
                     // decoder failure → fall back to a muxed/H.264 stream
                     val fallback = if (error.errorCode == PlaybackException.ERROR_CODE_DECODER_INIT_FAILED) {
                         fresh.videoStreams.firstOrNull { it.codec?.startsWith("avc") == true && it.height <= (s.quality?.height ?: 720) }
                     } else s.quality?.let { q -> fresh.videoStreams.firstOrNull { it.itag == q.itag } }
                     prepare(fresh, position, true, fallback)
                 }.onFailure { _state.value = _state.value.copy(error = it.message) }
-                delay(5_000)
                 refreshing = false
             }
             return
@@ -557,7 +576,43 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
         _state.value = s.copy(error = error.localizedMessage ?: "Playback error")
     }
 
+    private fun routeBrowserItems(items: List<MediaItem>, startIndex: Int): Boolean {
+        if (items.isEmpty() || items.none { AutoLibrary.isVidoraId(it.mediaId) }) return false
+        val videos = items.mapNotNull { AutoLibrary.videoFor(it) }
+        val start = videos.getOrNull(startIndex) ?: videos.firstOrNull() ?: return false
+        val queue = if (videos.size > 1) videos else AutoLibrary.queueFor(start)
+        scope.launch(Dispatchers.Main) { play(start, queue) }
+        return true
+    }
+
     private var refreshing = false
+    private var refreshAttempts = 0
+    private var detailsFetchedAt = 0L
+
+    /**
+     * googlevideo URLs expire (~6 h). When resuming after a long pause, re-extract first so
+     * playback continues instead of failing with HTTP 403. Returns true if a refresh was started.
+     */
+    private fun refreshIfStale(): Boolean {
+        val s = _state.value
+        val details = s.details ?: return false
+        if (s.localFile || details.item.isLive || refreshing) return false
+        if (System.currentTimeMillis() - detailsFetchedAt < STREAM_MAX_AGE_MS) return false
+        refreshing = true
+        val position = exoPlayer.currentPosition
+        _state.value = s.copy(loading = true)
+        scope.launch(Dispatchers.Main) {
+            runCatching { Graph.repository.stream(details.item.url, forceRefresh = true) }
+                .onSuccess { fresh ->
+                    detailsFetchedAt = System.currentTimeMillis()
+                    _state.value = _state.value.copy(details = fresh, loading = false, error = null)
+                    prepare(fresh, position, true, _state.value.quality?.let { q -> fresh.videoStreams.firstOrNull { it.itag == q.itag } })
+                }
+                .onFailure { _state.value = _state.value.copy(loading = false, error = it.message) }
+            refreshing = false
+        }
+        return true
+    }
 
     private fun loadSponsorSegments(item: VideoItem) {
         if (!settings.sponsorBlock || item.isLive) return
@@ -601,5 +656,10 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
 
     fun toast(message: String) {
         scope.launch(Dispatchers.Main) { Toast.makeText(context, message, Toast.LENGTH_SHORT).show() }
+    }
+
+    private companion object {
+        /** Re-extract before resuming if the stream URLs are older than this. */
+        const val STREAM_MAX_AGE_MS = 4 * 60 * 60 * 1000L
     }
 }

@@ -1,5 +1,7 @@
 package com.vidora.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.vidora.app.R
 import android.app.Activity
 import android.content.Intent
 import android.content.pm.ActivityInfo
@@ -387,14 +389,14 @@ private fun LazyListScope.detailsSection(
             if (uploaderUrl != null) {
                 if (subscribed) {
                     FilledTonalButton(onClick = { Graph.library.toggleSubscription(com.vidora.app.data.ChannelItem(uploaderUrl, item.uploader.orEmpty(), item.uploaderAvatar)) }) {
-                        Text("Subscribed")
+                        Text(stringResource(R.string.subscribed))
                     }
                 } else {
                     Button(onClick = {
                         Graph.library.toggleSubscription(
                             com.vidora.app.data.ChannelItem(uploaderUrl, item.uploader.orEmpty(), item.uploaderAvatar, details?.subscriberCount ?: -1)
                         )
-                    }) { Text("Subscribe") }
+                    }) { Text(stringResource(R.string.subscribe)) }
                 }
             }
         }
@@ -410,7 +412,7 @@ private fun LazyListScope.detailsSection(
         ) {
             item {
                 ActionChip(
-                    if (details != null && details.likes >= 0) Format.count(details.likes) else "Like",
+                    if (details != null && details.likes >= 0) Format.count(details.likes) else stringResource(R.string.chip_like),
                     if (liked) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder, selected = liked
                 ) { Graph.library.toggleFavorite(item) }
             }
@@ -422,7 +424,7 @@ private fun LazyListScope.detailsSection(
                     if (settings.returnDislike) votes = Graph.repository.videoId(item.url)?.let { com.vidora.app.data.Community.votes(it) }
                 }
                 val count = votes?.dislikes?.let { it + if (disliked) 1 else 0 }
-                ActionChip(count?.let { Format.count(it) } ?: "Dislike", Icons.Rounded.ThumbDown, selected = disliked) {
+                ActionChip(count?.let { Format.count(it) } ?: stringResource(R.string.chip_dislike), Icons.Rounded.ThumbDown, selected = disliked) {
                     disliked = !disliked
                     if (disliked) {
                         if (liked) Graph.library.toggleFavorite(item)
@@ -430,26 +432,26 @@ private fun LazyListScope.detailsSection(
                     } else com.vidora.app.account.AccountSync.liked(item.url, false)
                 }
             }
-            item { ActionChip("Download", Icons.Rounded.Download) { onDownload(item) } }
-            item { ActionChip("Playlist", Icons.AutoMirrored.Rounded.PlaylistAdd) { openSheet(Sheet.PLAYLIST) } }
-            item { ActionChip(state.subtitle?.label ?: "Captions", Icons.Rounded.ClosedCaption, selected = state.subtitle != null) { openSheet(Sheet.CAPTIONS) } }
+            item { ActionChip(stringResource(R.string.chip_download), Icons.Rounded.Download) { onDownload(item) } }
+            item { ActionChip(stringResource(R.string.chip_playlist), Icons.AutoMirrored.Rounded.PlaylistAdd) { openSheet(Sheet.PLAYLIST) } }
+            item { ActionChip(state.subtitle?.label ?: stringResource(R.string.chip_captions), Icons.Rounded.ClosedCaption, selected = state.subtitle != null) { openSheet(Sheet.CAPTIONS) } }
             if (details != null && details.audioTracks.size > 1) {
                 item {
                     val current = details.audioTracks.firstOrNull { it.id == state.audioTrackId }?.name ?: "Audio track"
                     ActionChip(current, Icons.Rounded.Translate) { openSheet(Sheet.AUDIO) }
                 }
             }
-            item { ActionChip("Equalizer", Icons.Rounded.GraphicEq, selected = Graph.settingsState.value.eqEnabled) { openSheet(Sheet.EQ) } }
-            item { ActionChip(state.quality?.label ?: "Quality", Icons.Rounded.HighQuality) { openSheet(Sheet.QUALITY) } }
+            item { ActionChip(stringResource(R.string.chip_equalizer), Icons.Rounded.GraphicEq, selected = Graph.settingsState.value.eqEnabled) { openSheet(Sheet.EQ) } }
+            item { ActionChip(state.quality?.label ?: stringResource(R.string.chip_quality), Icons.Rounded.HighQuality) { openSheet(Sheet.QUALITY) } }
             item { ActionChip(if (state.audioOnly) "Audio only" else "Audio mode", Icons.Rounded.Audiotrack, selected = state.audioOnly) { Graph.player.setAudioOnly(!state.audioOnly) } }
             item { ActionChip("${trimSpeed(state.speed)}x", Icons.Rounded.Speed) { openSheet(Sheet.SPEED) } }
             item { ActionChip("Queue ${state.queue.size}", Icons.AutoMirrored.Rounded.QueueMusic) { openSheet(Sheet.QUEUE) } }
-            item { ActionChip("Save", Icons.Rounded.WatchLater, selected = later) { Graph.library.toggleWatchLater(item) } }
-            item { ActionChip("Loop", if (state.loop) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat, selected = state.loop) { Graph.player.toggleLoop() } }
+            item { ActionChip(stringResource(R.string.chip_save), Icons.Rounded.WatchLater, selected = later) { Graph.library.toggleWatchLater(item) } }
+            item { ActionChip(stringResource(R.string.chip_loop), if (state.loop) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat, selected = state.loop) { Graph.player.toggleLoop() } }
             item { ActionChip(if (state.sleepTimerEndsAt > 0) "Sleep on" else "Sleep", Icons.Rounded.Bedtime, selected = state.sleepTimerEndsAt > 0) { openSheet(Sheet.SLEEP) } }
             item { ActionChip("PiP", Icons.Rounded.PictureInPictureAlt) { activity.enterPip() } }
             item {
-                ActionChip("Share", Icons.Rounded.Share) {
+                ActionChip(stringResource(R.string.chip_share), Icons.Rounded.Share) {
                     val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, item.url).putExtra(Intent.EXTRA_SUBJECT, item.title)
                     context.startActivity(Intent.createChooser(send, "Share video"))
                 }
@@ -459,7 +461,7 @@ private fun LazyListScope.detailsSection(
     if (details != null && details.chapters.isNotEmpty()) {
         item(key = "chapters") {
             Column {
-                Text("Chapters", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                Text(stringResource(R.string.chapters), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                 LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     items(details.chapters) { ch ->
                         Column(Modifier.width(150.dp).clip(MaterialTheme.shapes.small).clickable { Graph.player.seekTo(ch.startSeconds * 1000L) }) {
@@ -494,12 +496,12 @@ private fun LazyListScope.relatedSection(state: PlayerUiState, actions: VideoAct
     val upNext = state.queue.drop(state.queueIndex + 1)
     if (upNext.isNotEmpty()) {
         item(key = "upnext_h") {
-            Text("Up next in queue", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+            Text(stringResource(R.string.up_next), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
         }
         items(upNext.distinctBy { it.url }, key = { "q" + it.url }) { v -> VideoCard(v, actions, compact = true) }
     }
     item(key = "related_h") {
-        Text("Related", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+        Text(stringResource(R.string.related), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
     }
     if (details == null) {
         if (state.error == null) items(5) { ShimmerCard(compact = true) }

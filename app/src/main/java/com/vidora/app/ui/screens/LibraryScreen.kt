@@ -1,5 +1,7 @@
 package com.vidora.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.vidora.app.R
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -68,7 +70,7 @@ fun LibraryScreen(nav: NavHostController, actions: VideoActions) {
     val session by Graph.account.session.collectAsState()
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
-            title = { Text("Library") },
+            title = { Text(stringResource(R.string.library)) },
             actions = { IconButton(onClick = { nav.navigate(Routes.SETTINGS) }) { Icon(Icons.Rounded.Settings, "Settings") } },
             colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
         )

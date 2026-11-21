@@ -1,5 +1,6 @@
 package com.vidora.app.ui
 
+import com.vidora.app.R
 import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -102,13 +103,13 @@ object Routes {
     fun localPlaylist(id: String) = "local/$id"
 }
 
-private data class TopDest(val route: String, val label: String, val icon: ImageVector, val selectedIcon: ImageVector)
+private data class TopDest(val route: String, @androidx.annotation.StringRes val label: Int, val icon: ImageVector, val selectedIcon: ImageVector)
 
 private val topDestinations = listOf(
-    TopDest(Routes.HOME, "Home", Icons.Outlined.Home, Icons.Rounded.Home),
-    TopDest(Routes.SUBS, "Subscriptions", Icons.Outlined.Subscriptions, Icons.Rounded.Subscriptions),
-    TopDest(Routes.DOWNLOADS, "Downloads", Icons.Outlined.Download, Icons.Rounded.Download),
-    TopDest(Routes.LIBRARY, "Library", Icons.Outlined.VideoLibrary, Icons.Rounded.VideoLibrary),
+    TopDest(Routes.HOME, R.string.nav_home, Icons.Outlined.Home, Icons.Rounded.Home),
+    TopDest(Routes.SUBS, R.string.nav_subscriptions, Icons.Outlined.Subscriptions, Icons.Rounded.Subscriptions),
+    TopDest(Routes.DOWNLOADS, R.string.nav_downloads, Icons.Outlined.Download, Icons.Rounded.Download),
+    TopDest(Routes.LIBRARY, R.string.nav_library, Icons.Outlined.VideoLibrary, Icons.Rounded.VideoLibrary),
 )
 
 @Composable
@@ -177,7 +178,7 @@ fun AppRoot(activity: MainActivity, settings: AppSettings) {
                                     selected = route == d.route,
                                     onClick = { nav.navigateTop(d.route) },
                                     icon = { NavIcon(d, route == d.route, if (d.route == Routes.DOWNLOADS) activeDownloads else 0) },
-                                    label = { Text(d.label, maxLines = 1) }
+                                    label = { Text(androidx.compose.ui.res.stringResource(d.label), maxLines = 1) }
                                 )
                             }
                         }
@@ -194,7 +195,7 @@ fun AppRoot(activity: MainActivity, settings: AppSettings) {
                             selected = route == d.route,
                             onClick = { nav.navigateTop(d.route) },
                             icon = { NavIcon(d, route == d.route, if (d.route == Routes.DOWNLOADS) activeDownloads else 0) },
-                            label = { Text(d.label, maxLines = 1) }
+                            label = { Text(androidx.compose.ui.res.stringResource(d.label), maxLines = 1) }
                         )
                     }
                 }
@@ -246,7 +247,7 @@ fun AppRoot(activity: MainActivity, settings: AppSettings) {
 @Composable
 private fun NavIcon(d: TopDest, selected: Boolean, badge: Int) {
     BadgedBox(badge = { if (badge > 0) Badge { Text("$badge") } }) {
-        Icon(if (selected) d.selectedIcon else d.icon, contentDescription = d.label)
+        Icon(if (selected) d.selectedIcon else d.icon, contentDescription = androidx.compose.ui.res.stringResource(d.label))
     }
 }
 

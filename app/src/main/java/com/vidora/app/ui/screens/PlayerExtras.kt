@@ -1,5 +1,7 @@
 package com.vidora.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+import com.vidora.app.R
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
@@ -484,7 +486,7 @@ fun CommentsPreview(state: CommentsState, onOpen: () -> Unit) {
     ) {
         Column(Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Comments", style = MaterialTheme.typography.titleSmall)
+                Text(stringResource(R.string.comments), style = MaterialTheme.typography.titleSmall)
                 if (state.total > 0) Text("  ${Format.count(state.total.toLong())}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Spacer(Modifier.height(6.dp))
