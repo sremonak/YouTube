@@ -73,7 +73,7 @@ Priority: **P0** = keeps the app working, **P1** = premium features users notice
 4. **Sprint 4 (library):** playlists, notifications, imports, signed-in actions.
 5. **Sprint 5 (polish):** Bengali localisation, Room, baseline profiles, tests, Android Auto/TV.
 
-## Status (implemented in PR #1, build `Vidora-1.0.23`+)
+## Status (implemented in PR #1, build `Vidora-1.0.29`+)
 
 | Item | Status |
 |---|---|
@@ -81,7 +81,7 @@ Priority: **P0** = keeps the app working, **P1** = premium features users notice
 | Stream URL expiry / 403 recovery | ✅ Done — up to 3 back-off re-extractions on HTTP errors + pre-emptive refresh when resuming after 4 h |
 | In-app updater | ✅ Done — GitHub Releases, changelog, download + install, "skip this version" |
 | Crash & error reporter | ✅ Done — dialog on next start, copy or open pre-filled GitHub issue; "Report a problem" in Settings |
-| Own release keystore | ⏳ Needs the repo owner to add the `VIDORA_KEYSTORE_B64` secret (CI already supports it) |
+| Own release keystore | ⏸ Skipped by owner — the shared debug key is kept (CI still supports `VIDORA_KEYSTORE_B64` if ever wanted) |
 | SABR streaming | ⏳ Waiting for NewPipe Extractor PR #1568; PoToken + client fallback cover today's playback |
 | Gestures (double-tap, hold 2×, swipe brightness/volume, pinch zoom) | ✅ Done |
 | Seek-bar preview thumbnails | ✅ Done |
@@ -91,7 +91,7 @@ Priority: **P0** = keeps the app working, **P1** = premium features users notice
 | Shorts vertical player | ✅ Done |
 | Queue persistence | ✅ Done |
 | Comments (replies, pinned, hearted, timestamps) | ✅ Done |
-| Live chat | ⏳ Later |
+| Live chat | ✅ Done — live streams show a polling chat panel (pause/resume) instead of comments |
 | Return YouTube Dislike | ✅ Done (attribution in About) |
 | DeArrow | ✅ Done (opt-in) |
 | Content filters | ✅ Done |
@@ -99,12 +99,20 @@ Priority: **P0** = keeps the app working, **P1** = premium features users notice
 | Subscription groups | ✅ Done |
 | New-video notifications (RSS + WorkManager) | ✅ Done |
 | Import NewPipe / LibreTube / FreeTube / Takeout / OPML | ✅ Done (+ NewPipe-format export) |
-| Signed-in like / dislike / subscribe sync | ✅ Done (toggle); saving to a YouTube playlist ⏳ later |
-| Batch download playlist | ✅ Done; channel batch, metadata embedding, SD-card picker ⏳ later |
+| Signed-in like / dislike / subscribe sync | ✅ Done (toggle) + save to / remove from / create YouTube playlists |
+| Batch download | ✅ Playlists, local playlists and channels; custom download folder / SD card (Storage Access Framework). Metadata embedding ⏳ later |
 | Android Auto, widget, Quick Settings tile | ✅ Done |
-| Android TV | ✅ Launcher entry + banner; full D-pad-optimised UI ⏳ later |
-| Bengali localisation | ✅ Navigation, settings sections, player actions, notifications, widget; remaining strings ⏳ ongoing |
+| Android TV | ✅ Launcher entry + banner + visible D-pad focus ring on cards; a dedicated 10-foot UI ⏳ later |
+| Bengali localisation | ✅ Full UI (≈250 strings incl. all settings, dialogs, empty states) |
 | OkHttp 5 | ✅ 5.1.0 (5.5.x needs compileSdk 37) |
-| Unit tests in CI | ✅ `testDebugUnitTest` (versions, PoToken base64, imports, filters, storyboards, EQ) |
+| Unit tests in CI | ✅ `testDebugUnitTest` (versions, PoToken base64, imports, filters, storyboards, EQ, search refine, continue watching) |
 | F-Droid / fastlane metadata | ✅ `fastlane/metadata/android` |
 | Room, Baseline Profiles, Coil 3, lint/detekt, Piped proxy | ⏳ Later — need larger migrations or an emulator in CI |
+| Incognito mode | ✅ Settings + one-tap toggle in Library — no watch/search history |
+| Voice search | ✅ Mic button in the search bar |
+| Search refinements | ✅ Length, upload date, hide live (client-side; the extractor only supports content type server-side) |
+| Continue watching | ✅ Home row with half-watched videos and time left |
+| Seek-bar markers | ✅ Chapters and SponsorBlock segments marked on the seek bar |
+| Sleep timer "end of video" | ✅ Done |
+| Stats for nerds | ✅ Codec, resolution, bitrate, buffer, dropped frames |
+| Loudness normalisation | ⏳ Needs `loudnessDb` from the extractor (not exposed in v0.27.1) |
