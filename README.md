@@ -3,7 +3,8 @@
 Vidora is a modern, fully native Android app (Kotlin + Jetpack Compose + Media3) for watching
 YouTube content **without ads**, with **background playback**, **picture-in-picture**,
 **video/audio downloads in the quality you choose**, SponsorBlock and a fully customisable
-design — no Google account, no tracking, everything stored on your device.
+design — no tracking, everything stored on your device. Signing in with a YouTube account is
+**optional** and only unlocks extra content (see [Sign in](#-optional-youtube-sign-in)).
 
 > বাংলা সারসংক্ষেপ নিচে দেওয়া আছে ⬇️
 
@@ -21,9 +22,40 @@ design — no Google account, no tracking, everything stored on your device.
 | **SponsorBlock** | Automatically skips sponsors, intros, self-promo, etc. — choose which categories. |
 | **Discover** | Home feed (personal "For you" mix built locally from your history, Live, Music, Gaming, Podcasts, Movies), search with suggestions & history, filters (videos/channels/playlists/music), channels with tabs, playlists with Play-all/Shuffle. |
 | **Library (local)** | Subscriptions + subscription feed, history, liked videos, watch later — all private, no login. Export/Import backup as JSON. |
+| **YouTube sign-in (optional)** | Sign in on Google's own page inside the app to unlock age-restricted videos, get past "confirm you're not a bot" blocks, and see your **Recommended**, **Subscriptions feed**, **Liked**, **Watch later** and **History** — still with no ads. One-tap import of your YouTube subscriptions. |
 | **Customisation** | Theme (System/Light/Dark/AMOLED black), Material You dynamic colour, 8 accent colours, corner roundness slider, card or compact-list layout, avatars on/off, custom in-app display name, **6 launcher icons × 4 launcher names** switchable from Settings. |
 | **Responsive** | Phones, foldables and tablets: bottom bar on phones, navigation rail + side-by-side player on large screens, adaptive grids, edge-to-edge. |
 | **Open links** | Share any YouTube link to Vidora, or open `youtube.com` / `youtu.be` links with it. |
+
+## 🔐 Optional YouTube sign-in
+
+Open **Settings → Account → Sign in with YouTube** (or tap the account icon on Home / the
+"YouTube account" section in Library).
+
+1. Vidora shows Google's own sign-in page in a WebView. Your password is typed **only into
+   Google's page**. Vidora never sees or stores it.
+2. When sign-in finishes, Vidora keeps the youtube.com session cookies and fetches your name and
+   avatar.
+3. Signed in, you get:
+   - Your own feeds on Home and in Library.
+   - **Import YouTube subscriptions** into the local library.
+   - **Use account for restricted videos**, on by default: a video, search, channel or playlist
+     is tried anonymously first. If YouTube refuses (age-restricted, bot check, members-only…),
+     Vidora retries once with your account.
+4. **Sign out** from Settings wipes the session and the WebView cookies from the device.
+
+**Fallback:** if Google blocks sign-in inside the WebView, use *"Google sign-in blocked? Paste
+cookies instead"*. Sign in to youtube.com in a desktop browser, open DevTools → Network, pick a
+request to `www.youtube.com` and paste its `Cookie` header. It must contain `SAPISID`.
+
+**Privacy & security**
+- The session is encrypted with AES-256-GCM. The key lives in the hardware-backed **Android
+  Keystore**, and the encrypted file sits in `noBackupFilesDir`, so it is excluded from cloud
+  backups.
+- Cookies are only ever sent to `youtube.com` hosts, never to Vidora servers (there are none),
+  SponsorBlock or googlevideo.
+- Google doesn't officially support third-party clients. To be extra safe, you can use a
+  secondary Google account.
 
 ## 📦 Getting the APK
 
@@ -76,6 +108,10 @@ app/src/main/java/com/vidora/app/
 │   ├── SettingsRepository.kt       DataStore-backed settings
 │   ├── LibraryStore.kt             local history / likes / watch later / subscriptions (JSON)
 │   └── SponsorBlock.kt             SponsorBlock API client
+├── account/
+│   ├── AccountManager.kt           session state, SAPISIDHASH auth headers, sign-out
+│   ├── AccountApi.kt               signed-in InnerTube feeds (recommended, subs, liked, WL, history)
+│   └── SecureStore.kt              Android Keystore AES-GCM encrypted storage
 ├── player/
 │   ├── PlayerManager.kt            single ExoPlayer, quality/audio-only/queue/sleep/SponsorBlock
 │   ├── PlaybackService.kt          MediaSessionService → background playback + notification
@@ -121,6 +157,12 @@ Licensed under **GPL-3.0** (see `LICENSE`), as required by NewPipe Extractor.
 - ⏭ **SponsorBlock** — স্পন্সর অংশ নিজে থেকেই স্কিপ করে।
 - 🎨 **নিজের মতো ডিজাইন** — থিম (লাইট/ডার্ক/AMOLED), Material You রঙ, ৮টি অ্যাকসেন্ট কালার, কর্নার রাউন্ডনেস, কার্ড/লিস্ট লেআউট, অ্যাপের নাম পরিবর্তন, **৬টি আইকন × ৪টি নাম** — Settings থেকে লঞ্চার আইকন ও নাম বদলানো যায়।
 - 📚 **লাইব্রেরি** — সাবস্ক্রিপশন, হিস্টোরি, লাইকড, ওয়াচ লেটার — সব ফোনেই থাকে, কোনো অ্যাকাউন্ট লাগে না; ব্যাকআপ/রিস্টোর।
+- 🔐 **YouTube লগইন (ঐচ্ছিক)** — **Settings → Account → Sign in with YouTube**। Google-এর নিজের পেজে লগইন করবেন, পাসওয়ার্ড Vidora কখনো দেখে না। লগইন করলে:
+  - বয়স-সীমাবদ্ধ (age-restricted) ভিডিও দেখা যাবে, "confirm you're not a bot" সমস্যাও কাটবে।
+  - আপনার Recommended, Subscriptions feed, Liked, Watch later ও History দেখা যাবে, তবু কোনো বিজ্ঞাপন থাকবে না।
+  - এক ট্যাপে YouTube সাবস্ক্রিপশন ইমপোর্ট করা যাবে।
+  - সেশন Android Keystore দিয়ে এনক্রিপ্ট করে শুধু ফোনেই রাখা হয় এবং শুধু youtube.com-এ পাঠানো হয়। Sign out করলে সব মুছে যায়।
+  - WebView-এ Google লগইন ব্লক করলে "Paste cookies" অপশন ব্যবহার করুন।
 - 📱 **রেসপন্সিভ** — ফোন, ট্যাবলেট, ফোল্ডেবল সব স্ক্রিনে মানিয়ে যায়।
 
 **APK পাওয়ার উপায়:** GitHub-এর **Actions** ট্যাবে গিয়ে সর্বশেষ "Build APK" রান থেকে `Vidora-x.y.z` আর্টিফ্যাক্ট ডাউনলোড করুন, অথবা `v1.0.0` ট্যাগ পুশ করলে Releases-এ APK চলে আসবে।
