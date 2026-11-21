@@ -1,0 +1,17 @@
+*.iml
+.gradle/
+/local.properties
+/.idea/
+.DS_Store
+/build/
+/app/build/
+/captures/
+.externalNativeBuild/
+.cxx/
+*.keystore
+*.jks
+*.p12
+keystore.properties
+/release-key/
+# shared, non-secret debug key so every CI build has the same signature (updates install cleanly)
+!app/debug.keystore

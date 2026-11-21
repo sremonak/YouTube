@@ -1,0 +1,129 @@
+package com.vidora.app.ui.screens
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.PlayCircle
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.dp
+import androidx.navigation.NavHostController
+import com.vidora.app.Graph
+import com.vidora.app.data.AppSettings
+import com.vidora.app.data.Entry
+import com.vidora.app.data.HomeSection
+import com.vidora.app.data.PageResult
+import com.vidora.app.ui.Paged
+import com.vidora.app.ui.Routes
+import com.vidora.app.ui.components.EntryGrid
+import com.vidora.app.ui.components.VideoActions
+import com.vidora.app.ui.theme.BrandTitle
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSettings) {
+    val scope = rememberCoroutineScope()
+    var section by rememberSaveable { mutableStateOf(HomeSection.FOR_YOU) }
+    val pages = remember { HashMap<HomeSection, Paged>() }
+    val paged = pages.getOrPut(section) { Paged(scope) { loadSection(section) } }
+    val gridState = rememberLazyGridState()
+
+    LaunchedEffect(section) {
+        if (paged.items.isEmpty() && !paged.loading) paged.load()
+        gridState.scrollToItem(0)
+    }
+
+    Column(Modifier.fillMaxSize()) {
+        TopAppBar(
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Rounded.PlayCircle, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(30.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        settings.displayName.ifBlank { "Vidora" },
+                        style = BrandTitle.merge(
+                            TextStyle(
+                                brush = Brush.linearGradient(
+                                    listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.tertiary)
+                                )
+                            )
+                        )
+                    )
+                }
+            },
+            actions = {
+                IconButton(onClick = { nav.navigate(Routes.search()) }) { Icon(Icons.Rounded.Search, "Search") }
+                IconButton(onClick = { nav.navigate(Routes.SETTINGS) }) { Icon(Icons.Rounded.Settings, "Settings") }
+            },
+            colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+        )
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(bottom = 4.dp)
+        ) {
+            items(HomeSection.entries) { s ->
+                FilterChip(
+                    selected = s == section,
+                    onClick = { section = s },
+                    label = { Text(s.label) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = MaterialTheme.colorScheme.primary,
+                        selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                    ),
+                )
+            }
+        }
+        PullToRefreshBox(isRefreshing = paged.refreshing, onRefresh = { paged.load(refresh = true) }, modifier = Modifier.fillMaxSize()) {
+            EntryGrid(
+                paged = paged, actions = actions, state = gridState,
+                filter = { e -> !(settings.hideShorts && e is Entry.Video && e.video.isShort) }
+            )
+        }
+    }
+}
+
+/** "For you" is built locally from the user's own history & searches — no account, no tracking. */
+private suspend fun loadSection(section: HomeSection): PageResult {
+    section.kioskId?.let { return Graph.repository.kiosk(it) }
+    val lib = Graph.library.data.value
+    val seeds = buildList {
+        addAll(lib.searchHistory.take(5))
+        addAll(lib.history.take(10).mapNotNull { it.video.uploader }.distinct().take(4))
+        addAll(lib.subscriptions.shuffled().take(3).map { it.name })
+    }
+    val query = seeds.randomOrNull() ?: listOf("trending today", "new music", "technology news", "best of the week", "documentary").random()
+    return runCatching { Graph.repository.search(query) }.getOrElse { Graph.repository.kiosk("trending_music") }
+}
