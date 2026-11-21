@@ -20,16 +20,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v5
 
       - name: Decode release keystore
         env:
@@ -59,7 +59,21 @@ jobs:
           VIDORA_KEY_PASSWORD: ${{ secrets.VIDORA_KEY_PASSWORD }}
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon --stacktrace assembleRelease
+          set -o pipefail
+          ./gradlew --no-daemon assembleRelease 2>&1 | tee build.log
+
+      - name: Report build errors
+        if: failure()
+        run: |
+          # Surface compiler / Gradle errors as annotations (visible on the PR & checks page)
+          { grep -E "^e: |^ERROR|error:|Could not (find|resolve)|Execution failed" build.log || true
+            awk '/What went wrong:/{f=1} f&&n<25{print;n++}' build.log; } | head -c 30000 > errors.txt
+          python3 - <<'PY'
+          text = open("errors.txt").read()
+          chunks = [text[i:i + 3500] for i in range(0, len(text), 3500)][:9]
+          for c in chunks:
+              print("::error title=Build error::" + c.replace("%", "%25").replace("\r", "").replace("\n", "%0A"))
+          PY
 
       - name: Rename APK
         run: |
