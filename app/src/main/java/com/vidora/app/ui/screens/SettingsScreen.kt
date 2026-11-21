@@ -127,6 +127,15 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
         }.onSuccess { Toast.makeText(context, "Subscriptions exported", Toast.LENGTH_SHORT).show() }
     }
     val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        uri ?: return@rememberLauncherForActivityResult
+        runCatching {
+            context.contentResolver.takePersistableUriPermission(
+                uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            )
+        }.onSuccess { update { it.copy(downloadFolder = uri.toString()) } }
+            .onFailure { Toast.makeText(context, "Couldn't use that folder: ${it.message}", Toast.LENGTH_LONG).show() }
+    }
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri ?: return@rememberLauncherForActivityResult
         val ok = runCatching {
@@ -367,6 +376,20 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
             item { ClickRow("Default download quality", "${s.downloadQuality}p") { dialog = "dlquality" } }
             item { ClickRow("Preferred audio format", s.downloadAudioPref.label) { dialog = "audiofmt" } }
             item { SwitchRow("Download on Wi-Fi only", null, s.downloadWifiOnly) { v -> update { it.copy(downloadWifiOnly = v) } } }
+            item { ClickRow("Download folder", com.vidora.app.download.Storage.folderLabel(s.downloadFolder) + " · tap to choose (SD card supported)") { folderPicker.launch(null) } }
+            if (s.downloadFolder.isNotBlank()) {
+                item {
+                    ClickRow("Use default folders", "Movies/Vidora and Music/Vidora") {
+                        runCatching {
+                            context.contentResolver.releasePersistableUriPermission(
+                                android.net.Uri.parse(s.downloadFolder),
+                                android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                            )
+                        }
+                        update { it.copy(downloadFolder = "") }
+                    }
+                }
+            }
 
             // ------------------------------------------------------------ content & privacy
             item { Header(stringResource(R.string.h_content)) }
@@ -374,6 +397,7 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
             item { SwitchRow("Hide Shorts", null, s.hideShorts) { v -> update { it.copy(hideShorts = v) } } }
             item { ClickRow("Import subscriptions", "From NewPipe, LibreTube, FreeTube (JSON), Google Takeout (CSV) or OPML") { subsImportLauncher.launch(arrayOf("*/*")) } }
             item { ClickRow("Export subscriptions", "NewPipe-compatible JSON") { subsExportLauncher.launch("vidora-subscriptions.json") } }
+            item { SwitchRow("Incognito mode", "Pause watch & search history (also in the Library screen)", s.incognito) { v -> update { it.copy(incognito = v) } } }
             item { SwitchRow("Save watch history", "Stored only on this device", s.saveHistory) { v -> update { it.copy(saveHistory = v) } } }
             item { SwitchRow("Save search history", null, s.saveSearchHistory) { v -> update { it.copy(saveSearchHistory = v) } } }
             item { ClickRow("Clear search history", null) { Graph.library.clearSearchHistory(); Toast.makeText(context, "Search history cleared", Toast.LENGTH_SHORT).show() } }

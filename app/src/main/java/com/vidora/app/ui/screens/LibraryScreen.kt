@@ -19,6 +19,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Visibility
+import androidx.compose.material.icons.rounded.VisibilityOff
+import kotlinx.coroutines.launch
 import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
@@ -71,10 +74,34 @@ fun LibraryScreen(nav: NavHostController, actions: VideoActions) {
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
             title = { Text(stringResource(R.string.library)) },
-            actions = { IconButton(onClick = { nav.navigate(Routes.SETTINGS) }) { Icon(Icons.Rounded.Settings, "Settings") } },
+            actions = {
+                val incognito = Graph.settingsState.collectAsState().value.incognito
+                val scope = androidx.compose.runtime.rememberCoroutineScope()
+                IconButton(onClick = { scope.launch { Graph.settings.update { it.copy(incognito = !it.incognito) } } }) {
+                    Icon(
+                        if (incognito) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
+                        if (incognito) "Turn off incognito" else "Turn on incognito",
+                        tint = if (incognito) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                IconButton(onClick = { nav.navigate(Routes.SETTINGS) }) { Icon(Icons.Rounded.Settings, "Settings") }
+            },
             colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
         )
         LazyColumn(contentPadding = PaddingValues(bottom = 120.dp)) {
+            if (Graph.settingsState.value.incognito) {
+                item {
+                    androidx.compose.material3.Surface(
+                        color = MaterialTheme.colorScheme.secondaryContainer, shape = MaterialTheme.shapes.medium,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            "Incognito is on — nothing you watch or search is saved.",
+                            style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(12.dp)
+                        )
+                    }
+                }
+            }
             item {
                 SectionHeader("Recently watched") {
                     TextButton(onClick = { nav.navigate(Routes.list("history")) }) { Text("See all") }

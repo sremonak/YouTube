@@ -6,6 +6,7 @@ import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import android.provider.DocumentsContract
 import android.provider.MediaStore
 import androidx.core.content.FileProvider
 import androidx.core.net.toUri
@@ -18,6 +19,12 @@ object Storage {
     fun publish(context: Context, source: File, record: DownloadRecord): Uri {
         val isAudio = record.kind == DownloadKind.AUDIO
         val mime = record.mime ?: if (isAudio) "audio/mp4" else "video/mp4"
+        // User-chosen folder (e.g. SD card) via the Storage Access Framework
+        val tree = com.vidora.app.Graph.settingsState.value.downloadFolder
+        if (tree.isNotBlank()) {
+            runCatching { return publishToTree(context, source, record, mime, Uri.parse(tree)) }
+            // fall through to the default location if the folder is gone / permission revoked
+        }
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val collection = if (isAudio) MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
             else MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
@@ -57,6 +64,32 @@ object Storage {
         }
     }
 
+    private fun publishToTree(context: Context, source: File, record: DownloadRecord, mime: String, tree: Uri): Uri {
+        val resolver = context.contentResolver
+        val parent = DocumentsContract.buildDocumentUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree))
+        val doc = DocumentsContract.createDocument(resolver, parent, mime, record.fileName)
+            ?: error("Could not create file in the chosen folder")
+        try {
+            resolver.openOutputStream(doc)?.use { out -> source.inputStream().use { it.copyTo(out, 1 shl 16) } }
+                ?: error("Could not open output")
+        } catch (e: Throwable) {
+            runCatching { DocumentsContract.deleteDocument(resolver, doc) }
+            throw e
+        }
+        source.delete()
+        return doc
+    }
+
+    /** Human-readable name of a chosen SAF folder, e.g. "SD card › Vidora". */
+    fun folderLabel(tree: String): String {
+        if (tree.isBlank()) return "Movies/Vidora · Music/Vidora"
+        val id = runCatching { DocumentsContract.getTreeDocumentId(Uri.parse(tree)) }.getOrNull() ?: return tree
+        val volume = id.substringBefore(':')
+        val path = id.substringAfter(':', "")
+        val vol = if (volume == "primary") "Internal storage" else "SD card"
+        return if (path.isBlank()) vol else "$vol › ${path.replace("/", " › ")}"
+    }
+
     /** A uri that other apps can open (content:// on every API level). */
     fun shareableUri(context: Context, record: DownloadRecord): Uri? {
         val uri = record.uri?.toUri() ?: return null
@@ -71,6 +104,7 @@ object Storage {
         val uri = record.uri?.toUri() ?: return
         runCatching {
             if (uri.scheme == "file") File(uri.path!!).delete()
+            else if (DocumentsContract.isDocumentUri(context, uri)) DocumentsContract.deleteDocument(context.contentResolver, uri)
             else context.contentResolver.delete(uri, null, null)
         }
     }

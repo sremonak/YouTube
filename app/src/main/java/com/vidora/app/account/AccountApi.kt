@@ -149,6 +149,71 @@ class AccountApi {
         })
     }
 
+    // ------------------------------------------------------------------ YouTube playlists
+
+    /** The signed-in user's playlists, with whether each already contains [videoId]. */
+    suspend fun playlistsFor(videoId: String): List<RemotePlaylist> {
+        val res = post("playlist/get_add_to_playlist", buildJsonObject {
+            put("context", context())
+            put("videoIds", JsonArray(listOf(JsonPrimitive(videoId))))
+            put("excludeWatchLater", false)
+        })
+        val out = mutableListOf<RemotePlaylist>()
+        fun rec(e: JsonElement?) {
+            when (e) {
+                is JsonObject -> {
+                    (e["playlistAddToOptionRenderer"] as? JsonObject)?.let { r ->
+                        val id = str(r["playlistId"]) ?: return@let
+                        out += RemotePlaylist(
+                            id = id,
+                            title = text(r["title"]) ?: id,
+                            containsVideo = str(r["containsSelectedVideos"]) == "ALL",
+                            privacy = str(r["privacy"]),
+                        )
+                    }
+                    e.values.forEach(::rec)
+                }
+                is JsonArray -> e.forEach(::rec)
+                else -> Unit
+            }
+        }
+        rec(res)
+        return out.distinctBy { it.id }
+    }
+
+    suspend fun addToPlaylist(playlistId: String, videoId: String) {
+        post("browse/edit_playlist", buildJsonObject {
+            put("context", context())
+            put("playlistId", playlistId)
+            put("actions", JsonArray(listOf(buildJsonObject {
+                put("action", "ACTION_ADD_VIDEO")
+                put("addedVideoId", videoId)
+            })))
+        })
+    }
+
+    suspend fun removeFromPlaylist(playlistId: String, videoId: String) {
+        post("browse/edit_playlist", buildJsonObject {
+            put("context", context())
+            put("playlistId", playlistId)
+            put("actions", JsonArray(listOf(buildJsonObject {
+                put("action", "ACTION_REMOVE_VIDEO_BY_VIDEO_ID")
+                put("removedVideoId", videoId)
+            })))
+        })
+    }
+
+    /** Creates a private playlist containing [videoId]; returns the new playlist id if reported. */
+    suspend fun createPlaylist(title: String, videoId: String, privacy: String = "PRIVATE"): String? {
+        val res = post("playlist/create", buildJsonObject {
+            put("context", context())
+            put("title", title)
+            put("privacyStatus", privacy)
+            put("videoIds", JsonArray(listOf(JsonPrimitive(videoId))))
+        })
+        return str(res["playlistId"])
+    }
+
     // ------------------------------------------------------------------ JSON walking
 
     private val videoKeys = setOf("videoRenderer", "compactVideoRenderer", "gridVideoRenderer", "playlistVideoRenderer")
@@ -324,3 +389,4 @@ class AccountApi {
     }
 }
 
+data class RemotePlaylist(val id: String, val title: String, val containsVideo: Boolean, val privacy: String?)

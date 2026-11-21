@@ -70,6 +70,8 @@ data class PlayerUiState(
     val localFile: Boolean = false,
     val segments: List<SponsorSegment> = emptyList(),
     val sleepTimerEndsAt: Long = 0,
+    /** Sleep timer set to "end of current video". */
+    val sleepAtEnd: Boolean = false,
     val loop: Boolean = false,
     val subtitle: SubtitleOption? = null,
     val audioTrackId: String? = null,
@@ -257,7 +259,7 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
                     subtitle = defaultSubtitle(details),
                     audioTrackId = defaultAudioTrack(details),
                 )
-                if (settings.saveHistory) Graph.library.addHistory(merged)
+                if (settings.saveHistory && !settings.incognito) Graph.library.addHistory(merged)
                 val resumeAt = if (settings.resumePlayback && !merged.isLive) {
                     Graph.library.positionOf(merged.url).takeIf { it > 5_000 && (merged.duration == 0L || it < merged.duration * 1000 - 10_000) } ?: 0
                 } else 0
@@ -350,8 +352,15 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
         exoPlayer.repeatMode = if (loop) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
     }
 
+    /** Pause when the current video finishes instead of playing the next one. */
+    fun setSleepAtEnd() {
+        sleepJob?.cancel()
+        _state.value = _state.value.copy(sleepTimerEndsAt = 0, sleepAtEnd = true)
+    }
+
     fun setSleepTimer(minutes: Int) {
         sleepJob?.cancel()
+        _state.value = _state.value.copy(sleepAtEnd = false)
         if (minutes <= 0) {
             _state.value = _state.value.copy(sleepTimerEndsAt = 0)
             return
@@ -539,6 +548,12 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
     }
 
     private fun onEnded() {
+        if (_state.value.sleepAtEnd) {
+            _state.value = _state.value.copy(sleepAtEnd = false)
+            persistPosition(reset = true)
+            _events.tryEmit("Sleep timer: stopped at the end of the video")
+            return
+        }
         persistPosition(reset = true)
         if (!_state.value.loop) playNext()
     }
@@ -647,7 +662,7 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
     private fun persistPosition(reset: Boolean = false) {
         val s = _state.value
         val current = s.current ?: return
-        if (current.isLive || s.localFile || !settings.saveHistory) return
+        if (current.isLive || s.localFile || !settings.saveHistory || settings.incognito) return
         val position = if (reset) 0 else exoPlayer.currentPosition
         if (reset || position > 0) Graph.library.savePosition(current.url, position)
     }

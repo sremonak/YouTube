@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Verified
 import androidx.compose.material3.Button
@@ -98,6 +100,24 @@ fun ChannelScreen(nav: NavHostController, actions: VideoActions, url: String) {
                                             Tab(selected = i == selected, onClick = { tab = i }, text = { Text(t.name) })
                                         }
                                     }
+                                }
+                                val loadedVideos = paged.items.filterIsInstance<com.vidora.app.data.Entry.Video>().map { it.video }
+                                if (loadedVideos.isNotEmpty()) {
+                                    var batch by remember { mutableStateOf(false) }
+                                    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        androidx.compose.material3.AssistChip(
+                                            onClick = { Graph.player.play(loadedVideos.first(), loadedVideos); nav.navigate(com.vidora.app.ui.Routes.PLAYER) },
+                                            label = { Text("Play all") },
+                                            leadingIcon = { Icon(Icons.Rounded.PlayArrow, null, Modifier.size(18.dp)) }
+                                        )
+                                        Spacer(Modifier.width(8.dp))
+                                        androidx.compose.material3.AssistChip(
+                                            onClick = { batch = true },
+                                            label = { Text("Download ${loadedVideos.size}") },
+                                            leadingIcon = { Icon(Icons.Rounded.Download, null, Modifier.size(18.dp)) }
+                                        )
+                                    }
+                                    if (batch) com.vidora.app.ui.components.BatchDownloadDialog(loadedVideos) { batch = false }
                                 }
                             }
                         }

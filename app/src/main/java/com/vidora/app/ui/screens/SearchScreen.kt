@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.History
@@ -88,8 +89,22 @@ fun SearchScreen(nav: NavHostController, actions: VideoActions, initialQuery: St
         editing = false
         focus.clearFocus()
         scope.launchSafe {
-            if (Graph.settings.flow.first().saveSearchHistory) Graph.library.addSearch(q)
+            Graph.settings.flow.first().let { if (it.saveSearchHistory && !it.incognito) Graph.library.addSearch(q) }
         }
+    }
+
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val voice = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) { r ->
+        r.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.let { submit(it) }
+    }
+    fun startVoice() {
+        val intent = android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+            .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_WEB_SEARCH)
+            .putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, "Search Vidora")
+        runCatching { voice.launch(intent) }
+            .onFailure { android.widget.Toast.makeText(context, "Voice search isn't available on this device", android.widget.Toast.LENGTH_SHORT).show() }
     }
 
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
@@ -104,6 +119,8 @@ fun SearchScreen(nav: NavHostController, actions: VideoActions, initialQuery: St
                 trailingIcon = {
                     if (text.isNotEmpty()) IconButton(onClick = { text = ""; editing = true; focusRequester.requestFocus() }) {
                         Icon(Icons.Rounded.Close, "Clear")
+                    } else IconButton(onClick = { startVoice() }) {
+                        Icon(Icons.Rounded.Mic, "Voice search")
                     }
                 },
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),

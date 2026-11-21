@@ -633,3 +633,76 @@ private fun CommentRow(c: CommentItem, onSeek: (Long) -> Unit) {
 
 private fun htmlToPlain(html: String): String =
     androidx.core.text.HtmlCompat.fromHtml(html, androidx.core.text.HtmlCompat.FROM_HTML_MODE_COMPACT).toString().trim()
+
+// ======================================================================= live chat
+
+/** Inline live chat for live streams: polls YouTube every few seconds and auto-scrolls. */
+@Composable
+fun LiveChatPanel(url: String, initialToken: String, modifier: Modifier = Modifier) {
+    val messages = remember(url) { mutableStateListOf<CommentItem>() }
+    var status by remember(url) { mutableStateOf<String?>("Connecting…") }
+    var paused by remember { mutableStateOf(false) }
+    val listState = rememberLazyListState()
+    LaunchedEffect(url, initialToken) {
+        var token: String? = initialToken
+        var failures = 0
+        while (token != null) {
+            val result = runCatching { Graph.repository.liveChat(url, token!!) }
+            result.onSuccess { (items, next) ->
+                failures = 0
+                status = null
+                if (items.isNotEmpty()) {
+                    messages.addAll(items)
+                    if (messages.size > 300) messages.removeRange(0, messages.size - 300)
+                }
+                token = next
+            }.onFailure {
+                failures++
+                status = "Reconnecting…"
+                if (failures >= 5) { status = "Live chat unavailable"; token = null }
+            }
+            kotlinx.coroutines.delay(if (failures > 0) 6_000L else 4_000L)
+        }
+        if (status == null) status = "Chat ended"
+    }
+    LaunchedEffect(messages.size) {
+        if (!paused && messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
+    }
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shape = MaterialTheme.shapes.medium,
+        modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)
+    ) {
+        Column(Modifier.padding(vertical = 8.dp)) {
+            Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(8.dp).clip(RoundedCornerShape(50)).background(Color(0xFFE53935)))
+                Spacer(Modifier.width(6.dp))
+                Text("Live chat", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                status?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                TextButton(onClick = { paused = !paused }) { Text(if (paused) "Resume" else "Pause") }
+            }
+            LazyColumn(state = listState, modifier = Modifier.fillMaxWidth().height(280.dp), contentPadding = PaddingValues(horizontal = 12.dp)) {
+                items(messages.size) { i ->
+                    val m = messages[i]
+                    Row(Modifier.padding(vertical = 3.dp), verticalAlignment = Alignment.Top) {
+                        Avatar(m.authorAvatar, 20)
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            androidx.compose.ui.text.buildAnnotatedString {
+                                pushStyle(androidx.compose.ui.text.SpanStyle(
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (m.byCreator) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                ))
+                                append(m.author)
+                                pop()
+                                append("  ")
+                                append(htmlToPlain(m.text))
+                            },
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            }
+        }
+    }
+}

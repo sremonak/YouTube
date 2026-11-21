@@ -277,6 +277,13 @@ private fun VideoSurface(modifier: Modifier, state: PlayerUiState, showControls:
             },
             update = { view ->
                 view.useController = showControls
+                // Chapter starts + SponsorBlock segments as markers on the seek bar
+                val markers = (state.details?.chapters.orEmpty().drop(1).map { it.startSeconds * 1000L } + state.segments.map { it.startMs })
+                    .distinct().sorted().toLongArray()
+                if (view.tag != markers.toList()) {
+                    view.tag = markers.toList()
+                    view.setExtraAdGroupMarkers(markers, BooleanArray(markers.size))
+                }
                 view.subtitleView?.setFractionalTextSize(SubtitleView.DEFAULT_TEXT_SIZE_FRACTION * settings.captionScale)
                 view.setFullscreenButtonClickListener { onFullscreen() }
                 if (view.player == null) view.player = Graph.player.sessionPlayer
@@ -448,7 +455,7 @@ private fun LazyListScope.detailsSection(
             item { ActionChip("Queue ${state.queue.size}", Icons.AutoMirrored.Rounded.QueueMusic) { openSheet(Sheet.QUEUE) } }
             item { ActionChip(stringResource(R.string.chip_save), Icons.Rounded.WatchLater, selected = later) { Graph.library.toggleWatchLater(item) } }
             item { ActionChip(stringResource(R.string.chip_loop), if (state.loop) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat, selected = state.loop) { Graph.player.toggleLoop() } }
-            item { ActionChip(if (state.sleepTimerEndsAt > 0) "Sleep on" else "Sleep", Icons.Rounded.Bedtime, selected = state.sleepTimerEndsAt > 0) { openSheet(Sheet.SLEEP) } }
+            item { ActionChip(if (state.sleepTimerEndsAt > 0 || state.sleepAtEnd) "Sleep on" else "Sleep", Icons.Rounded.Bedtime, selected = state.sleepTimerEndsAt > 0 || state.sleepAtEnd) { openSheet(Sheet.SLEEP) } }
             item { ActionChip("PiP", Icons.Rounded.PictureInPictureAlt) { activity.enterPip() } }
             item {
                 ActionChip(stringResource(R.string.chip_share), Icons.Rounded.Share) {
@@ -485,7 +492,10 @@ private fun LazyListScope.detailsSection(
             )
         }
     }
-    if (comments != null) {
+    if (details != null && item.isLive && details.liveChat != null) {
+        item(key = "livechat") { LiveChatPanel(item.url, details.liveChat) }
+    }
+    if (comments != null && !item.isLive) {
         item(key = "comments") { CommentsPreview(comments) { openSheet(Sheet.COMMENTS) } }
     }
     item(key = "divider") { HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
@@ -588,7 +598,16 @@ private fun SleepSheet(state: PlayerUiState, onDismiss: () -> Unit) {
             val left = ((state.sleepTimerEndsAt - now) / 1000).coerceAtLeast(0)
             Text("Pausing in ${Format.duration(left)}", color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 24.dp))
         }
+        if (state.sleepAtEnd) {
+            Text("Stopping when this video ends", color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 24.dp))
+        }
         LazyColumn(Modifier.navigationBarsPadding(), contentPadding = PaddingValues(bottom = 24.dp)) {
+            item {
+                ListItem(
+                    headlineContent = { Text("End of current video") },
+                    modifier = Modifier.clickable { Graph.player.setSleepAtEnd(); onDismiss() }
+                )
+            }
             items(listOf(0, 5, 10, 15, 30, 45, 60, 90)) { m ->
                 ListItem(
                     headlineContent = { Text(if (m == 0) "Off" else "$m minutes") },

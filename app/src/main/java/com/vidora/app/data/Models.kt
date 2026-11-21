@@ -170,6 +170,8 @@ data class StreamDetails(
     val allAudioStreams: List<AudioOption> = audioStreams,
     val subtitles: List<SubtitleOption> = emptyList(),
     val frames: FrameSet? = null,
+    /** Continuation token for live chat (live streams and chat replays), null if unavailable. */
+    val liveChat: String? = null,
 ) {
     /** Distinct audio languages; empty/one entry means there's nothing to choose. */
     val audioTracks: List<AudioTrack>

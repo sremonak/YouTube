@@ -83,6 +83,10 @@ data class AppSettings(
     val gestures: Boolean = true,
     val captionsEnabled: Boolean = false,
     val captionLang: String = "",
+    /** SAF tree uri for downloads (any folder / SD card); empty = Movies/Vidora + Music/Vidora. */
+    val downloadFolder: String = "",
+    /** Incognito: nothing is added to watch or search history. */
+    val incognito: Boolean = false,
     val captionTranslate: Boolean = false,
     val captionScale: Float = 1f,
     val preferredAudioLang: String = "",
@@ -139,6 +143,8 @@ class SettingsRepository(private val context: Context) {
         val gestures = booleanPreferencesKey("gestures")
         val captionsEnabled = booleanPreferencesKey("captions")
         val captionLang = stringPreferencesKey("caption_lang")
+        val downloadFolder = stringPreferencesKey("download_folder")
+        val incognito = booleanPreferencesKey("incognito")
         val captionTranslate = booleanPreferencesKey("caption_translate")
         val captionScale = floatPreferencesKey("caption_scale")
         val preferredAudioLang = stringPreferencesKey("audio_lang")
@@ -197,6 +203,8 @@ class SettingsRepository(private val context: Context) {
             gestures = this[K.gestures] ?: d.gestures,
             captionsEnabled = this[K.captionsEnabled] ?: d.captionsEnabled,
             captionLang = this[K.captionLang] ?: d.captionLang,
+            downloadFolder = this[K.downloadFolder] ?: d.downloadFolder,
+            incognito = this[K.incognito] ?: d.incognito,
             captionTranslate = this[K.captionTranslate] ?: d.captionTranslate,
             captionScale = this[K.captionScale] ?: d.captionScale,
             preferredAudioLang = this[K.preferredAudioLang] ?: d.preferredAudioLang,
@@ -254,6 +262,8 @@ class SettingsRepository(private val context: Context) {
             p[K.gestures] = s.gestures
             p[K.captionsEnabled] = s.captionsEnabled
             p[K.captionLang] = s.captionLang
+            p[K.downloadFolder] = s.downloadFolder
+            p[K.incognito] = s.incognito
             p[K.captionTranslate] = s.captionTranslate
             p[K.captionScale] = s.captionScale
             p[K.preferredAudioLang] = s.preferredAudioLang

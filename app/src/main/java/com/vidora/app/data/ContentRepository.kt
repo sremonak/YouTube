@@ -183,6 +183,7 @@ class ContentRepository {
             allAudioStreams = allAudios,
             subtitles = subs,
             frames = frameSet,
+            liveChat = runCatching { liveChatContinuation?.takeIf { hasLiveChat() } }.getOrNull(),
         )
     }
 
@@ -231,6 +232,17 @@ class ContentRepository {
             nextComments(url, info.nextPage),
             info.commentsCount,
         )
+    }
+
+    /**
+     * One poll of a live chat. Returns new messages and the token for the next poll
+     * (null when the chat has ended).
+     */
+    suspend fun liveChat(url: String, token: String): Pair<List<CommentItem>, String?> = io {
+        val extractor = service.getCommentsExtractor(url)
+        extractor.setLiveChatContinuation(token)
+        val page = extractor.getPage(Page("live_chat", token))
+        page.items.map { it.toComment(url) } to page.nextPage?.id
     }
 
     private fun nextComments(url: String, page: Page?): (suspend () -> CommentsPage)? {
