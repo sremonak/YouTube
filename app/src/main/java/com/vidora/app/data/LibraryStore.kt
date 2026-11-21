@@ -25,6 +25,15 @@ data class LibraryData(
     val subscriptions: List<ChannelItem> = emptyList(),
     val searchHistory: List<String> = emptyList(),
     val playlists: List<LocalPlaylist> = emptyList(),
+    val groups: List<SubscriptionGroup> = emptyList(),
+)
+
+/** User-defined folder of subscribed channels (by channel URL). */
+@Serializable
+data class SubscriptionGroup(
+    val id: String,
+    val name: String,
+    val channels: List<String> = emptyList(),
 )
 
 @Serializable
@@ -152,6 +161,19 @@ class LibraryStore(context: Context, private val scope: CoroutineScope) {
     private fun updatePlaylist(id: String, block: (LocalPlaylist) -> LocalPlaylist) = mutate { d ->
         d.copy(playlists = d.playlists.map { if (it.id == id) block(it) else it })
     }
+
+    // ---------------------------------------------------------------- subscription groups
+    fun saveGroup(id: String?, name: String, channels: List<String>): String {
+        val gid = id ?: java.util.UUID.randomUUID().toString()
+        mutate { d ->
+            val g = SubscriptionGroup(gid, name.trim().ifBlank { "Group" }, channels.distinct())
+            val exists = d.groups.any { it.id == gid }
+            d.copy(groups = if (exists) d.groups.map { if (it.id == gid) g else it } else d.groups + g)
+        }
+        return gid
+    }
+
+    fun deleteGroup(id: String) = mutate { d -> d.copy(groups = d.groups.filter { it.id != id }) }
 
     fun unsubscribe(url: String) = mutate { d -> d.copy(subscriptions = d.subscriptions.filter { it.url != url }) }
 

@@ -1,5 +1,27 @@
 package com.vidora.app.ui.screens
 
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
+import com.vidora.app.data.ChannelItem
+import com.vidora.app.data.SubscriptionGroup
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -55,6 +77,12 @@ fun SubscriptionsScreen(nav: NavHostController, actions: VideoActions) {
     val subs = library.subscriptions
     val paged = remember(subs.map { it.url }) { Paged(scope) { loadFeed() } }
     LaunchedEffect(paged) { if (subs.isNotEmpty()) paged.load() }
+    var groupId by rememberSaveable { mutableStateOf<String?>(null) }
+    var editing by remember { mutableStateOf<SubscriptionGroup?>(null) }
+    var creating by remember { mutableStateOf(false) }
+    val group = library.groups.firstOrNull { it.id == groupId }
+    val groupSet = remember(group) { group?.channels?.toHashSet() }
+    val shownSubs = if (groupSet == null) subs else subs.filter { it.url in groupSet }
 
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
@@ -70,8 +98,20 @@ fun SubscriptionsScreen(nav: NavHostController, actions: VideoActions) {
             )
             return@Column
         }
-        LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            items(subs, key = { it.url }) { c ->
+        LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            item { FilterChip(selected = group == null, onClick = { groupId = null }, label = { Text("All") }) }
+            items(library.groups, key = { "g:" + it.id }) { g ->
+                FilterChip(
+                    selected = g.id == groupId,
+                    onClick = { groupId = if (groupId == g.id) null else g.id },
+                    label = { Text("${g.name} · ${g.channels.size}") },
+                    trailingIcon = if (g.id == groupId) ({ Icon(Icons.Rounded.Edit, "Edit group", Modifier.size(16.dp).clickable { editing = g }) }) else null,
+                )
+            }
+            item { AssistChip(onClick = { creating = true }, label = { Text("New group") }, leadingIcon = { Icon(Icons.Rounded.Add, null, Modifier.size(16.dp)) }) }
+        }
+        LazyRow(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            items(shownSubs, key = { it.url }) { c ->
                 Column(
                     Modifier.width(68.dp).clickable { nav.navigate(Routes.channel(c.url)) },
                     horizontalAlignment = Alignment.CenterHorizontally
@@ -83,7 +123,42 @@ fun SubscriptionsScreen(nav: NavHostController, actions: VideoActions) {
             }
         }
         PullToRefreshBox(isRefreshing = paged.refreshing, onRefresh = { paged.load(refresh = true) }, modifier = Modifier.fillMaxSize()) {
-            EntryGrid(paged = paged, actions = actions)
+            EntryGrid(paged = paged, actions = actions, filter = { e -> groupSet == null || (e is Entry.Video && e.video.uploaderUrl in groupSet) })
+        }
+    }
+    if (creating || editing != null) {
+        GroupEditor(editing, subs, onDismiss = { creating = false; editing = null }) { id ->
+            creating = false; editing = null
+            groupId = id
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun GroupEditor(initial: SubscriptionGroup?, channels: List<ChannelItem>, onDismiss: () -> Unit, onDone: (String?) -> Unit) {
+    var name by remember { mutableStateOf(initial?.name.orEmpty()) }
+    val selected = remember { mutableStateListOf<String>().apply { addAll(initial?.channels.orEmpty()) } }
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(Modifier.padding(horizontal = 20.dp)) {
+            Text(if (initial == null) "New group" else "Edit group", style = MaterialTheme.typography.titleLarge)
+            OutlinedTextField(name, { name = it }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (initial != null) TextButton(onClick = { Graph.library.deleteGroup(initial.id); onDone(null) }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+                Spacer(Modifier.weight(1f))
+                Button(enabled = name.isNotBlank(), onClick = { onDone(Graph.library.saveGroup(initial?.id, name, selected.toList())) }) { Text("Save · ${selected.size}") }
+            }
+        }
+        LazyColumn(Modifier.navigationBarsPadding(), contentPadding = PaddingValues(bottom = 24.dp)) {
+            items(channels, key = { it.url }) { c ->
+                val checked = c.url in selected
+                ListItem(
+                    headlineContent = { Text(c.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    leadingContent = { Avatar(c.avatar, 36) },
+                    trailingContent = { Checkbox(checked = checked, onCheckedChange = null) },
+                    modifier = Modifier.clickable { if (checked) selected.remove(c.url) else selected.add(c.url) }
+                )
+            }
         }
     }
 }
@@ -93,7 +168,12 @@ private suspend fun loadFeed(): PageResult = coroutineScope {
     val subs = Graph.library.data.value.subscriptions
     val gate = Semaphore(6)
     val videos = subs.map { c ->
-        async { gate.withPermit { runCatching { Graph.repository.latestUploads(c.url).take(15) }.getOrDefault(emptyList()) } }
+        async {
+            gate.withPermit {
+                // Tag with the subscription URL so group filters match regardless of URL form (/channel/UC… vs /@handle)
+                runCatching { Graph.repository.latestUploads(c.url).take(15).map { it.copy(uploaderUrl = c.url) } }.getOrDefault(emptyList())
+            }
+        }
     }.awaitAll().flatten()
     val sorted = videos.sortedByDescending { it.uploadedEpoch }.distinctBy { it.url }
     PageResult(sorted.map { Entry.Video(it) })
