@@ -22,9 +22,11 @@ class StreamInterceptor : Interceptor {
         val original = chain.request()
         val url = original.url
         if (!url.encodedPath.startsWith("/videoplayback")) return chain.proceed(original)
+        // HLS/DASH segment URLs use path parameters (/videoplayback/id/...) and must not get `rn`
+        val progressive = url.encodedPath == "/videoplayback"
 
         val urlString = url.toString()
-        val newUrl = if (url.queryParameter("rn") == null) {
+        val newUrl = if (progressive && url.queryParameter("rn") == null) {
             url.newBuilder().addQueryParameter("rn", requestNumber.getAndIncrement().toString()).build()
         } else url
 

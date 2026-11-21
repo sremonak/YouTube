@@ -137,6 +137,7 @@ fun PlayerScreen(
         onDispose {
             activity.playerVisible = false
             activity.updatePipParams()
+            if (!pipMode) activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
     }
 
@@ -145,11 +146,13 @@ fun PlayerScreen(
         return
     }
 
-    FullscreenEffect(activity, fullscreen, fullscreenRequested)
-    BackHandler(enabled = fullscreen) {
+    FullscreenEffect(activity, fullscreen)
+    val exitFullscreen = {
         fullscreenRequested = false
-        activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        // force portrait so a phone held sideways leaves fullscreen too
+        activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT
     }
+    BackHandler(enabled = fullscreen) { exitFullscreen() }
 
     if (state.current == null) {
         LaunchedEffect(Unit) { nav.popBackStack() }
@@ -158,11 +161,7 @@ fun PlayerScreen(
 
     if (fullscreen) {
         Box(Modifier.fillMaxSize().background(Color.Black)) {
-            VideoSurface(Modifier.fillMaxSize(), state, showControls = true, onFullscreen = {
-                fullscreenRequested = !fullscreen
-                activity.requestedOrientation = if (fullscreenRequested) ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-                else ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-            })
+            VideoSurface(Modifier.fillMaxSize(), state, showControls = true, onFullscreen = exitFullscreen)
         }
         return
     }
@@ -214,7 +213,7 @@ fun PlayerScreen(
 }
 
 @Composable
-private fun FullscreenEffect(activity: Activity, fullscreen: Boolean, requested: Boolean) {
+private fun FullscreenEffect(activity: Activity, fullscreen: Boolean) {
     DisposableEffect(fullscreen) {
         val controller = WindowCompat.getInsetsController(activity.window, activity.window.decorView)
         if (fullscreen) {
@@ -223,10 +222,7 @@ private fun FullscreenEffect(activity: Activity, fullscreen: Boolean, requested:
         } else {
             controller.show(WindowInsetsCompat.Type.systemBars())
         }
-        onDispose {
-            controller.show(WindowInsetsCompat.Type.systemBars())
-            if (requested) activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-        }
+        onDispose { controller.show(WindowInsetsCompat.Type.systemBars()) }
     }
 }
 
@@ -433,7 +429,7 @@ private fun LazyListScope.relatedSection(state: PlayerUiState, actions: VideoAct
         item(key = "upnext_h") {
             Text("Up next in queue", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
         }
-        items(upNext, key = { "q" + it.url }) { v -> VideoCard(v, actions, compact = true) }
+        items(upNext.distinctBy { it.url }, key = { "q" + it.url }) { v -> VideoCard(v, actions, compact = true) }
     }
     item(key = "related_h") {
         Text("Related", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
@@ -441,7 +437,7 @@ private fun LazyListScope.relatedSection(state: PlayerUiState, actions: VideoAct
     if (details == null) {
         if (state.error == null) items(5) { ShimmerCard(compact = true) }
     } else {
-        items(details.relatedVideos.filter { r -> upNext.none { it.url == r.url } }, key = { "r" + it.url }) { v ->
+        items(details.relatedVideos.filter { r -> upNext.none { it.url == r.url } }.distinctBy { it.url }, key = { "r" + it.url }) { v ->
             VideoCard(v, actions, compact = true)
         }
     }

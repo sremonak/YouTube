@@ -164,7 +164,8 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
     // ------------------------------------------------------------------ public API
 
     fun play(item: VideoItem, queue: List<VideoItem>? = null) {
-        val newQueue = queue ?: _state.value.queue.takeIf { q -> q.any { it.url == item.url } } ?: listOf(item)
+        val newQueue = (queue ?: _state.value.queue.takeIf { q -> q.any { it.url == item.url } } ?: listOf(item))
+            .distinctBy { it.url }
         val index = newQueue.indexOfFirst { it.url == item.url }.coerceAtLeast(0)
         if (_state.value.current?.url == item.url && _state.value.details != null) {
             _state.value = _state.value.copy(queue = newQueue, queueIndex = index)
@@ -266,6 +267,13 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
     }
 
     fun seekTo(ms: Long) = exoPlayer.seekTo(ms)
+
+    /** Stops decoding video while the app is in the background → much lower battery use. */
+    fun setVideoTrackEnabled(enabled: Boolean) {
+        exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters.buildUpon()
+            .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, !enabled)
+            .build()
+    }
 
     fun togglePlay() {
         if (exoPlayer.isPlaying) exoPlayer.pause() else {

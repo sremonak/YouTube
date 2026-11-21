@@ -82,12 +82,14 @@ class MainActivity : ComponentActivity() {
             val token = SessionToken(this, ComponentName(this, PlaybackService::class.java))
             controllerFuture = MediaController.Builder(this, token).buildAsync()
         }
+        Graph.player.setVideoTrackEnabled(true)
     }
 
     override fun onStop() {
         super.onStop()
-        if (!settings.backgroundPlay && !isInPip) {
-            Graph.player.exoPlayer.pause()
+        if (!isInPip) {
+            if (settings.backgroundPlay) Graph.player.setVideoTrackEnabled(false)
+            else Graph.player.exoPlayer.pause()
         }
     }
 

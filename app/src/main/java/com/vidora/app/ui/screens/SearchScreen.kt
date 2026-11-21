@@ -120,10 +120,10 @@ fun SearchScreen(nav: NavHostController, actions: VideoActions, initialQuery: St
         if (editing) {
             val history = if (text.isBlank()) library.searchHistory else library.searchHistory.filter { it.contains(text, true) }.take(4)
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 96.dp)) {
-                items(history, key = { "h$it" }) { q ->
+                items(history.distinct(), key = { "h$it" }) { q ->
                     SuggestionRow(q, isHistory = true, onClick = { submit(q) }, onFill = { text = q }, onRemove = { Graph.library.removeSearch(q) })
                 }
-                items(suggestions.filter { s -> history.none { it.equals(s, true) } }, key = { "s$it" }) { q ->
+                items(suggestions.distinct().filter { s -> history.none { it.equals(s, true) } }, key = { "s$it" }) { q ->
                     SuggestionRow(q, isHistory = false, onClick = { submit(q) }, onFill = { text = "$q " })
                 }
             }
