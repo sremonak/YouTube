@@ -337,6 +337,11 @@ fun EntryGrid(
                 EmptyState(stringResource(R.string.ui_nothing_here_yet), stringResource(R.string.ui_try_another_search_or_category))
             }
         }
+        if (paged.items.isNotEmpty() && visible.isEmpty() && !paged.loading && paged.endReached) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                EmptyState("No results match your filters", "Try a different length, date or turn off some content filters.")
+            }
+        }
         items(visible, key = { it.key }, span = { e ->
             if (e is Entry.Channel) GridItemSpan(maxLineSpan) else GridItemSpan(1)
         }) { entry ->

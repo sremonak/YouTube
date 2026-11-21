@@ -1,5 +1,7 @@
 package com.vidora.app.ui.screens
 
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -120,9 +122,12 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
             }
         }
         PullToRefreshBox(isRefreshing = paged.refreshing, onRefresh = { paged.load(refresh = true) }, modifier = Modifier.fillMaxSize()) {
+            val library by Graph.library.data.collectAsState()
+            val resume = remember(library.history) { com.vidora.app.data.ContinueWatching.pick(library.history) }
             EntryGrid(
                 paged = paged, actions = actions, state = gridState,
-                filter = { e -> !(settings.hideShorts && e is Entry.Video && e.video.isShort) }
+                filter = { e -> !(settings.hideShorts && e is Entry.Video && e.video.isShort) },
+                header = if (resume.isEmpty() || section == HomeSection.LIVE) null else ({ ContinueWatchingRow(resume, actions) })
             )
         }
     }
@@ -140,4 +145,27 @@ private suspend fun loadSection(section: HomeSection): PageResult {
     }
     val query = seeds.randomOrNull() ?: listOf("trending today", "new music", "technology news", "best of the week", "documentary").random()
     return runCatching { Graph.repository.search(query) }.getOrElse { Graph.repository.kiosk("trending_music") }
+}
+
+@Composable
+private fun ContinueWatchingRow(entries: List<com.vidora.app.data.HistoryEntry>, actions: VideoActions) {
+    Column(Modifier.padding(bottom = 8.dp)) {
+        com.vidora.app.ui.components.SectionHeader("Continue watching")
+        LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            items(entries, key = { it.video.url }) { h ->
+                Column(Modifier.width(200.dp).clickable { actions.open(h.video) }) {
+                    val progress = h.positionMs / 1000f / h.video.duration
+                    com.vidora.app.ui.components.Thumbnail(h.video, Modifier.fillMaxWidth(), progress)
+                    Text(
+                        h.video.title, style = MaterialTheme.typography.bodyMedium, maxLines = 2,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp)
+                    )
+                    Text(
+                        "${com.vidora.app.util.Format.duration((h.video.duration - h.positionMs / 1000).coerceAtLeast(0))} left",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1
+                    )
+                }
+            }
+        }
+    }
 }

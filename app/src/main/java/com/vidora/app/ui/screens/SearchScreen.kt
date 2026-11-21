@@ -20,6 +20,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ArrowDropDown
+import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Close
@@ -68,6 +70,9 @@ fun SearchScreen(nav: NavHostController, actions: VideoActions, initialQuery: St
     var text by rememberSaveable { mutableStateOf(initialQuery) }
     var submitted by rememberSaveable { mutableStateOf(initialQuery) }
     var filter by rememberSaveable { mutableStateOf(SearchFilter.ALL) }
+    var durationF by rememberSaveable { mutableStateOf(com.vidora.app.data.DurationFilter.ANY) }
+    var dateF by rememberSaveable { mutableStateOf(com.vidora.app.data.DateFilter.ANY) }
+    var hideLive by rememberSaveable { mutableStateOf(false) }
     var editing by remember { mutableStateOf(initialQuery.isBlank()) }
     var suggestions by remember { mutableStateOf<List<String>>(emptyList()) }
     val library by Graph.library.data.collectAsState()
@@ -152,10 +157,38 @@ fun SearchScreen(nav: NavHostController, actions: VideoActions, initialQuery: St
                     FilterChip(selected = f == filter, onClick = { filter = f }, label = { Text(f.label) })
                 }
             }
+            if (filter == SearchFilter.ALL || filter == SearchFilter.VIDEOS) {
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    item { RefineChip(durationF.label, durationF != com.vidora.app.data.DurationFilter.ANY, com.vidora.app.data.DurationFilter.entries.map { it.label }) { durationF = com.vidora.app.data.DurationFilter.entries[it] } }
+                    item { RefineChip(dateF.label, dateF != com.vidora.app.data.DateFilter.ANY, com.vidora.app.data.DateFilter.entries.map { it.label }) { dateF = com.vidora.app.data.DateFilter.entries[it] } }
+                    item { FilterChip(selected = hideLive, onClick = { hideLive = !hideLive }, label = { Text("Hide live") }) }
+                }
+            }
             EntryGrid(
                 paged = paged, actions = actions,
-                filter = { e -> !(settings?.hideShorts == true && e is Entry.Video && e.video.isShort) }
+                filter = { e ->
+                    !(settings?.hideShorts == true && e is Entry.Video && e.video.isShort) &&
+                        (e !is Entry.Video || com.vidora.app.data.SearchRefine.matches(e.video, durationF, dateF, hideLive))
+                }
             )
+        }
+    }
+}
+
+@Composable
+private fun RefineChip(label: String, active: Boolean, options: List<String>, onPick: (Int) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        FilterChip(
+            selected = active, onClick = { open = true }, label = { Text(label) },
+            trailingIcon = { Icon(Icons.Rounded.ArrowDropDown, null) }
+        )
+        androidx.compose.material3.DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            options.forEachIndexed { i, o ->
+                androidx.compose.material3.DropdownMenuItem(text = { Text(o) }, onClick = { onPick(i); open = false })
+            }
         }
     }
 }
