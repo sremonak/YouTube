@@ -19,7 +19,16 @@ import com.vidora.app.player.PlayerManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+import com.vidora.app.data.AppSettings
+import com.vidora.app.potoken.PoTokenProviderImpl
+import com.vidora.app.util.CrashReporter
+import com.vidora.app.notify.NewVideosWorker
+import org.schabi.newpipe.extractor.services.youtube.extractors.YoutubeStreamExtractor
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import org.schabi.newpipe.extractor.NewPipe
@@ -54,6 +63,11 @@ object Graph {
     val account by lazy { AccountManager(app, appScope) }
     val accountApi by lazy { AccountApi() }
 
+    /** Always-current settings snapshot for non-UI code (filters, player, workers). */
+    val settingsState: StateFlow<AppSettings> by lazy {
+        settings.flow.stateIn(appScope, SharingStarted.Eagerly, AppSettings())
+    }
+
     fun init(application: Application) {
         app = application
     }
@@ -64,6 +78,7 @@ class VidoraApp : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
         Graph.init(this)
+        CrashReporter.install(this)
 
         val country = runCatching {
             runBlocking { Graph.settings.flow.first().contentCountry }
@@ -74,6 +89,12 @@ class VidoraApp : Application(), ImageLoaderFactory {
             Localization.fromLocale(locale),
             ContentCountry(country.ifBlank { locale.country.ifBlank { "US" } })
         )
+        // Browser-grade poTokens (BotGuard) → fewer "not a bot" checks and 403s
+        YoutubeStreamExtractor.setPoTokenProvider(PoTokenProviderImpl)
+        Graph.appScope.launch {
+            Graph.settingsState.collect { PoTokenProviderImpl.enabled = it.poToken }
+        }
+        NewVideosWorker.schedule(this)
         createChannels()
     }
 

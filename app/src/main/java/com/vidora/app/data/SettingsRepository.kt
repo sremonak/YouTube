@@ -78,6 +78,28 @@ data class AppSettings(
     val hideShorts: Boolean = false,
     val onboardingDone: Boolean = false,
     val useAccountForRestricted: Boolean = true,
+    val poToken: Boolean = true,
+    val autoUpdateCheck: Boolean = true,
+    val gestures: Boolean = true,
+    val captionsEnabled: Boolean = false,
+    val captionLang: String = "",
+    val captionTranslate: Boolean = false,
+    val captionScale: Float = 1f,
+    val preferredAudioLang: String = "",
+    val eqEnabled: Boolean = false,
+    val eqPreset: Int = -1,
+    val eqBands: String = "",
+    val bassBoost: Int = 0,
+    val volumeBoost: Int = 0,
+    val returnDislike: Boolean = true,
+    val deArrow: Boolean = false,
+    val blockedChannels: Set<String> = emptySet(),
+    val blockedKeywords: Set<String> = emptySet(),
+    val hideWatched: Boolean = false,
+    val shortsPlayer: Boolean = true,
+    val notifyHours: Int = 0,
+    val syncAccountActions: Boolean = true,
+    val persistQueue: Boolean = true,
 )
 
 class SettingsRepository(private val context: Context) {
@@ -112,6 +134,28 @@ class SettingsRepository(private val context: Context) {
         val hideShorts = booleanPreferencesKey("hide_shorts")
         val onboarding = booleanPreferencesKey("onboarding")
         val useAccount = booleanPreferencesKey("use_account")
+        val poToken = booleanPreferencesKey("po_token")
+        val autoUpdateCheck = booleanPreferencesKey("auto_update")
+        val gestures = booleanPreferencesKey("gestures")
+        val captionsEnabled = booleanPreferencesKey("captions")
+        val captionLang = stringPreferencesKey("caption_lang")
+        val captionTranslate = booleanPreferencesKey("caption_translate")
+        val captionScale = floatPreferencesKey("caption_scale")
+        val preferredAudioLang = stringPreferencesKey("audio_lang")
+        val eqEnabled = booleanPreferencesKey("eq_enabled")
+        val eqPreset = intPreferencesKey("eq_preset")
+        val eqBands = stringPreferencesKey("eq_bands")
+        val bassBoost = intPreferencesKey("bass_boost")
+        val volumeBoost = intPreferencesKey("volume_boost")
+        val returnDislike = booleanPreferencesKey("ryd")
+        val deArrow = booleanPreferencesKey("dearrow")
+        val blockedChannels = stringSetPreferencesKey("blocked_channels")
+        val blockedKeywords = stringSetPreferencesKey("blocked_keywords")
+        val hideWatched = booleanPreferencesKey("hide_watched")
+        val shortsPlayer = booleanPreferencesKey("shorts_player")
+        val notifyHours = intPreferencesKey("notify_hours")
+        val syncAccountActions = booleanPreferencesKey("sync_account")
+        val persistQueue = booleanPreferencesKey("persist_queue")
     }
 
     val flow: Flow<AppSettings> = context.dataStore.data.map { p -> p.toSettings() }
@@ -148,6 +192,28 @@ class SettingsRepository(private val context: Context) {
             hideShorts = this[K.hideShorts] ?: d.hideShorts,
             onboardingDone = this[K.onboarding] ?: d.onboardingDone,
             useAccountForRestricted = this[K.useAccount] ?: d.useAccountForRestricted,
+            poToken = this[K.poToken] ?: d.poToken,
+            autoUpdateCheck = this[K.autoUpdateCheck] ?: d.autoUpdateCheck,
+            gestures = this[K.gestures] ?: d.gestures,
+            captionsEnabled = this[K.captionsEnabled] ?: d.captionsEnabled,
+            captionLang = this[K.captionLang] ?: d.captionLang,
+            captionTranslate = this[K.captionTranslate] ?: d.captionTranslate,
+            captionScale = this[K.captionScale] ?: d.captionScale,
+            preferredAudioLang = this[K.preferredAudioLang] ?: d.preferredAudioLang,
+            eqEnabled = this[K.eqEnabled] ?: d.eqEnabled,
+            eqPreset = this[K.eqPreset] ?: d.eqPreset,
+            eqBands = this[K.eqBands] ?: d.eqBands,
+            bassBoost = this[K.bassBoost] ?: d.bassBoost,
+            volumeBoost = this[K.volumeBoost] ?: d.volumeBoost,
+            returnDislike = this[K.returnDislike] ?: d.returnDislike,
+            deArrow = this[K.deArrow] ?: d.deArrow,
+            blockedChannels = this[K.blockedChannels] ?: d.blockedChannels,
+            blockedKeywords = this[K.blockedKeywords] ?: d.blockedKeywords,
+            hideWatched = this[K.hideWatched] ?: d.hideWatched,
+            shortsPlayer = this[K.shortsPlayer] ?: d.shortsPlayer,
+            notifyHours = this[K.notifyHours] ?: d.notifyHours,
+            syncAccountActions = this[K.syncAccountActions] ?: d.syncAccountActions,
+            persistQueue = this[K.persistQueue] ?: d.persistQueue,
         )
     }
 
@@ -183,6 +249,28 @@ class SettingsRepository(private val context: Context) {
             p[K.hideShorts] = s.hideShorts
             p[K.onboarding] = s.onboardingDone
             p[K.useAccount] = s.useAccountForRestricted
+            p[K.poToken] = s.poToken
+            p[K.autoUpdateCheck] = s.autoUpdateCheck
+            p[K.gestures] = s.gestures
+            p[K.captionsEnabled] = s.captionsEnabled
+            p[K.captionLang] = s.captionLang
+            p[K.captionTranslate] = s.captionTranslate
+            p[K.captionScale] = s.captionScale
+            p[K.preferredAudioLang] = s.preferredAudioLang
+            p[K.eqEnabled] = s.eqEnabled
+            p[K.eqPreset] = s.eqPreset
+            p[K.eqBands] = s.eqBands
+            p[K.bassBoost] = s.bassBoost
+            p[K.volumeBoost] = s.volumeBoost
+            p[K.returnDislike] = s.returnDislike
+            p[K.deArrow] = s.deArrow
+            p[K.blockedChannels] = s.blockedChannels
+            p[K.blockedKeywords] = s.blockedKeywords
+            p[K.hideWatched] = s.hideWatched
+            p[K.shortsPlayer] = s.shortsPlayer
+            p[K.notifyHours] = s.notifyHours
+            p[K.syncAccountActions] = s.syncAccountActions
+            p[K.persistQueue] = s.persistQueue
         }
     }
 

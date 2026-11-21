@@ -136,4 +136,6 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
 
     implementation(libs.newpipe.extractor)
+
+    testImplementation(libs.junit)
 }

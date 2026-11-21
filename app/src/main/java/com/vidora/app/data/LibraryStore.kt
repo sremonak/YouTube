@@ -24,7 +24,18 @@ data class LibraryData(
     val watchLater: List<VideoItem> = emptyList(),
     val subscriptions: List<ChannelItem> = emptyList(),
     val searchHistory: List<String> = emptyList(),
+    val playlists: List<LocalPlaylist> = emptyList(),
 )
+
+@Serializable
+data class LocalPlaylist(
+    val id: String,
+    val name: String,
+    val videos: List<VideoItem> = emptyList(),
+    val createdAt: Long = System.currentTimeMillis(),
+) {
+    val thumbnail: String? get() = videos.firstOrNull()?.thumbnail
+}
 
 /** Local-only library (history, likes, watch later, subscriptions). Nothing leaves the device. */
 class LibraryStore(context: Context, private val scope: CoroutineScope) {
@@ -68,9 +79,13 @@ class LibraryStore(context: Context, private val scope: CoroutineScope) {
 
     // favourites / watch later
     fun isFavorite(url: String) = _data.value.favorites.any { it.url == url }
-    fun toggleFavorite(video: VideoItem) = mutate { d ->
-        if (d.favorites.any { it.url == video.url }) d.copy(favorites = d.favorites.filter { it.url != video.url })
-        else d.copy(favorites = listOf(video) + d.favorites)
+    fun toggleFavorite(video: VideoItem) {
+        val nowLiked = !isFavorite(video.url)
+        mutate { d ->
+            if (d.favorites.any { it.url == video.url }) d.copy(favorites = d.favorites.filter { it.url != video.url })
+            else d.copy(favorites = listOf(video) + d.favorites)
+        }
+        com.vidora.app.account.AccountSync.liked(video.url, nowLiked)
     }
 
     fun toggleWatchLater(video: VideoItem) = mutate { d ->
@@ -80,9 +95,13 @@ class LibraryStore(context: Context, private val scope: CoroutineScope) {
 
     // subscriptions
     fun isSubscribed(url: String) = _data.value.subscriptions.any { it.url == url }
-    fun toggleSubscription(channel: ChannelItem) = mutate { d ->
-        if (d.subscriptions.any { it.url == channel.url }) d.copy(subscriptions = d.subscriptions.filter { it.url != channel.url })
-        else d.copy(subscriptions = (d.subscriptions + channel).sortedBy { it.name.lowercase() })
+    fun toggleSubscription(channel: ChannelItem) {
+        val nowSubscribed = !isSubscribed(channel.url)
+        mutate { d ->
+            if (d.subscriptions.any { it.url == channel.url }) d.copy(subscriptions = d.subscriptions.filter { it.url != channel.url })
+            else d.copy(subscriptions = (d.subscriptions + channel).sortedBy { it.name.lowercase() })
+        }
+        com.vidora.app.account.AccountSync.subscribed(channel.url, nowSubscribed)
     }
 
     /** Merges channels (e.g. imported from the YouTube account); returns how many were new. */
@@ -105,6 +124,36 @@ class LibraryStore(context: Context, private val scope: CoroutineScope) {
 
     fun removeSearch(query: String) = mutate { d -> d.copy(searchHistory = d.searchHistory - query) }
     fun clearSearchHistory() = mutate { it.copy(searchHistory = emptyList()) }
+
+    // local playlists
+    fun playlist(id: String): LocalPlaylist? = _data.value.playlists.firstOrNull { it.id == id }
+
+    fun createPlaylist(name: String, first: VideoItem? = null): String {
+        val id = java.util.UUID.randomUUID().toString()
+        mutate { d -> d.copy(playlists = d.playlists + LocalPlaylist(id, name.trim().ifBlank { "My playlist" }, listOfNotNull(first))) }
+        return id
+    }
+
+    fun renamePlaylist(id: String, name: String) = updatePlaylist(id) { it.copy(name = name.trim().ifBlank { it.name }) }
+    fun deletePlaylist(id: String) = mutate { d -> d.copy(playlists = d.playlists.filter { it.id != id }) }
+
+    fun addToPlaylist(id: String, videos: List<VideoItem>) = updatePlaylist(id) { p ->
+        val known = p.videos.map { it.url }.toHashSet()
+        p.copy(videos = p.videos + videos.filter { known.add(it.url) })
+    }
+
+    fun removeFromPlaylist(id: String, url: String) = updatePlaylist(id) { p -> p.copy(videos = p.videos.filter { it.url != url }) }
+
+    fun movePlaylistItem(id: String, from: Int, to: Int) = updatePlaylist(id) { p ->
+        if (from !in p.videos.indices || to !in p.videos.indices) p
+        else p.copy(videos = p.videos.toMutableList().apply { add(to, removeAt(from)) })
+    }
+
+    private fun updatePlaylist(id: String, block: (LocalPlaylist) -> LocalPlaylist) = mutate { d ->
+        d.copy(playlists = d.playlists.map { if (it.id == id) block(it) else it })
+    }
+
+    fun unsubscribe(url: String) = mutate { d -> d.copy(subscriptions = d.subscriptions.filter { it.url != url }) }
 
     // backup / restore
     fun exportJson(): String = json.encodeToString(LibraryData.serializer(), _data.value)

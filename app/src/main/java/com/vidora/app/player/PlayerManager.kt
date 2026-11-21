@@ -24,7 +24,16 @@ import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import com.vidora.app.Graph
+import androidx.media3.common.Format
+import androidx.media3.common.util.Util
+import androidx.media3.extractor.ExtractorsFactory
+import androidx.media3.extractor.text.SubtitleExtractor
+import androidx.media3.extractor.text.webvtt.WebvttParser
 import com.vidora.app.data.AppSettings
+import com.vidora.app.data.AudioTrack
+import com.vidora.app.data.SubtitleOption
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import com.vidora.app.data.AudioOption
 import com.vidora.app.data.SponsorCategories
 import com.vidora.app.data.SponsorSegment
@@ -62,6 +71,10 @@ data class PlayerUiState(
     val segments: List<SponsorSegment> = emptyList(),
     val sleepTimerEndsAt: Long = 0,
     val loop: Boolean = false,
+    val subtitle: SubtitleOption? = null,
+    val audioTrackId: String? = null,
+    /** Restored from the last session; media is loaded on first play. */
+    val restored: Boolean = false,
 )
 
 /**
@@ -124,6 +137,11 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
             else -> super.isCommandAvailable(command)
         }
 
+        override fun play() {
+            val s = _state.value
+            if (s.restored && s.current != null) this@PlayerManager.play(s.current, s.queue) else super.play()
+        }
+
         override fun hasNextMediaItem(): Boolean = true
         override fun hasPreviousMediaItem(): Boolean = true
         override fun seekToNext() = playNext()
@@ -133,10 +151,23 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
     }
 
     private var settings = AppSettings()
+    val effects = AudioEffects()
+    private val sessionStore = SessionStore(context)
 
     init {
+        runCatching { exoPlayer.audioSessionId = Util.generateAudioSessionIdV21(context) }
         scope.launch { Graph.settings.flow.collect { applySettings(it) } }
+        scope.launch(Dispatchers.IO) {
+            _state.map { it.queue.map { v -> v.url } to it.queueIndex }.distinctUntilChanged().collect {
+                val s = _state.value
+                if (settings.persistQueue && !s.localFile) sessionStore.save(PersistedSession(s.queue, s.queueIndex))
+            }
+        }
         exoPlayer.addListener(object : Player.Listener {
+            override fun onAudioSessionIdChanged(audioSessionId: Int) {
+                effects.attach(audioSessionId, settings)
+            }
+
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 _state.value = _state.value.copy(isPlaying = isPlaying)
                 if (!isPlaying) persistPosition()
@@ -156,9 +187,25 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
         val first = settings == AppSettings() && s != settings
         settings = s
         exoPlayer.skipSilenceEnabled = s.skipSilence
+        effects.attach(exoPlayer.audioSessionId, s)
         Graph.repository.useAccountForRestricted = s.useAccountForRestricted
         if (first && _state.value.current == null) {
             _state.value = _state.value.copy(audioOnly = s.audioOnlyDefault, speed = s.defaultSpeed)
+        }
+        if (!restoreChecked) {
+            restoreChecked = true
+            if (s.persistQueue && _state.value.current == null) restoreSession()
+        }
+    }
+
+    private var restoreChecked = false
+
+    private suspend fun restoreSession() {
+        val saved = withContext(Dispatchers.IO) { sessionStore.load() } ?: return
+        if (_state.value.current == null) {
+            _state.value = _state.value.copy(
+                current = saved.queue[saved.index], queue = saved.queue, queueIndex = saved.index, restored = true,
+            )
         }
     }
 
@@ -178,7 +225,7 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
         _state.value = _state.value.copy(
             current = item, details = null, loading = true, error = null,
             queue = newQueue, queueIndex = index, localFile = false, segments = emptyList(),
-            quality = null, audio = null,
+            quality = null, audio = null, subtitle = null, audioTrackId = null, restored = false,
         )
         exoPlayer.stop()
         loadJob?.cancel()
@@ -189,7 +236,11 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
                     thumbnail = details.item.thumbnail ?: item.thumbnail,
                     uploaderAvatar = details.item.uploaderAvatar ?: item.uploaderAvatar,
                 )
-                _state.value = _state.value.copy(current = merged, details = details, loading = false)
+                _state.value = _state.value.copy(
+                    current = merged, details = details, loading = false,
+                    subtitle = defaultSubtitle(details),
+                    audioTrackId = defaultAudioTrack(details),
+                )
                 if (settings.saveHistory) Graph.library.addHistory(merged)
                 val resumeAt = if (settings.resumePlayback && !merged.isLive) {
                     Graph.library.positionOf(merged.url).takeIf { it > 5_000 && (merged.duration == 0L || it < merged.duration * 1000 - 10_000) } ?: 0
@@ -240,6 +291,38 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
         }
     }
 
+    fun setSubtitle(option: SubtitleOption?) {
+        val details = _state.value.details ?: return
+        _state.value = _state.value.copy(subtitle = option)
+        if (option != null) scope.launch { Graph.settings.update { it.copy(captionsEnabled = true, captionLang = option.languageCode) } }
+        else scope.launch { Graph.settings.update { it.copy(captionsEnabled = false) } }
+        prepare(details, exoPlayer.currentPosition, exoPlayer.playWhenReady, forced = _state.value.quality)
+    }
+
+    fun setAudioTrack(track: AudioTrack) {
+        val details = _state.value.details ?: return
+        _state.value = _state.value.copy(audioTrackId = track.id)
+        val pref = if (track.type == null || track.type == "ORIGINAL") "" else track.name
+        scope.launch { Graph.settings.update { it.copy(preferredAudioLang = pref) } }
+        prepare(details, exoPlayer.currentPosition, exoPlayer.playWhenReady, forced = _state.value.quality)
+    }
+
+    private fun defaultSubtitle(details: StreamDetails): SubtitleOption? {
+        if (!settings.captionsEnabled || details.subtitles.isEmpty()) return null
+        val lang = settings.captionLang.ifBlank { java.util.Locale.getDefault().language }
+        return details.subtitles.firstOrNull { it.languageCode == lang && !it.autoGenerated }
+            ?: details.subtitles.firstOrNull { it.languageCode.substringBefore('-') == lang.substringBefore('-') }
+            ?: if (settings.captionTranslate) details.subtitles.firstOrNull() else null
+    }
+
+    private fun defaultAudioTrack(details: StreamDetails): String? {
+        val tracks = details.audioTracks
+        if (tracks.size <= 1) return null
+        val pref = settings.preferredAudioLang
+        if (pref.isNotBlank()) tracks.firstOrNull { it.name.equals(pref, true) }?.let { return it.id }
+        return null
+    }
+
     fun setSpeed(speed: Float) {
         _state.value = _state.value.copy(speed = speed)
         exoPlayer.playbackParameters = PlaybackParameters(speed)
@@ -277,6 +360,10 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
     }
 
     fun togglePlay() {
+        val s = _state.value
+        if (s.restored && s.current != null) {
+            play(s.current, s.queue); return
+        }
         if (exoPlayer.isPlaying) exoPlayer.pause() else {
             if (exoPlayer.playbackState == Player.STATE_ENDED) exoPlayer.seekTo(0)
             exoPlayer.play()
@@ -329,6 +416,7 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
         exoPlayer.stop()
         exoPlayer.clearMediaItems()
         _state.value = PlayerUiState(audioOnly = settings.audioOnlyDefault, speed = settings.defaultSpeed)
+        scope.launch(Dispatchers.IO) { sessionStore.save(null) }
     }
 
     // ------------------------------------------------------------------ internals
@@ -356,7 +444,7 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
             }
 
             s.audioOnly && details.audioStreams.isNotEmpty() -> {
-                chosenAudio = pickAudio(details.audioStreams)
+                chosenAudio = pickAudio(details.audioFor(s.audioTrackId))
                 source = progressive(chosenAudio.url, meta)
             }
 
@@ -365,18 +453,42 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
                     ?: throw IllegalStateException("No playable stream")
                 chosenVideo = video
                 source = if (video.videoOnly && details.audioStreams.isNotEmpty()) {
-                    chosenAudio = pickAudio(details.audioStreams, preferMp4 = video.suffix == "mp4")
+                    chosenAudio = pickAudio(details.audioFor(s.audioTrackId), preferMp4 = video.suffix == "mp4")
                     MergingMediaSource(true, progressive(video.url, meta), progressive(chosenAudio.url, meta))
                 } else progressive(video.url, meta)
             }
         }
 
         _state.value = _state.value.copy(quality = chosenVideo ?: s.quality, audio = chosenAudio)
-        exoPlayer.setMediaSource(source, positionMs)
+        val sub = s.subtitle
+        val withSubs = if (sub != null && !item.isLive) MergingMediaSource(true, source, subtitleSource(sub)) else source
+        exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters.buildUpon()
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, sub == null)
+            .setPreferredTextLanguage(sub?.languageCode)
+            .setSelectUndeterminedTextLanguage(true)
+            .build()
+        exoPlayer.setMediaSource(withSubs, positionMs)
         exoPlayer.playbackParameters = PlaybackParameters(_state.value.speed)
         exoPlayer.repeatMode = if (_state.value.loop) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
         exoPlayer.prepare()
         exoPlayer.playWhenReady = autoPlay
+    }
+
+    /** Side-loaded WebVTT captions, optionally auto-translated by YouTube (tlang). */
+    private fun subtitleSource(sub: SubtitleOption): MediaSource {
+        val target = java.util.Locale.getDefault().language
+        val translate = settings.captionTranslate && target.isNotBlank() &&
+            sub.languageCode.substringBefore('-') != target
+        val url = if (translate) sub.url + "&tlang=" + target else sub.url
+        val format = Format.Builder()
+            .setSampleMimeType(MimeTypes.TEXT_VTT)
+            .setLanguage(if (translate) target else sub.languageCode)
+            .setLabel(sub.label)
+            .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+            .build()
+        val extractors = ExtractorsFactory { arrayOf(SubtitleExtractor(WebvttParser(), format)) }
+        return ProgressiveMediaSource.Factory(httpFactory, extractors)
+            .createMediaSource(MediaItem.fromUri(url))
     }
 
     private fun progressive(url: String, meta: MediaMetadata): MediaSource =

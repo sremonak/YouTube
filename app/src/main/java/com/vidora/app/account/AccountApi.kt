@@ -129,6 +129,26 @@ class AccountApi {
         return channels.distinctBy { it.url }
     }
 
+    // ------------------------------------------------------------------ actions
+
+    suspend fun like(videoId: String) { post("like/like", buildJsonObject { put("context", context()); putJsonObject("target") { put("videoId", videoId) } }) }
+    suspend fun dislike(videoId: String) { post("like/dislike", buildJsonObject { put("context", context()); putJsonObject("target") { put("videoId", videoId) } }) }
+    suspend fun removeLike(videoId: String) { post("like/removelike", buildJsonObject { put("context", context()); putJsonObject("target") { put("videoId", videoId) } }) }
+
+    suspend fun subscribe(channelId: String) {
+        post("subscription/subscribe", buildJsonObject {
+            put("context", context())
+            put("channelIds", JsonArray(listOf(JsonPrimitive(channelId))))
+        })
+    }
+
+    suspend fun unsubscribe(channelId: String) {
+        post("subscription/unsubscribe", buildJsonObject {
+            put("context", context())
+            put("channelIds", JsonArray(listOf(JsonPrimitive(channelId))))
+        })
+    }
+
     // ------------------------------------------------------------------ JSON walking
 
     private val videoKeys = setOf("videoRenderer", "compactVideoRenderer", "gridVideoRenderer", "playlistVideoRenderer")

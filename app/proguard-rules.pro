@@ -46,3 +46,9 @@
 
 # WorkManager workers are instantiated by reflection
 -keep class * extends androidx.work.ListenableWorker { <init>(...); }
+
+# BotGuard / poToken WebView bridge — methods are called from JavaScript
+-keepclassmembers class com.vidora.app.potoken.PoTokenWebView {
+    @android.webkit.JavascriptInterface <methods>;
+}
+-keepattributes JavascriptInterface

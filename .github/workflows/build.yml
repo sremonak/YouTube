@@ -60,13 +60,13 @@ jobs:
         run: |
           chmod +x gradlew
           set -o pipefail
-          ./gradlew --no-daemon assembleRelease 2>&1 | tee build.log
+          ./gradlew --no-daemon assembleRelease testReleaseUnitTest 2>&1 | tee build.log
 
       - name: Report build errors
         if: failure()
         run: |
           # Surface compiler / Gradle errors as annotations (visible on the PR & checks page)
-          { grep -E "^e: |^ERROR|error:|Could not (find|resolve)|Execution failed" build.log || true
+          { grep -E "^e: |^ERROR|error:|Could not (find|resolve)|Execution failed|FAILED|AssertionError|Exception at" build.log || true
             awk '/What went wrong:/{f=1} f&&n<25{print;n++}' build.log; } | head -c 30000 > errors.txt
           python3 - <<'PY'
           text = open("errors.txt").read()
