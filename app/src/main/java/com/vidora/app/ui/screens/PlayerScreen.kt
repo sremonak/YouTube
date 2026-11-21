@@ -6,7 +6,6 @@ import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
-import androidx.annotation.OptIn
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -231,7 +230,7 @@ private fun FullscreenEffect(activity: Activity, fullscreen: Boolean, requested:
     }
 }
 
-@OptIn(UnstableApi::class)
+@androidx.annotation.OptIn(UnstableApi::class)
 @Composable
 private fun VideoSurface(modifier: Modifier, state: PlayerUiState, showControls: Boolean, onFullscreen: () -> Unit) {
     Box(modifier, contentAlignment = Alignment.Center) {

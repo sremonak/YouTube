@@ -69,7 +69,7 @@ class ContentRepository {
     }
 
     private fun nextSearch(handler: SearchQueryHandler, page: Page?): (suspend () -> PageResult)? {
-        if (!Page.isValid(page)) return null
+        if (page == null || !Page.isValid(page)) return null
         return {
             io {
                 val more = SearchInfo.getMoreItems(service, handler, page)
@@ -88,7 +88,7 @@ class ContentRepository {
     }
 
     private fun nextKiosk(url: String, page: Page?): (suspend () -> PageResult)? {
-        if (!Page.isValid(page)) return null
+        if (page == null || !Page.isValid(page)) return null
         return {
             io {
                 val more = KioskInfo.getMoreItems(service, url, page)
@@ -222,7 +222,7 @@ class ContentRepository {
     }
 
     private fun nextChannelTab(handler: ListLinkHandler, page: Page?): (suspend () -> PageResult)? {
-        if (!Page.isValid(page)) return null
+        if (page == null || !Page.isValid(page)) return null
         return {
             io {
                 val more = ChannelTabInfo.getMoreItems(service, handler, page)
@@ -253,7 +253,7 @@ class ContentRepository {
     }
 
     private fun nextPlaylist(url: String, page: Page?): (suspend () -> PageResult)? {
-        if (!Page.isValid(page)) return null
+        if (page == null || !Page.isValid(page)) return null
         return {
             io {
                 val more: ListExtractor.InfoItemsPage<StreamInfoItem> = PlaylistInfo.getMoreItems(service, url, page)
