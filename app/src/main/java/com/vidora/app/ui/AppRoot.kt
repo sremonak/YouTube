@@ -60,6 +60,10 @@ import com.vidora.app.data.VideoItem
 import com.vidora.app.download.DownloadStatus
 import com.vidora.app.ui.components.VideoActions
 import com.vidora.app.ui.screens.AccountFeedScreen
+import com.vidora.app.ui.screens.FiltersScreen
+import com.vidora.app.ui.screens.LocalPlaylistScreen
+import com.vidora.app.ui.screens.ShortsScreen
+import com.vidora.app.ui.screens.ShortsSession
 import com.vidora.app.ui.screens.ChannelScreen
 import com.vidora.app.ui.screens.LoginScreen
 import com.vidora.app.ui.screens.DownloadsScreen
@@ -88,6 +92,7 @@ object Routes {
     const val ACCOUNT_FEED = "account/{feed}"
     const val LOCAL_PLAYLIST = "local/{id}"
     const val FILTERS = "filters"
+    const val SHORTS = "shorts"
 
     fun search(q: String = "") = "search?q=" + Uri.encode(q)
     fun channel(url: String) = "channel/" + Uri.encode(url)
@@ -122,8 +127,13 @@ fun AppRoot(activity: MainActivity, settings: AppSettings) {
     val actions = remember(nav) {
         VideoActions(
             open = { item ->
-                Graph.player.play(item)
-                nav.navigate(Routes.PLAYER) { launchSingleTop = true }
+                if (item.isShort && Graph.settingsState.value.shortsPlayer) {
+                    ShortsSession.seed = listOf(item)
+                    nav.navigate(Routes.SHORTS) { launchSingleTop = true }
+                } else {
+                    Graph.player.play(item)
+                    nav.navigate(Routes.PLAYER) { launchSingleTop = true }
+                }
             },
             openChannel = { url -> nav.navigate(Routes.channel(url)) },
             openPlaylist = { url -> nav.navigate(Routes.playlist(url)) },
@@ -148,7 +158,7 @@ fun AppRoot(activity: MainActivity, settings: AppSettings) {
     }
 
     val isTop = topDestinations.any { it.route == route }
-    val showMini = playerState.current != null && route != Routes.PLAYER && route != Routes.LOGIN
+    val showMini = playerState.current != null && route != Routes.PLAYER && route != Routes.LOGIN && route != Routes.SHORTS
     val showNav = route != Routes.PLAYER && route != Routes.LOGIN
 
     Scaffold(
@@ -215,6 +225,7 @@ fun AppRoot(activity: MainActivity, settings: AppSettings) {
                         LocalPlaylistScreen(nav, actions, entry.arguments?.getString("id").orEmpty())
                     }
                     composable(Routes.FILTERS) { FiltersScreen(nav) }
+                    composable(Routes.SHORTS) { ShortsScreen(nav, actions) }
                     composable(Routes.LIST, arguments = listOf(navArgument("kind") { type = NavType.StringType })) { entry ->
                         VideoListScreen(nav, actions, entry.arguments?.getString("kind").orEmpty())
                     }
@@ -229,6 +240,7 @@ fun AppRoot(activity: MainActivity, settings: AppSettings) {
     }
 
     downloadTarget?.let { video -> DownloadSheet(video = video, onDismiss = { downloadTarget = null }) }
+    com.vidora.app.ui.components.StartupDialogs()
 }
 
 @Composable

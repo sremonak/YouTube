@@ -100,6 +100,31 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
         runCatching { context.contentResolver.openOutputStream(uri)?.use { it.write(Graph.library.exportJson().toByteArray()) } }
             .onSuccess { Toast.makeText(context, "Library exported", Toast.LENGTH_SHORT).show() }
     }
+    var updateInfo by remember { mutableStateOf<com.vidora.app.util.UpdateInfo?>(null) }
+    var checkingUpdate by remember { mutableStateOf(false) }
+    var showEq by remember { mutableStateOf(false) }
+    val subsImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri ?: return@rememberLauncherForActivityResult
+        val result = runCatching {
+            val text = context.contentResolver.openInputStream(uri)?.use { it.readBytes().decodeToString() }.orEmpty()
+            val channels = com.vidora.app.data.SubscriptionImport.parse(text)
+            if (channels.isEmpty()) error("No channels found in this file")
+            Graph.library.importSubscriptions(channels) to channels.size
+        }
+        Toast.makeText(
+            context,
+            result.fold({ (added, total) -> "Imported $added new of $total channels" }, { "Import failed: ${it.message}" }),
+            Toast.LENGTH_LONG
+        ).show()
+    }
+    val subsExportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        uri ?: return@rememberLauncherForActivityResult
+        runCatching {
+            val text = com.vidora.app.data.SubscriptionImport.exportNewPipe(Graph.library.data.value.subscriptions)
+            context.contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray()) }
+        }.onSuccess { Toast.makeText(context, "Subscriptions exported", Toast.LENGTH_SHORT).show() }
+    }
+    val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri ?: return@rememberLauncherForActivityResult
         val ok = runCatching {
@@ -162,6 +187,11 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
                                 Toast.LENGTH_LONG
                             ).show()
                         }
+                    }
+                }
+                item {
+                    SwitchRow("Sync likes & subscriptions to YouTube", "Liking, disliking or subscribing in Vidora also does it on your account", s.syncAccountActions) { v ->
+                        update { it.copy(syncAccountActions = v) }
                     }
                 }
                 item {
@@ -284,6 +314,35 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
             item { SwitchRow("Resume where you left off", null, s.resumePlayback) { v -> update { it.copy(resumePlayback = v) } } }
             item { SwitchRow("Start in audio-only mode", "Great for music and podcasts, saves data", s.audioOnlyDefault) { v -> update { it.copy(audioOnlyDefault = v) } } }
             item { SwitchRow("Skip silence", "Speeds through silent parts", s.skipSilence) { v -> update { it.copy(skipSilence = v) } } }
+            item { SwitchRow("Gestures", "Double-tap to seek, hold for 2×, swipe for brightness/volume in fullscreen", s.gestures) { v -> update { it.copy(gestures = v) } } }
+            item { SwitchRow("Remember queue", "Restore what you were watching after restarting the app", s.persistQueue) { v -> update { it.copy(persistQueue = v) } } }
+            item { ClickRow("Equalizer & audio boost", if (s.eqEnabled || s.volumeBoost > 0) "On" else "Off") { showEq = true } }
+
+            // ------------------------------------------------------------ captions & audio language
+            item { Header("Captions & audio language") }
+            item { SwitchRow("Show captions by default", null, s.captionsEnabled) { v -> update { it.copy(captionsEnabled = v) } } }
+            item { ClickRow("Caption language", s.captionLang.ifBlank { "Device language (${java.util.Locale.getDefault().displayLanguage})" }) { dialog = "caplang" } }
+            item { SwitchRow("Auto-translate captions", "Translate into your device language when no matching track exists", s.captionTranslate) { v -> update { it.copy(captionTranslate = v) } } }
+            item {
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                    Text("Caption size · ${(s.captionScale * 100).toInt()}%", style = MaterialTheme.typography.titleSmall)
+                    Slider(value = s.captionScale, valueRange = 0.6f..2f, steps = 6, onValueChange = { v -> update { it.copy(captionScale = v) } })
+                }
+            }
+            item { ClickRow("Preferred audio track", s.preferredAudioLang.ifBlank { "Original" }) { update { it.copy(preferredAudioLang = "") }; Toast.makeText(context, "Reset to original audio. Pick a dubbed track from the player to remember it.", Toast.LENGTH_LONG).show() } }
+
+            // ------------------------------------------------------------ community
+            item { Header("Community features") }
+            item { SwitchRow("Return YouTube Dislike", "Show dislike counts from returnyoutubedislike.com", s.returnDislike) { v -> update { it.copy(returnDislike = v) } } }
+            item { SwitchRow("DeArrow", "Replace clickbait titles & thumbnails with community ones (dearrow.ajay.app)", s.deArrow) { v -> update { it.copy(deArrow = v) } } }
+            item { SwitchRow("Vertical Shorts player", "Swipe through Shorts full-screen", s.shortsPlayer) { v -> update { it.copy(shortsPlayer = v) } } }
+            item { ClickRow("Content filters", "${s.blockedChannels.size} blocked channels · ${s.blockedKeywords.size} keywords") { nav.navigate(Routes.FILTERS) } }
+
+            // ------------------------------------------------------------ notifications
+            item { Header("Notifications") }
+            item {
+                ClickRow("New video notifications", if (s.notifyHours <= 0) "Off" else "Check subscriptions every ${s.notifyHours} h") { dialog = "notify" }
+            }
 
             // ------------------------------------------------------------ sponsorblock
             item { Header("SponsorBlock") }
@@ -311,6 +370,8 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
             item { Header("Content & privacy") }
             item { ClickRow("Content country", Countries.firstOrNull { it.first == s.contentCountry }?.second ?: s.contentCountry) { dialog = "country" } }
             item { SwitchRow("Hide Shorts", null, s.hideShorts) { v -> update { it.copy(hideShorts = v) } } }
+            item { ClickRow("Import subscriptions", "From NewPipe, LibreTube, FreeTube (JSON), Google Takeout (CSV) or OPML") { subsImportLauncher.launch(arrayOf("*/*")) } }
+            item { ClickRow("Export subscriptions", "NewPipe-compatible JSON") { subsExportLauncher.launch("vidora-subscriptions.json") } }
             item { SwitchRow("Save watch history", "Stored only on this device", s.saveHistory) { v -> update { it.copy(saveHistory = v) } } }
             item { SwitchRow("Save search history", null, s.saveSearchHistory) { v -> update { it.copy(saveSearchHistory = v) } } }
             item { ClickRow("Clear search history", null) { Graph.library.clearSearchHistory(); Toast.makeText(context, "Search history cleared", Toast.LENGTH_SHORT).show() } }
@@ -318,6 +379,35 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
             item { ClickRow("Export library", "Back up subscriptions, likes, history") { exportLauncher.launch("vidora-backup.json") } }
             item { ClickRow("Import library", "Restore from a backup file") { importLauncher.launch(arrayOf("application/json", "*/*")) } }
             item { ClickRow("Reset all settings", null) { dialog = "reset" } }
+
+            // ------------------------------------------------------------ advanced
+            item { Header("Advanced") }
+            item {
+                SwitchRow("Use PoToken (BotGuard)", "Generates YouTube integrity tokens locally to avoid playback errors. Status: ${com.vidora.app.potoken.PoTokenProviderImpl.lastStatus}", s.poToken) { v ->
+                    update { it.copy(poToken = v) }
+                }
+            }
+            item { SwitchRow("Check for updates automatically", "From github.com/${com.vidora.app.util.Updater.REPO} releases", s.autoUpdateCheck) { v -> update { it.copy(autoUpdateCheck = v) } } }
+            item {
+                ClickRow(if (checkingUpdate) "Checking…" else "Check for updates now", "Current version ${BuildConfig.VERSION_NAME}") {
+                    if (checkingUpdate) return@ClickRow
+                    checkingUpdate = true
+                    scope.launch {
+                        val r = runCatching { com.vidora.app.util.Updater.check() }
+                        checkingUpdate = false
+                        r.onSuccess { info ->
+                            if (info == null) Toast.makeText(context, "You're on the latest version", Toast.LENGTH_SHORT).show() else updateInfo = info
+                        }.onFailure { Toast.makeText(context, "Update check failed: ${it.message}", Toast.LENGTH_LONG).show() }
+                    }
+                }
+            }
+            item {
+                ClickRow("Report a problem", "Opens a GitHub issue with device details") {
+                    val body = com.vidora.app.util.CrashReporter.report(null, "Describe the problem:")
+                    val url = "https://github.com/${com.vidora.app.util.Updater.REPO}/issues/new?body=" + android.net.Uri.encode(body)
+                    runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))) }
+                }
+            }
 
             // ------------------------------------------------------------ about
             item { Header("About") }
@@ -330,7 +420,8 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
                         Text("${s.displayName} ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         Text(
                             "Ad-free · background play · downloads · optional sign-in, no tracking. " +
-                                "Powered by the open-source NewPipe Extractor (GPLv3), Media3/ExoPlayer and SponsorBlock.",
+                                "Powered by the open-source NewPipe Extractor (GPLv3), Media3/ExoPlayer, SponsorBlock, " +
+                                "DeArrow and Return YouTube Dislike (returnyoutubedislike.com).",
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
@@ -339,7 +430,23 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
         }
     }
 
+    updateInfo?.let { info -> com.vidora.app.ui.components.UpdateDialog(info) { updateInfo = null } }
+    if (showEq) EqualizerSheet { showEq = false }
+
     when (dialog) {
+        "caplang" -> ChoiceDialog(
+            "Caption language",
+            listOf("" to "Device language") + CaptionLanguages,
+            s.captionLang, { dialog = null }
+        ) { v -> update { it.copy(captionLang = v) } }
+        "notify" -> ChoiceDialog(
+            "Check for new videos",
+            listOf(0 to "Off", 1 to "Every hour", 3 to "Every 3 hours", 6 to "Every 6 hours", 12 to "Every 12 hours", 24 to "Once a day"),
+            s.notifyHours, { dialog = null }
+        ) { v ->
+            update { it.copy(notifyHours = v) }
+            if (v > 0 && Build.VERSION.SDK_INT >= 33) notifPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        }
         "signout" -> AlertDialog(
             onDismissRequest = { dialog = null },
             title = { Text("Sign out?") },
@@ -432,3 +539,10 @@ private fun TextDialog(title: String, initial: String, onDismiss: () -> Unit, on
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }
+
+private val CaptionLanguages = listOf(
+    "en" to "English", "bn" to "বাংলা (Bengali)", "hi" to "हिन्दी (Hindi)", "ur" to "اردو (Urdu)", "ar" to "العربية (Arabic)",
+    "es" to "Español", "fr" to "Français", "de" to "Deutsch", "pt" to "Português", "ru" to "Русский",
+    "ja" to "日本語", "ko" to "한국어", "zh-Hans" to "中文 (简体)", "id" to "Bahasa Indonesia", "tr" to "Türkçe",
+    "it" to "Italiano", "ta" to "தமிழ்", "te" to "తెలుగు", "ml" to "മലയാളം", "vi" to "Tiếng Việt",
+)
