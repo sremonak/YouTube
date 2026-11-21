@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Shuffle
@@ -96,6 +97,9 @@ fun PlaylistScreen(nav: NavHostController, actions: VideoActions, url: String) {
                         }, modifier = Modifier.weight(1f)) {
                             Icon(Icons.Rounded.Shuffle, null); Spacer(Modifier.width(6.dp)); Text("Shuffle")
                         }
+                        var batch by remember { mutableStateOf(false) }
+                        IconButton(onClick = { batch = true }, enabled = videos.isNotEmpty()) { Icon(Icons.Rounded.Download, "Download all") }
+                        if (batch) com.vidora.app.ui.components.BatchDownloadDialog(videos) { batch = false }
                     }
                 }
             })

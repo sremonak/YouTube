@@ -117,6 +117,24 @@ object Downloads {
         start(context, id)
     }
 
+    /**
+     * Batch download (playlist / channel): resolves each video and queues it with the default
+     * quality. Runs sequentially so YouTube isn't hammered; returns how many were queued.
+     */
+    suspend fun enqueueAll(context: Context, videos: List<VideoItem>, audioOnly: Boolean, onProgress: (Int, Int) -> Unit = { _, _ -> }): Int {
+        var queued = 0
+        val already = Graph.downloads.items.value.map { it.video.url }.toHashSet()
+        val todo = videos.distinctBy { it.url }.filter { it.url !in already && !it.isLive }
+        todo.forEachIndexed { i, v ->
+            runCatching {
+                val details = Graph.repository.stream(v.url)
+                defaultChoice(details, audioOnly)?.let { enqueue(context, details.item.copy(thumbnail = details.item.thumbnail ?: v.thumbnail), it); queued++ }
+            }
+            onProgress(i + 1, todo.size)
+        }
+        return queued
+    }
+
     suspend fun start(context: Context, id: String) {
         val wifiOnly = Graph.settings.flow.first().downloadWifiOnly
         val request = OneTimeWorkRequestBuilder<DownloadWorker>()

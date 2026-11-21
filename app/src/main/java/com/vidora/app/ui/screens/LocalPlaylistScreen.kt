@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
@@ -60,6 +61,7 @@ fun LocalPlaylistScreen(nav: NavHostController, actions: VideoActions, id: Strin
     var renaming by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf(false) }
+    var batch by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
     if (playlist == null) {
@@ -79,6 +81,7 @@ fun LocalPlaylistScreen(nav: NavHostController, actions: VideoActions, id: Strin
                         context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text), "Share playlist"))
                     }) { Icon(Icons.Rounded.Share, "Share") }
                 }
+                if (playlist.videos.isNotEmpty()) IconButton(onClick = { batch = true }) { Icon(Icons.Rounded.Download, "Download all") }
                 IconButton(onClick = { deleting = true }) { Icon(Icons.Rounded.Delete, "Delete") }
             },
             colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
@@ -119,6 +122,7 @@ fun LocalPlaylistScreen(nav: NavHostController, actions: VideoActions, id: Strin
         }
     }
 
+    if (batch) com.vidora.app.ui.components.BatchDownloadDialog(playlist.videos) { batch = false }
     if (renaming) {
         NameDialog("Rename playlist", playlist.name, "Save", onDismiss = { renaming = false }) {
             Graph.library.renamePlaylist(id, it); renaming = false
