@@ -1,5 +1,10 @@
 package com.vidora.app.ui.components
 
+import com.vidora.app.data.Community
+import com.vidora.app.data.ContentFilter
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -135,14 +140,15 @@ fun Avatar(url: String?, size: Int, modifier: Modifier = Modifier) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun VideoCard(item: VideoItem, actions: VideoActions, modifier: Modifier = Modifier, compact: Boolean = LocalDesign.current.compact) {
+fun VideoCard(original: VideoItem, actions: VideoActions, modifier: Modifier = Modifier, compact: Boolean = LocalDesign.current.compact) {
+    val item = rememberDeArrow(original)
     var menu by remember { mutableStateOf(false) }
     val history by Graph.library.data.collectAsStateCompat()
     val progress = remember(history, item.url) {
         val h = history.history.firstOrNull { it.video.url == item.url }
         if (h != null && item.duration > 0) h.positionMs / 1000f / item.duration else 0f
     }
-    val clickModifier = modifier.combinedClickable(onClick = { actions.open(item) }, onLongClick = { menu = true })
+    val clickModifier = modifier.combinedClickable(onClick = { actions.open(original) }, onLongClick = { menu = true })
 
     if (compact) {
         Row(clickModifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
@@ -153,7 +159,7 @@ fun VideoCard(item: VideoItem, actions: VideoActions, modifier: Modifier = Modif
                 Spacer(Modifier.height(4.dp))
                 MetaLine(item)
             }
-            Box { MoreButton(item, actions, menu) { menu = it } }
+            Box { MoreButton(original, actions, menu) { menu = it } }
         }
     } else {
         Column(clickModifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
@@ -168,7 +174,7 @@ fun VideoCard(item: VideoItem, actions: VideoActions, modifier: Modifier = Modif
                     Spacer(Modifier.height(3.dp))
                     MetaLine(item)
                 }
-                Box { MoreButton(item, actions, menu) { menu = it } }
+                Box { MoreButton(original, actions, menu) { menu = it } }
             }
         }
     }
@@ -195,9 +201,24 @@ private fun MetaLine(item: VideoItem) {
     }
 }
 
+/** DeArrow: community-sourced, non-clickbait titles and thumbnails (opt-in). */
+@Composable
+fun rememberDeArrow(item: VideoItem): VideoItem {
+    val enabled = Graph.settingsState.collectAsState().value.deArrow
+    if (!enabled) return item
+    val id = remember(item.url) { Graph.repository.videoId(item.url) } ?: return item
+    var branding by remember(id) { mutableStateOf(Community.cachedBranding(id)) }
+    LaunchedEffect(id) { if (branding == null) branding = runCatching { Community.branding(id) }.getOrNull() }
+    val b = branding ?: return item
+    return item.copy(title = b.title ?: item.title, thumbnail = b.thumbnail ?: item.thumbnail)
+}
+
 @Composable
 private fun MoreButton(item: VideoItem, actions: VideoActions, expanded: Boolean, onExpanded: (Boolean) -> Unit) {
     val library by Graph.library.data.collectAsStateCompat()
+    var playlistSheet by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    if (playlistSheet) AddToPlaylistSheet(item) { playlistSheet = false }
     IconButton(onClick = { onExpanded(true) }, modifier = Modifier.size(32.dp)) {
         Icon(Icons.Rounded.MoreVert, contentDescription = "More", modifier = Modifier.size(18.dp))
     }
@@ -210,10 +231,17 @@ private fun MoreButton(item: VideoItem, actions: VideoActions, expanded: Boolean
         DropdownMenuItem(
             text = { Text(if (library.favorites.any { it.url == item.url }) "Remove from Liked" else "Add to Liked") },
             onClick = { Graph.library.toggleFavorite(item); onExpanded(false) })
+        DropdownMenuItem(text = { Text("Save to playlist") }, onClick = { playlistSheet = true; onExpanded(false) })
         DropdownMenuItem(text = { Text("Download") }, leadingIcon = { Icon(Icons.Rounded.Download, null) },
             onClick = { actions.download(item); onExpanded(false) })
         item.uploaderUrl?.let { url ->
             DropdownMenuItem(text = { Text("Go to channel") }, onClick = { actions.openChannel(url); onExpanded(false) })
+            DropdownMenuItem(text = { Text("Don't recommend channel") }, onClick = {
+                onExpanded(false)
+                scope.launch {
+                    Graph.settings.update { it.copy(blockedChannels = it.blockedChannels + ContentFilter.encodeChannel(url, item.uploader.orEmpty())) }
+                }
+            })
         }
     }
 }
@@ -273,7 +301,14 @@ fun EntryGrid(
     filter: (Entry) -> Boolean = { true },
 ) {
     val compact = LocalDesign.current.compact
-    val visible = remember(paged.items, filter) { paged.items.filter(filter) }
+    val settings by Graph.settingsState.collectAsState()
+    val library by Graph.library.data.collectAsStateCompat()
+    val watched = remember(library.history, settings.hideWatched) {
+        if (settings.hideWatched) library.history.filter { h -> h.video.duration > 0 && h.positionMs / 1000 >= h.video.duration * 0.9 }.map { it.video.url }.toHashSet() else emptySet()
+    }
+    val visible = remember(paged.items, filter, settings, watched) {
+        paged.items.filter { filter(it) && ContentFilter.allows(it, settings, watched) }
+    }
     val shouldLoadMore by remember {
         derivedStateOf {
             val last = state.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0

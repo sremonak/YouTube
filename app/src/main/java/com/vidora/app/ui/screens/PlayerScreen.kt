@@ -53,6 +53,16 @@ import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.ThumbUp
+import androidx.compose.material.icons.rounded.ThumbDown
+import androidx.compose.material.icons.rounded.ClosedCaption
+import androidx.compose.material.icons.rounded.Translate
+import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.media3.ui.SubtitleView
+import androidx.media3.ui.TimeBar
+import com.vidora.app.ui.components.AddToPlaylistSheet
 import androidx.compose.material.icons.rounded.Verified
 import androidx.compose.material.icons.rounded.WatchLater
 import androidx.compose.material3.AssistChip
@@ -115,7 +125,7 @@ import com.vidora.app.ui.components.VideoCard
 import com.vidora.app.util.Format
 import kotlinx.coroutines.delay
 
-private enum class Sheet { NONE, QUALITY, SPEED, SLEEP, QUEUE }
+private enum class Sheet { NONE, QUALITY, SPEED, SLEEP, QUEUE, CAPTIONS, AUDIO, EQ, COMMENTS, PLAYLIST }
 
 @Composable
 fun PlayerScreen(
@@ -161,12 +171,14 @@ fun PlayerScreen(
 
     if (fullscreen) {
         Box(Modifier.fillMaxSize().background(Color.Black)) {
-            VideoSurface(Modifier.fillMaxSize(), state, showControls = true, onFullscreen = exitFullscreen)
+            VideoSurface(Modifier.fillMaxSize(), state, showControls = true, onFullscreen = exitFullscreen, fullscreen = true)
         }
         return
     }
 
     var sheet by remember { mutableStateOf(Sheet.NONE) }
+    val commentsScope = rememberCoroutineScope()
+    val comments = remember(state.current?.url) { state.current?.url?.let { CommentsState(it, commentsScope) } }
     val wide = config.screenWidthDp >= 840
     val onFullscreen = {
         fullscreenRequested = true
@@ -182,7 +194,7 @@ fun PlayerScreen(
                         state, true, onFullscreen
                     )
                 }
-                detailsSection(state, nav, actions, activity, onDownload) { sheet = it }
+                detailsSection(state, nav, actions, activity, onDownload, comments) { sheet = it }
             }
             LazyColumn(Modifier.weight(0.36f).fillMaxHeight(), contentPadding = PaddingValues(top = 16.dp, bottom = 32.dp)) {
                 relatedSection(state, actions)
@@ -197,7 +209,7 @@ fun PlayerScreen(
                 }
             }
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp)) {
-                detailsSection(state, nav, actions, activity, onDownload) { sheet = it }
+                detailsSection(state, nav, actions, activity, onDownload, comments) { sheet = it }
                 relatedSection(state, actions)
             }
         }
@@ -208,6 +220,11 @@ fun PlayerScreen(
         Sheet.SPEED -> SpeedSheet(state.speed) { sheet = Sheet.NONE }
         Sheet.SLEEP -> SleepSheet(state) { sheet = Sheet.NONE }
         Sheet.QUEUE -> QueueSheet(state, actions) { sheet = Sheet.NONE }
+        Sheet.CAPTIONS -> CaptionsSheet(state) { sheet = Sheet.NONE }
+        Sheet.AUDIO -> AudioTrackSheet(state) { sheet = Sheet.NONE }
+        Sheet.EQ -> EqualizerSheet { sheet = Sheet.NONE }
+        Sheet.COMMENTS -> comments?.let { CommentsSheet(it, onSeek = { ms -> Graph.player.seekTo(ms) }) { sheet = Sheet.NONE } }
+        Sheet.PLAYLIST -> state.current?.let { AddToPlaylistSheet(it) { sheet = Sheet.NONE } }
         Sheet.NONE -> Unit
     }
 }
@@ -228,11 +245,22 @@ private fun FullscreenEffect(activity: Activity, fullscreen: Boolean) {
 
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
-private fun VideoSurface(modifier: Modifier, state: PlayerUiState, showControls: Boolean, onFullscreen: () -> Unit) {
+private fun VideoSurface(modifier: Modifier, state: PlayerUiState, showControls: Boolean, onFullscreen: () -> Unit, fullscreen: Boolean = false) {
+    val settings by Graph.settingsState.collectAsState()
+    val gesturesOn by rememberUpdatedState(settings.gestures && showControls)
+    val swipesOn by rememberUpdatedState(fullscreen)
+    var feedback by remember { mutableStateOf<GestureFeedback?>(null) }
+    var scrubMs by remember { mutableStateOf<Long?>(null) }
     Box(modifier, contentAlignment = Alignment.Center) {
         AndroidView(
             factory = { ctx ->
                 PlayerView(ctx).apply {
+                    installPlayerGestures(this, { gesturesOn }, { swipesOn }) { feedback = it }
+                    (findViewById<android.view.View>(androidx.media3.ui.R.id.exo_progress) as? TimeBar)?.addListener(object : TimeBar.OnScrubListener {
+                        override fun onScrubStart(timeBar: TimeBar, position: Long) { scrubMs = position }
+                        override fun onScrubMove(timeBar: TimeBar, position: Long) { scrubMs = position }
+                        override fun onScrubStop(timeBar: TimeBar, position: Long, canceled: Boolean) { scrubMs = null }
+                    })
                     layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
                     player = Graph.player.sessionPlayer
                     resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
@@ -247,6 +275,7 @@ private fun VideoSurface(modifier: Modifier, state: PlayerUiState, showControls:
             },
             update = { view ->
                 view.useController = showControls
+                view.subtitleView?.setFractionalTextSize(SubtitleView.DEFAULT_TEXT_SIZE_FRACTION * settings.captionScale)
                 view.setFullscreenButtonClickListener { onFullscreen() }
                 if (view.player == null) view.player = Graph.player.sessionPlayer
             },
@@ -270,7 +299,16 @@ private fun VideoSurface(modifier: Modifier, state: PlayerUiState, showControls:
                 }
             }
         }
+        GestureOverlay(feedback, Modifier.align(Alignment.Center))
+        scrubMs?.let { ms -> SeekPreview(state.details?.frames, ms, Modifier.align(Alignment.Center)) }
         if (state.loading) CircularProgressIndicator(color = Color.White)
+        if (state.restored && !state.loading && state.error == null) {
+            AsyncImage(state.current?.thumbnail, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            IconButton(
+                onClick = { Graph.player.togglePlay() },
+                modifier = Modifier.size(64.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.55f))
+            ) { Icon(Icons.Rounded.PlayArrow, "Play", tint = Color.White, modifier = Modifier.size(40.dp)) }
+        }
         state.error?.let { err ->
             Column(Modifier.background(Color.Black.copy(alpha = 0.7f)).padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("Playback failed", color = Color.White, fontWeight = FontWeight.Bold)
@@ -288,6 +326,7 @@ private fun LazyListScope.detailsSection(
     actions: VideoActions,
     activity: MainActivity,
     onDownload: (VideoItem) -> Unit,
+    comments: CommentsState?,
     openSheet: (Sheet) -> Unit,
 ) {
     val item = state.current ?: return
@@ -375,7 +414,32 @@ private fun LazyListScope.detailsSection(
                     if (liked) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder, selected = liked
                 ) { Graph.library.toggleFavorite(item) }
             }
+            item {
+                val settings by Graph.settingsState.collectAsState()
+                var votes by remember(item.url) { mutableStateOf<com.vidora.app.data.Votes?>(null) }
+                var disliked by remember(item.url) { mutableStateOf(false) }
+                LaunchedEffect(item.url, settings.returnDislike) {
+                    if (settings.returnDislike) votes = Graph.repository.videoId(item.url)?.let { com.vidora.app.data.Community.votes(it) }
+                }
+                val count = votes?.dislikes?.let { it + if (disliked) 1 else 0 }
+                ActionChip(count?.let { Format.count(it) } ?: "Dislike", Icons.Rounded.ThumbDown, selected = disliked) {
+                    disliked = !disliked
+                    if (disliked) {
+                        if (liked) Graph.library.toggleFavorite(item)
+                        com.vidora.app.account.AccountSync.disliked(item.url)
+                    } else com.vidora.app.account.AccountSync.liked(item.url, false)
+                }
+            }
             item { ActionChip("Download", Icons.Rounded.Download) { onDownload(item) } }
+            item { ActionChip("Playlist", Icons.AutoMirrored.Rounded.PlaylistAdd) { openSheet(Sheet.PLAYLIST) } }
+            item { ActionChip(state.subtitle?.label ?: "Captions", Icons.Rounded.ClosedCaption, selected = state.subtitle != null) { openSheet(Sheet.CAPTIONS) } }
+            if (details != null && details.audioTracks.size > 1) {
+                item {
+                    val current = details.audioTracks.firstOrNull { it.id == state.audioTrackId }?.name ?: "Audio track"
+                    ActionChip(current, Icons.Rounded.Translate) { openSheet(Sheet.AUDIO) }
+                }
+            }
+            item { ActionChip("Equalizer", Icons.Rounded.GraphicEq, selected = Graph.settingsState.value.eqEnabled) { openSheet(Sheet.EQ) } }
             item { ActionChip(state.quality?.label ?: "Quality", Icons.Rounded.HighQuality) { openSheet(Sheet.QUALITY) } }
             item { ActionChip(if (state.audioOnly) "Audio only" else "Audio mode", Icons.Rounded.Audiotrack, selected = state.audioOnly) { Graph.player.setAudioOnly(!state.audioOnly) } }
             item { ActionChip("${trimSpeed(state.speed)}x", Icons.Rounded.Speed) { openSheet(Sheet.SPEED) } }
@@ -418,6 +482,9 @@ private fun LazyListScope.detailsSection(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
             )
         }
+    }
+    if (comments != null) {
+        item(key = "comments") { CommentsPreview(comments) { openSheet(Sheet.COMMENTS) } }
     }
     item(key = "divider") { HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
 }

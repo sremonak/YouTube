@@ -86,12 +86,15 @@ object Routes {
     const val LIST = "list/{kind}"
     const val LOGIN = "login"
     const val ACCOUNT_FEED = "account/{feed}"
+    const val LOCAL_PLAYLIST = "local/{id}"
+    const val FILTERS = "filters"
 
     fun search(q: String = "") = "search?q=" + Uri.encode(q)
     fun channel(url: String) = "channel/" + Uri.encode(url)
     fun playlist(url: String) = "playlist/" + Uri.encode(url)
     fun list(kind: String) = "list/$kind"
     fun accountFeed(feed: String) = "account/$feed"
+    fun localPlaylist(id: String) = "local/$id"
 }
 
 private data class TopDest(val route: String, val label: String, val icon: ImageVector, val selectedIcon: ImageVector)
@@ -208,6 +211,10 @@ fun AppRoot(activity: MainActivity, settings: AppSettings) {
                     composable(Routes.ACCOUNT_FEED, arguments = listOf(navArgument("feed") { type = NavType.StringType })) { entry ->
                         AccountFeedScreen(nav, actions, entry.arguments?.getString("feed").orEmpty())
                     }
+                    composable(Routes.LOCAL_PLAYLIST, arguments = listOf(navArgument("id") { type = NavType.StringType })) { entry ->
+                        LocalPlaylistScreen(nav, actions, entry.arguments?.getString("id").orEmpty())
+                    }
+                    composable(Routes.FILTERS) { FiltersScreen(nav) }
                     composable(Routes.LIST, arguments = listOf(navArgument("kind") { type = NavType.StringType })) { entry ->
                         VideoListScreen(nav, actions, entry.arguments?.getString("kind").orEmpty())
                     }

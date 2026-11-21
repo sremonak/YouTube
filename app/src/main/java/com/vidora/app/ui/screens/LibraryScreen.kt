@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.AccountCircle
@@ -100,6 +101,29 @@ fun LibraryScreen(nav: NavHostController, actions: VideoActions) {
             item { LibraryRow(Icons.Rounded.Favorite, "Liked videos", "${library.favorites.size} videos") { nav.navigate(Routes.list("liked")) } }
             item { LibraryRow(Icons.Rounded.WatchLater, "Watch later", "${library.watchLater.size} videos") { nav.navigate(Routes.list("later")) } }
             item { LibraryRow(Icons.Rounded.Subscriptions, "Subscriptions", "${library.subscriptions.size} channels") { nav.navigate(Routes.SUBS) } }
+
+            // ---------------------------------------------------------- local playlists
+            item {
+                var creating by remember { mutableStateOf(false) }
+                SectionHeader("Playlists") {
+                    TextButton(onClick = { creating = true }) { Text("New") }
+                }
+                if (creating) {
+                    com.vidora.app.ui.components.NameDialog("New playlist", "", "Create", onDismiss = { creating = false }) { name ->
+                        creating = false
+                        nav.navigate(Routes.localPlaylist(Graph.library.createPlaylist(name)))
+                    }
+                }
+            }
+            if (library.playlists.isEmpty()) {
+                item {
+                    Text("Create playlists from any video's ⋮ menu → Save to playlist.", style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+                }
+            }
+            items(library.playlists, key = { "pl:" + it.id }) { p ->
+                LibraryRow(Icons.AutoMirrored.Rounded.PlaylistPlay, p.name, "${p.videos.size} videos") { nav.navigate(Routes.localPlaylist(p.id)) }
+            }
 
             // ---------------------------------------------------------- YouTube account
             item { SectionHeader(if (session != null) "YouTube account · ${session?.name ?: "signed in"}" else "YouTube account") }
