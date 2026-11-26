@@ -23,6 +23,7 @@ android {
         versionCode = ciVersionCode ?: 1
         versionName = ciVersionName ?: "1.0.0"
         vectorDrawables.useSupportLibrary = true
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
@@ -138,4 +139,9 @@ dependencies {
     implementation(libs.newpipe.extractor)
 
     testImplementation(libs.junit)
+
+    // End-to-end playback checks on an emulator (.github/workflows/e2e.yml)
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation(libs.junit)
 }
