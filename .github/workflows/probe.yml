@@ -1,0 +1,32 @@
+# Diagnostics only: checks from a datacenter IP (like a VPN exit) which YouTube player clients
+# still return playable streams. Results are reported as annotations on the run.
+name: Playback probe
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "tools/probe/**"
+      - ".github/workflows/probe.yml"
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v5
+      - name: Probe clients (Kotlin + NewPipe Extractor)
+        run: ./gradlew -p tools/probe run --no-daemon -q
+      - name: Compare with yt-dlp
+        continue-on-error: true
+        run: |
+          pip install -q --upgrade "yt-dlp[default]"
+          curl -fsSL https://deno.land/install.sh | sh -s -- -y >/dev/null 2>&1 || true
+          export PATH="$HOME/.deno/bin:$PATH"
+          for c in default tv_samsung web_embedded mweb android_vr; do
+            out=$(yt-dlp -v --no-colors -F --extractor-args "youtube:player_client=$c" "https://www.youtube.com/watch?v=dQw4w9WgXcQ" 2>&1 | grep -E "WARNING|ERROR|^[0-9]{2,3} |player API JSON|\[debug\] yt-dlp version|JS runtimes" | head -40 | sed 's/%/%25/g' | tr '\n' '\001' | sed 's/\x01/%0A/g')
+            echo "::notice title=yt-dlp $c::$out"
+          done
