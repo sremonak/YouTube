@@ -78,6 +78,12 @@ fun rangeStatus(url: String, ua: String, from: Long): String = runCatching {
         .execute().use { r -> "${r.code}(${r.body.bytes().size}B)" }
 }.getOrElse { "ERR ${it.javaClass.simpleName}" }
 
+val http1 by lazy { http.newBuilder().protocols(listOf(okhttp3.Protocol.HTTP_1_1)).build() }
+fun rangeStatusH1(url: String, ua: String, from: Long): String = runCatching {
+    http1.newCall(okhttp3.Request.Builder().url(url).header("User-Agent", ua).header("Range", "bytes=$from-${from + 4095}").build())
+        .execute().use { r -> "${r.code}(${r.body.bytes().size}B)" }
+}.getOrElse { "ERR ${it.javaClass.simpleName}" }
+
 fun probeClient(c: Client, videoId: String, visitor: String?, sts: Int?): String {
     val body = buildJsonObject {
         putJsonObject("context") {
@@ -152,6 +158,7 @@ fun probeClient(c: Client, videoId: String, visitor: String?, sts: Int?): String
                 sb.append(" rangeParam=" + runCatching { http.newCall(okhttp3.Request.Builder().url("$u&range=0-4095").header("User-Agent", c.ua).build()).execute().use { "${it.code}" } }.getOrElse { "ERR" })
                 sb.append(" ffUA=" + rangeStatus(u, FIREFOX, 0))
                 sb.append(" post=" + runCatching { http.newCall(okhttp3.Request.Builder().url("$u&rn=1").header("User-Agent", c.ua).post(byteArrayOf(0x78, 0).toRequestBody()).build()).execute().use { "${it.code}" } }.getOrElse { "ERR" })
+                sb.append(" h1=" + rangeStatusH1(u, c.ua, 0))
                 sb.append(" noSig=" + rangeStatus(u.replace(Regex("&sig=[^&]*"), ""), c.ua, 0))
             }
         }
