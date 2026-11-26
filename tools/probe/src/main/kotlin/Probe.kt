@@ -78,6 +78,34 @@ fun rangeStatus(url: String, ua: String, from: Long): String = runCatching {
         .execute().use { r -> "${r.code}(${r.body.bytes().size}B)" }
 }.getOrElse { "ERR ${it.javaClass.simpleName}" }
 
+fun adWaitSeconds(pr: JsonObject): Double {
+    var total = 0.0
+    fun renderer(r: JsonObject?) {
+        val ivr = r?.get("instreamVideoAdRenderer") as? JsonObject ?: return
+        val skip = (ivr["skipOffsetMilliseconds"] as? JsonPrimitive)?.content?.toDoubleOrNull()
+        val len = (ivr["playerVars"] as? JsonPrimitive)?.content?.let { pv ->
+            Regex("(?:^|&)length_seconds=([0-9.]+)").find(pv)?.groupValues?.get(1)?.toDoubleOrNull() }
+        val d = skip?.div(1000) ?: len
+        if (d != null) total += d
+    }
+    pr.a("adPlacements").forEach { p ->
+        val apr = (p as? JsonObject)?.get("adPlacementRenderer") as? JsonObject ?: return@forEach
+        val kind = ((apr["config"] as? JsonObject)?.get("adPlacementConfig") as? JsonObject)?.s("kind")
+        if (kind == "AD_PLACEMENT_KIND_START") renderer(apr["renderer"] as? JsonObject)
+    }
+    pr.a("adSlots").forEach { p ->
+        val asr = (p as? JsonObject)?.get("adSlotRenderer") as? JsonObject ?: return@forEach
+        if ((asr["adSlotMetadata"] as? JsonObject)?.s("triggerEvent") != "SLOT_TRIGGER_EVENT_BEFORE_CONTENT") return@forEach
+        val rc = ((((asr["fulfillmentContent"] as? JsonObject)?.get("fulfilledLayout") as? JsonObject)
+            ?.get("playerBytesAdLayoutRenderer") as? JsonObject)?.get("renderingContent") as? JsonObject)
+        renderer(rc)
+        ((rc?.get("playerBytesSequentialLayoutRenderer") as? JsonObject)?.get("sequentialLayouts") as? JsonArray)?.forEach { l ->
+            renderer(((l as? JsonObject)?.get("playerBytesAdLayoutRenderer") as? JsonObject)?.get("renderingContent") as? JsonObject)
+        }
+    }
+    return total
+}
+
 val http1 by lazy { http.newBuilder().protocols(listOf(okhttp3.Protocol.HTTP_1_1)).build() }
 fun rangeStatusH1(url: String, ua: String, from: Long): String = runCatching {
     http1.newCall(okhttp3.Request.Builder().url(url).header("User-Agent", ua).header("Range", "bytes=$from-${from + 4095}").build())
@@ -158,6 +186,10 @@ fun probeClient(c: Client, videoId: String, visitor: String?, sts: Int?): String
                 sb.append(" rangeParam=" + runCatching { http.newCall(okhttp3.Request.Builder().url("$u&range=0-4095").header("User-Agent", c.ua).build()).execute().use { "${it.code}" } }.getOrElse { "ERR" })
                 sb.append(" ffUA=" + rangeStatus(u, FIREFOX, 0))
                 sb.append(" post=" + runCatching { http.newCall(okhttp3.Request.Builder().url("$u&rn=1").header("User-Agent", c.ua).post(byteArrayOf(0x78, 0).toRequestBody()).build()).execute().use { "${it.code}" } }.getOrElse { "ERR" })
+                val waitS = adWaitSeconds(res)
+                sb.append(" adWait=${waitS}s")
+                Thread.sleep((waitS * 1000 + 700).toLong())
+                sb.append(" afterWait0=${rangeStatus(u, c.ua, 0)} afterWait1.5M=${rangeStatus(u, c.ua, 1_500_000)}")
                 sb.append(" sChLen=${sigChallenge?.length} sigLen=${sigs[sigChallenge]?.length} nCh=$nChallenge nRes=${ns[nChallenge]}")
                 sb.append(" noSig=" + rangeStatus(u.replace(Regex("&sig=[^&]*"), ""), c.ua, 0))
             }
