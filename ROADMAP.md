@@ -82,7 +82,9 @@ Priority: **P0** = keeps the app working, **P1** = premium features users notice
 | In-app updater | ✅ Done — GitHub Releases, changelog, download + install, "skip this version" |
 | Crash & error reporter | ✅ Done — dialog on next start, copy or open pre-filled GitHub issue; "Report a problem" in Settings |
 | Own release keystore | ⏸ Skipped by owner — the shared debug key is kept (CI still supports `VIDORA_KEYSTORE_B64` if ever wanted) |
-| SABR streaming | ⏳ Waiting for NewPipe Extractor PR #1568; PoToken + client fallback cover today's playback |
+| SABR streaming | ⏳ Waiting for NewPipe Extractor PR #1568; the client fallbacks below cover today's playback |
+| Playback when NewPipe is blocked (VPN, "not a bot") | ✅ Done (1.0.39) — yt-dlp's EJS solver in a WebView solves `sig`/`n`; TV client (with account) honours the pre-roll wait; Safari HLS and mobile-web fallbacks; verified on an emulator by `e2e.yml` |
+| YouTube look | ✅ Done (1.0.39) — YouTube palette, Home / Shorts / Subscriptions / You bar, flat chips, watch-page layout |
 | Gestures (double-tap, hold 2×, swipe brightness/volume, pinch zoom) | ✅ Done |
 | Seek-bar preview thumbnails | ✅ Done |
 | Captions: picker, auto-translate, size, download | ✅ Done (`.vtt`; YouTube doesn't serve `.srt`) |

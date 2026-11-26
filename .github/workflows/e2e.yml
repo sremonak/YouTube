@@ -52,11 +52,12 @@ jobs:
       - name: Report
         if: always()
         run: |
+          set +e
           esc() { sed 's/%/%25/g' | tr '\n' '\001' | sed 's/\x01/%0A/g'; }
           if [ -f /tmp/e2e.log ]; then
             echo "::notice title=E2E log::$(grep -E 'E2E|TvPlayer|JsChallenge|ContentRepository|FATAL|Exception' /tmp/e2e.log | cut -c1-400 | head -80 | esc)"
           fi
-          for f in $(find app/build/outputs/androidTest-results -name '*.xml' 2>/dev/null); do
+          for f in $(find app/build -path '*androidTest-results*' -name '*.xml' 2>/dev/null); do
             python3 - "$f" <<'PY'
           import sys, xml.etree.ElementTree as ET
           root = ET.parse(sys.argv[1]).getroot()
@@ -76,3 +77,6 @@ jobs:
           if [ -f /tmp/build.log ] && grep -q "^e: " /tmp/build.log; then
             echo "::error title=E2E compile::$(grep -E '^e: ' /tmp/build.log | head -20 | esc)"
           fi
+          echo "xml: $(find app/build -path '*androidTest-results*' -name '*.xml' 2>/dev/null | head)"
+          if grep -q TESTS_FAILED /tmp/test.log 2>/dev/null; then exit 1; fi
+          exit 0
