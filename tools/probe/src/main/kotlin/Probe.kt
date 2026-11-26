@@ -170,10 +170,10 @@ fun ejsSolve(sigs: List<String>, ns: List<String>): Pair<Map<String, String>, Ma
     if (sigs.isEmpty() && ns.isEmpty()) return emptyMap<String, String>() to emptyMap()
     val assets = java.io.File(System.getenv("EJS_DIR") ?: "../../app/src/main/assets/ejs")
     val reqs = buildList {
-        if (ns.isNotEmpty()) add("""{"type":"n","challenges":${Json.encodeToString(kotlinx.serialization.builtins.ListSerializer(kotlinx.serialization.builtins.serializer<String>()), ns)}}""")
-        if (sigs.isNotEmpty()) add("""{"type":"sig","challenges":${Json.encodeToString(kotlinx.serialization.builtins.ListSerializer(kotlinx.serialization.builtins.serializer<String>()), sigs)}}""")
+        if (ns.isNotEmpty()) add("""{"type":"n","challenges":${JsonArray(ns.map { JsonPrimitive(it) })}}""")
+        if (sigs.isNotEmpty()) add("""{"type":"sig","challenges":${JsonArray(sigs.map { JsonPrimitive(it) })}}""")
     }
-    val data = """{"type":"player","player":${Json.encodeToString(kotlinx.serialization.builtins.serializer<String>(), PLAYER_JS)},"requests":[${reqs.joinToString(",")}],"output_preprocessed":false}"""
+    val data = """{"type":"player","player":${JsonPrimitive(PLAYER_JS)},"requests":[${reqs.joinToString(",")}],"output_preprocessed":false}"""
     val script = java.io.File.createTempFile("ejs", ".js")
     script.writeText(java.io.File(assets, "lib.min.js").readText() + "\nObject.assign(globalThis, lib);\n" +
         java.io.File(assets, "core.min.js").readText() + "\nconsole.log(JSON.stringify(jsc(" + data + ")));\n")
