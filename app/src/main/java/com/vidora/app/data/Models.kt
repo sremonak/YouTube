@@ -80,6 +80,10 @@ data class VideoOption(
     val videoOnly: Boolean,
     val bitrate: Int,
     val contentLength: Long,
+    val width: Int = 0,
+    /** Byte ranges ("0-740") of the init segment and the segment index — enable adaptive DASH playback. */
+    val initRange: String? = null,
+    val indexRange: String? = null,
 ) {
     val label: String
         get() = buildString {
@@ -100,6 +104,8 @@ data class AudioOption(
     val trackId: String? = null,
     val trackType: String? = null,
     val language: String? = null,
+    val initRange: String? = null,
+    val indexRange: String? = null,
 ) {
     val label: String get() = "${bitrateKbps} kbps · ${suffix.uppercase()}"
 }

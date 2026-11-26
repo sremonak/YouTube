@@ -221,6 +221,10 @@ object TvPlayer {
             val length = f.str("contentLength")?.toLongOrNull() ?: -1L
             val bitrate = f.int("bitrate") ?: 0
             val webm = mime.endsWith("webm")
+            fun range(k: String) = f.obj(k).let { r ->
+                val a = r.str("start")?.toLongOrNull(); val b = r.str("end")?.toLongOrNull()
+                if (a != null && b != null && b > a) "$a-$b" else null
+            }
             if (mime.startsWith("video")) {
                 val height = f.int("height") ?: 0
                 val fps = f.int("fps") ?: 30
@@ -229,6 +233,7 @@ object TvPlayer {
                     resolution = f.str("qualityLabel") ?: "${height}p",
                     mime = mime, suffix = if (webm) "webm" else "mp4", codec = codec,
                     videoOnly = adaptive, bitrate = bitrate, contentLength = length,
+                    width = f.int("width") ?: 0, initRange = range("initRange"), indexRange = range("indexRange"),
                 )
             } else if (mime.startsWith("audio") && adaptive) {
                 val track = f.obj("audioTrack")
@@ -245,6 +250,7 @@ object TvPlayer {
                         else -> "DUBBED"
                     },
                     language = track.str("displayName"),
+                    initRange = range("initRange"), indexRange = range("indexRange"),
                 )
             }
         }

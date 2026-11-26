@@ -371,7 +371,11 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
 
             // ------------------------------------------------------------ player
             item { Header(stringResource(R.string.h_player)) }
-            item { ClickRow(stringResource(R.string.ui_default_video_quality), "${s.defaultQuality}p") { dialog = "quality" } }
+            item { ClickRow(if (s.smartQuality) "Max video quality (Wi-Fi)" else stringResource(R.string.ui_default_video_quality), "${s.defaultQuality}p") { dialog = "quality" } }
+            item { SwitchRow("Smart quality (Auto)", "Starts instantly at a low quality on slow networks, then sharpens automatically like YouTube", s.smartQuality) { v -> update { it.copy(smartQuality = v) } } }
+            item { ClickRow("Mobile data quality limit", if (s.mobileQuality == 0) "No limit" else "${s.mobileQuality}p") { dialog = "mobilequality" } }
+            item { SwitchRow("Audio-only on very slow network", "When even 144p keeps buffering, keep listening with audio and bring the video back once the network recovers", s.autoAudioOnSlow) { v -> update { it.copy(autoAudioOnSlow = v) } } }
+            item { SwitchRow("Preload next video", "Gets the next video ready in the background so it starts instantly", s.prefetchNext) { v -> update { it.copy(prefetchNext = v) } } }
             item { ClickRow(stringResource(R.string.ui_default_playback_speed), "${s.defaultSpeed}x") { dialog = "speed" } }
             item { SwitchRow(stringResource(R.string.ui_background_playback), stringResource(R.string.ui_keep_playing_when_the_app_is_closed_or_t), s.backgroundPlay) { v -> update { it.copy(backgroundPlay = v) } } }
             item { SwitchRow(stringResource(R.string.ui_picture_in_picture), stringResource(R.string.ui_automatically_shrink_the_video_when_you), s.autoPip) { v -> update { it.copy(autoPip = v) } } }
@@ -548,6 +552,7 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
         )
         "name" -> TextDialog("App display name", s.displayName, onDismiss = { dialog = null }) { v -> update { it.copy(displayName = v.take(24)) } }
         "quality" -> ChoiceDialog("Default video quality", QualityOptions.map { it to "${it}p" }, s.defaultQuality, { dialog = null }) { v -> update { it.copy(defaultQuality = v) } }
+        "mobilequality" -> ChoiceDialog("Mobile data quality limit", listOf(0 to "No limit") + QualityOptions.take(6).map { it to "${it}p" }, s.mobileQuality, { dialog = null }) { v -> update { it.copy(mobileQuality = v) } }
         "dlquality" -> ChoiceDialog("Default download quality", QualityOptions.map { it to "${it}p" }, s.downloadQuality, { dialog = null }) { v -> update { it.copy(downloadQuality = v) } }
         "speed" -> ChoiceDialog("Default speed", listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f).map { it to "${it}x" }, s.defaultSpeed, { dialog = null }) { v ->
             update { it.copy(defaultSpeed = v) }; Graph.player.setSpeed(v)

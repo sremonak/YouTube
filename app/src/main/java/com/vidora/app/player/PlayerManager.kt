@@ -17,6 +17,12 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.DecoderReuseEvaluation
+import androidx.media3.exoplayer.analytics.AnalyticsListener
+import androidx.media3.exoplayer.dash.manifest.DashManifestParser
+import androidx.media3.exoplayer.trackselection.AdaptiveTrackSelection
+import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
+import androidx.media3.exoplayer.upstream.DefaultBandwidthMeter
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.dash.DashMediaSource
 import androidx.media3.exoplayer.hls.HlsMediaSource
@@ -77,7 +83,25 @@ data class PlayerUiState(
     val audioTrackId: String? = null,
     /** Restored from the last session; media is loaded on first play. */
     val restored: Boolean = false,
+    /** Adaptive (Auto) quality is active — ExoPlayer picks the bitrate from the measured bandwidth. */
+    val autoQuality: Boolean = false,
+    /** Height of the video currently being decoded (follows adaptive switches). */
+    val playingHeight: Int = 0,
+    /** Audio-only was switched on automatically because the network was too slow. */
+    val slowNetworkAudio: Boolean = false,
+    /** Estimated network speed (kbps) from ExoPlayer's bandwidth meter. */
+    val bandwidthKbps: Long = 0,
 )
+
+/** "Auto · 480p", "1080p60", "Audio only (slow network)" … for chips and the settings sheet. */
+val PlayerUiState.qualityLabel: String
+    get() = when {
+        audioOnly && slowNetworkAudio -> "Audio only · slow net"
+        audioOnly -> "Audio only"
+        quality != null && !autoQuality -> quality.label
+        autoQuality -> if (playingHeight > 0) "Auto · ${playingHeight}p" else quality?.let { "Auto · ${it.height}p" } ?: "Auto"
+        else -> quality?.label ?: "Auto"
+    }
 
 /**
  * Owns the single ExoPlayer instance. The [PlaybackService] wraps the same player in a
@@ -124,6 +148,19 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
     private val httpFactory = OkHttpDataSource.Factory(streamClient)
     private val dataSourceFactory = DefaultDataSource.Factory(context, httpFactory)
 
+    /** Shared bandwidth estimate — learned across videos, used for the first quality pick. */
+    private val bandwidthMeter = DefaultBandwidthMeter.getSingletonInstance(context)
+
+    private val trackSelector = DefaultTrackSelector(
+        context,
+        AdaptiveTrackSelection.Factory(
+            /* minDurationForQualityIncreaseMs = */ 6_000,
+            /* maxDurationForQualityDecreaseMs = */ 20_000,
+            /* minDurationToRetainAfterDiscardMs = */ 20_000,
+            /* bandwidthFraction = */ 0.7f,
+        ),
+    )
+
     val exoPlayer: ExoPlayer = ExoPlayer.Builder(context)
         .setAudioAttributes(
             AudioAttributes.Builder()
@@ -136,9 +173,15 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
         .setWakeMode(C.WAKE_MODE_NETWORK)
         .setSeekBackIncrementMs(10_000)
         .setSeekForwardIncrementMs(10_000)
+        .setBandwidthMeter(bandwidthMeter)
+        .setTrackSelector(trackSelector)
         .setLoadControl(
             DefaultLoadControl.Builder()
-                .setBufferDurationsMs(15_000, 60_000, 1_500, 3_000)
+                // Start after ~0.8 s of media (default 2.5 s) and resume after 2 s of rebuffering.
+                .setBufferDurationsMs(15_000, 50_000, 800, 2_000)
+                .setPrioritizeTimeOverSizeThresholds(true)
+                // Keep 15 s behind the playhead so short rewinds / double-tap back are instant.
+                .setBackBuffer(15_000, true)
                 .build()
         )
         .build()
@@ -198,6 +241,15 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
                 if (settings.persistQueue && !s.localFile) sessionStore.save(PersistedSession(s.queue, s.queueIndex))
             }
         }
+        exoPlayer.addAnalyticsListener(object : AnalyticsListener {
+            override fun onVideoInputFormatChanged(
+                eventTime: AnalyticsListener.EventTime, format: Format, decoderReuseEvaluation: DecoderReuseEvaluation?,
+            ) {
+                if (format.height > 0 && format.height != _state.value.playingHeight) {
+                    _state.value = _state.value.copy(playingHeight = format.height)
+                }
+            }
+        })
         exoPlayer.addListener(object : Player.Listener {
             override fun onAudioSessionIdChanged(audioSessionId: Int) {
                 effects.attach(audioSessionId, settings)
@@ -209,7 +261,15 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
             }
 
             override fun onPlaybackStateChanged(playbackState: Int) {
-                if (playbackState == Player.STATE_ENDED) onEnded()
+                when (playbackState) {
+                    Player.STATE_ENDED -> { bufferingSince = 0; onEnded() }
+                    Player.STATE_BUFFERING -> if (bufferingSince == 0L) bufferingSince = System.currentTimeMillis()
+                    Player.STATE_READY -> {
+                        bufferingSince = 0
+                        if (!startedOnce) { startedOnce = true; prefetchNext() }
+                    }
+                    else -> bufferingSince = 0
+                }
             }
 
             override fun onPlayerError(error: PlaybackException) {
@@ -257,10 +317,15 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
         }
         persistPosition()
         skippedSegments.clear()
+        resetNetworkAdaptation()
         _state.value = _state.value.copy(
             current = item, details = null, loading = true, error = null,
             queue = newQueue, queueIndex = index, localFile = false, segments = emptyList(),
             quality = null, audio = null, subtitle = null, audioTrackId = null, restored = false,
+            playingHeight = 0,
+            // audio-only that was forced by a slow network: try video again on the next item
+            audioOnly = if (_state.value.slowNetworkAudio) false else _state.value.audioOnly,
+            slowNetworkAudio = false,
         )
         exoPlayer.stop()
         loadJob?.cancel()
@@ -320,13 +385,23 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
 
     fun setQuality(option: VideoOption) {
         val details = _state.value.details ?: return
-        _state.value = _state.value.copy(quality = option, audioOnly = false)
+        manualQuality = true
+        _state.value = _state.value.copy(quality = option, audioOnly = false, slowNetworkAudio = false)
         prepare(details, exoPlayer.currentPosition, exoPlayer.playWhenReady, forced = option)
+    }
+
+    /** Back to automatic quality (adaptive DASH when possible, otherwise bandwidth-based pick). */
+    fun setAutoQuality() {
+        val details = _state.value.details ?: return
+        manualQuality = false
+        downshifts = 0
+        _state.value = _state.value.copy(quality = null, audioOnly = false, slowNetworkAudio = false)
+        prepare(details, exoPlayer.currentPosition, exoPlayer.playWhenReady, forced = null)
     }
 
     fun setAudioOnly(enabled: Boolean) {
         val details = _state.value.details
-        _state.value = _state.value.copy(audioOnly = enabled)
+        _state.value = _state.value.copy(audioOnly = enabled, slowNetworkAudio = false)
         if (details != null && !_state.value.localFile) {
             prepare(details, exoPlayer.currentPosition, exoPlayer.playWhenReady, forced = _state.value.quality)
         }
@@ -476,6 +551,7 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
         val source: MediaSource
         var chosenVideo: VideoOption? = null
         var chosenAudio: AudioOption? = null
+        var adaptive = false
         val meta = metadata(item)
 
         when {
@@ -494,22 +570,35 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
             }
 
             s.audioOnly && details.audioStreams.isNotEmpty() -> {
-                chosenAudio = pickAudio(details.audioFor(s.audioTrackId))
+                chosenAudio = pickAudio(details.audioFor(s.audioTrackId), slow = s.slowNetworkAudio || isSlow())
                 source = progressive(chosenAudio.url, meta)
             }
 
             else -> {
-                val video = forced ?: pickVideo(details, settings.defaultQuality)
-                    ?: throw IllegalStateException("No playable stream")
-                chosenVideo = video
-                source = if (video.videoOnly && details.audioStreams.isNotEmpty()) {
-                    chosenAudio = pickAudio(details.audioFor(s.audioTrackId), preferMp4 = video.suffix == "mp4")
-                    MergingMediaSource(true, progressive(video.url, meta), progressive(chosenAudio.url, meta))
-                } else progressive(video.url, meta)
+                val dash = if (forced == null) adaptiveSource(details, item, meta, s.audioTrackId) else null
+                if (dash != null) {
+                    adaptive = true
+                    source = dash
+                } else {
+                    val video = forced ?: pickVideo(details, autoMaxHeight(details))
+                        ?: throw IllegalStateException("No playable stream")
+                    chosenVideo = video
+                    source = if (video.videoOnly && details.audioStreams.isNotEmpty()) {
+                        chosenAudio = pickAudio(details.audioFor(s.audioTrackId), preferMp4 = video.suffix == "mp4", slow = forced == null && isSlow())
+                        MergingMediaSource(true, progressive(video.url, meta), progressive(chosenAudio.url, meta))
+                    } else progressive(video.url, meta)
+                }
             }
         }
 
-        _state.value = _state.value.copy(quality = chosenVideo ?: s.quality, audio = chosenAudio)
+        adaptiveActive = adaptive
+        bufferingSince = if (autoPlay) System.currentTimeMillis() else 0
+        _state.value = _state.value.copy(
+            quality = if (adaptive) null else chosenVideo ?: s.quality,
+            audio = chosenAudio,
+            autoQuality = adaptive || (!s.audioOnly && !manualQuality),
+            bandwidthKbps = bandwidthMeter.bitrateEstimate / 1000,
+        )
         val sub = s.subtitle
         val withSubs = if (sub != null && !item.isLive) MergingMediaSource(true, source, subtitleSource(sub)) else source
         exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters.buildUpon()
@@ -566,9 +655,163 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
             ?: atHeight.first()
     }
 
-    private fun pickAudio(list: List<AudioOption>, preferMp4: Boolean = true): AudioOption {
+    private fun pickAudio(list: List<AudioOption>, preferMp4: Boolean = true, slow: Boolean = false): AudioOption {
         val preferred = if (preferMp4) list.filter { it.suffix == "m4a" } else list.filter { it.suffix == "webm" }
-        return (preferred.ifEmpty { list }).maxBy { it.bitrateKbps }
+        val pool = preferred.ifEmpty { list }
+        // On a slow link the ~50 kbps stream starts several times faster than the 128–160 kbps one.
+        return if (slow) pool.minBy { it.bitrateKbps } else pool.maxBy { it.bitrateKbps }
+    }
+
+    // ------------------------------------------------------------------ network-aware quality
+
+    private var adaptiveActive = false
+    /** URL of a video whose adaptive manifest failed → progressive streams for the rest of it. */
+    private var adaptiveFailedFor: String? = null
+    private var manualQuality = false
+    private var downshifts = 0
+    private var bufferingSince = 0L
+    private var lastDownshiftAt = 0L
+    private var startedOnce = false
+    private var prefetchJob: Job? = null
+
+    private fun resetNetworkAdaptation() {
+        manualQuality = false
+        downshifts = 0
+        bufferingSince = 0
+        lastDownshiftAt = 0
+        startedOnce = false
+        adaptiveFailedFor = null
+        prefetchJob?.cancel()
+    }
+
+    private fun isMetered(): Boolean = runCatching {
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+        cm.isActiveNetworkMetered
+    }.getOrDefault(false)
+
+    /** Below ~1.2 Mbps 720p cannot start quickly; prefer small streams. */
+    private fun isSlow(): Boolean = bandwidthMeter.bitrateEstimate in 1 until 1_200_000
+
+    /** Upper quality limit: user setting, tightened on mobile data. */
+    private fun qualityCap(): Int {
+        val cap = settings.defaultQuality
+        return if (settings.mobileQuality > 0 && isMetered()) minOf(cap, settings.mobileQuality) else cap
+    }
+
+    /**
+     * Height for a fixed (progressive) stream: the cap, lowered to what the measured bandwidth can
+     * sustain (70 % of the estimate) when Smart quality is on, and lowered further after rebuffering.
+     */
+    private fun autoMaxHeight(details: StreamDetails): Int {
+        var cap = qualityCap()
+        if (settings.smartQuality && !manualQuality) {
+            val budget = bandwidthMeter.bitrateEstimate * 0.7
+            if (budget > 0) {
+                val audioBps = if (isSlow()) 50_000 else 130_000
+                val fitting = details.videoStreams
+                    .filter { it.height <= cap && approxBitrate(it) + audioBps <= budget }
+                    .maxOfOrNull { it.height }
+                cap = fitting ?: details.videoStreams.minOfOrNull { it.height } ?: cap
+            }
+        }
+        if (downshifts > 0) {
+            val heights = details.videoStreams.map { it.height }.filter { it > 0 }.distinct().sortedDescending()
+            val start = heights.indexOfFirst { it <= cap }.coerceAtLeast(0)
+            cap = heights.getOrNull(start + downshifts) ?: heights.lastOrNull() ?: cap
+        }
+        return cap
+    }
+
+    private fun approxBitrate(v: VideoOption): Int = v.bitrate.takeIf { it > 0 } ?: when {
+        v.height <= 144 -> 110_000
+        v.height <= 240 -> 250_000
+        v.height <= 360 -> 500_000
+        v.height <= 480 -> 900_000
+        v.height <= 720 -> 1_800_000
+        v.height <= 1080 -> 3_500_000
+        else -> 9_000_000
+    }
+
+    /** Builds an adaptive DASH source from the extracted streams, or null to use progressive streams. */
+    private fun adaptiveSource(details: StreamDetails, item: VideoItem, meta: MediaMetadata, trackId: String?): MediaSource? {
+        if (!settings.smartQuality || manualQuality || item.isLive || adaptiveFailedFor == details.item.url) return null
+        val plan = AdaptiveManifest.plan(details.videoStreams, details.audioFor(trackId), details.item.duration, qualityCap())
+            ?: return null
+        return runCatching {
+            val manifest = DashManifestParser().parse(
+                Uri.parse("https://www.youtube.com/vidora/${item.url.hashCode()}.mpd"),
+                plan.xml.byteInputStream(),
+            )
+            DashMediaSource.Factory(httpFactory).createMediaSource(
+                manifest,
+                MediaItem.Builder().setMediaId(item.url).setMediaMetadata(meta).build(),
+            )
+        }.onFailure { android.util.Log.w("PlayerManager", "adaptive manifest failed", it) }.getOrNull()
+    }
+
+    /**
+     * Called from the ticker. Long stalls → step the quality down (progressive) or, when even
+     * the lowest video stalls, keep the user listening with audio only. Brings video back once
+     * the measured bandwidth recovers.
+     */
+    private fun checkNetworkHealth() {
+        val s = _state.value
+        val details = s.details ?: return
+        if (s.localFile || details.item.isLive || refreshing) return
+        val now = System.currentTimeMillis()
+        if (s.bandwidthKbps != bandwidthMeter.bitrateEstimate / 1000) {
+            _state.value = s.copy(bandwidthKbps = bandwidthMeter.bitrateEstimate / 1000)
+        }
+        // recovered → bring the video back
+        if (s.slowNetworkAudio && exoPlayer.isPlaying && bandwidthMeter.bitrateEstimate > 900_000 && now - lastDownshiftAt > 30_000) {
+            _events.tryEmit("Network recovered — video is back")
+            downshifts = 0
+            lastDownshiftAt = now
+            _state.value = _state.value.copy(audioOnly = false, slowNetworkAudio = false)
+            prepare(details, exoPlayer.currentPosition, true, forced = null)
+            return
+        }
+        val since = bufferingSince
+        if (since == 0L || !exoPlayer.playWhenReady || manualQuality || s.audioOnly) return
+        val stalled = now - since
+        val limit = if (!startedOnce) 7_000 else 4_500
+        if (stalled < limit || now - lastDownshiftAt < 8_000) return
+        val position = exoPlayer.currentPosition
+        val lowestHeight = details.videoStreams.minOfOrNull { it.height } ?: 0
+        val atLowest = if (adaptiveActive) s.playingHeight in 1..maxOf(lowestHeight, 160)
+        else (s.quality?.height ?: 0) <= lowestHeight
+        if (settings.smartQuality && !adaptiveActive && !atLowest && downshifts < 6) {
+            downshifts++
+            val next = pickVideo(details, autoMaxHeight(details))
+            if (next != null && next.height < (s.quality?.height ?: Int.MAX_VALUE)) {
+                lastDownshiftAt = now
+                _events.tryEmit("Slow network — switched to ${next.height}p")
+                prepare(details, position, true, forced = null)
+                return
+            }
+        }
+        val giveUpOnVideo = atLowest || (adaptiveActive && stalled > 9_000)
+        if (giveUpOnVideo && settings.autoAudioOnSlow && details.audioStreams.isNotEmpty()) {
+            lastDownshiftAt = now
+            _events.tryEmit("Network too slow — playing audio only for now")
+            _state.value = _state.value.copy(audioOnly = true, slowNetworkAudio = true)
+            prepare(details, position, true, forced = null)
+        }
+    }
+
+    /** Resolves the next video's streams in the background so pressing Next starts instantly. */
+    private fun prefetchNext() {
+        if (!settings.prefetchNext) return
+        val s = _state.value
+        if (s.localFile) return
+        val next = s.queue.getOrNull(s.queueIndex + 1)
+            ?: if (settings.autoplayNext) s.details?.relatedVideos?.firstOrNull { r -> s.queue.none { it.url == r.url } } else null
+        next ?: return
+        prefetchJob?.cancel()
+        prefetchJob = scope.launch(Dispatchers.IO) {
+            delay(4_000) // let the current video fill its first buffer first
+            runCatching { Graph.repository.stream(next.url) }
+        }
     }
 
     private fun onEnded() {
@@ -585,6 +828,16 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
     private fun handleError(error: PlaybackException) {
         val s = _state.value
         val details = s.details
+        // The generated DASH manifest didn't work for this video → same position, fixed streams.
+        if (adaptiveActive && details != null && error.errorCode != PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED &&
+            error.errorCode != PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT
+        ) {
+            android.util.Log.w("PlayerManager", "adaptive playback failed, using progressive", error)
+            adaptiveFailedFor = details.item.url
+            adaptiveActive = false
+            prepare(details, exoPlayer.currentPosition, true, forced = null)
+            return
+        }
         // Stream URLs expire — refresh them once transparently.
         if (details != null && !s.localFile && error.errorCode in listOf(
                 PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS,
@@ -679,6 +932,7 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
                         }
                 }
                 if (++counter % 20 == 0 && exoPlayer.isPlaying) persistPosition()
+                if (counter % 2 == 0) checkNetworkHealth()
             }
         }
     }

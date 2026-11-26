@@ -127,3 +127,7 @@ Priority: **P0** = keeps the app working, **P1** = premium features users notice
 | PoToken player client | ✅ MWEB with WebView BotGuard tokens (full quality ladder) in the fallback chain |
 | History controls | ✅ Clear on device, manage/pause YouTube history (My Activity) |
 | Chromecast | ⏳ Needs Google Cast SDK (Play Services) + IP-bound URL handling |
+| Smart quality (adaptive DASH) | ✅ Manifest generated from the extracted streams (init/index byte ranges) → ExoPlayer ABR starts low on slow networks and steps up like YouTube |
+| Fast start | ✅ 0.8 s start buffer, shared bandwidth estimate, low-bitrate audio on slow links, next video pre-resolved in the background |
+| Slow-network rescue | ✅ Auto step-down on long stalls (fixed streams), audio-only fallback when even 144p stalls, video returns when the network recovers; mobile-data quality cap |
+| Media3 PreloadManager (pre-buffer next media) | ⏳ Next step after metadata prefetch |

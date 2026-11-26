@@ -73,6 +73,12 @@ object AltFrontends {
     private fun JsonObject.b(k: String) = (this[k] as? JsonPrimitive)?.booleanOrNull
     private fun JsonObject.arr(k: String) = (this[k] as? JsonArray)?.mapNotNull { it as? JsonObject }.orEmpty()
 
+    private fun pipedRange(o: JsonObject, k: String): String? {
+        val a = o.l(k + "Start") ?: return null
+        val b = o.l(k + "End") ?: return null
+        return if (b > a && a >= 0) "$a-$b" else null
+    }
+
     private fun suffixOf(mime: String) = when {
         "webm" in mime -> "webm"
         mime.startsWith("audio") -> "m4a"
@@ -98,6 +104,9 @@ object AltFrontends {
                 videoOnly = v.b("videoOnly") ?: true,
                 bitrate = v.i("bitrate") ?: 0,
                 contentLength = v.l("contentLength") ?: -1,
+                width = v.i("width") ?: 0,
+                initRange = pipedRange(v, "init"),
+                indexRange = pipedRange(v, "index"),
             )
         }.sortedByDescending { it.height }
         val audios = o.arr("audioStreams").mapNotNull { a ->
@@ -114,6 +123,8 @@ object AltFrontends {
                 trackId = a.s("audioTrackId"),
                 trackType = a.s("audioTrackType"),
                 language = a.s("audioTrackLocale"),
+                initRange = pipedRange(a, "init"),
+                indexRange = pipedRange(a, "index"),
             )
         }.sortedByDescending { it.bitrateKbps }
         if (videos.isEmpty() && audios.isEmpty() && o.s("hls") == null) throw IOException("No streams")
@@ -193,6 +204,8 @@ object AltFrontends {
                 videoOnly = true,
                 bitrate = v.i("bitrate") ?: 0,
                 contentLength = v.l("clen") ?: -1,
+                width = v.s("size")?.substringBefore('x')?.toIntOrNull() ?: 0,
+                initRange = v.s("init"), indexRange = v.s("index"),
             )
         } + o.arr("formatStreams").mapNotNull { v ->
             val type = v.s("type") ?: return@mapNotNull null
@@ -203,7 +216,8 @@ object AltFrontends {
         val audios = o.arr("adaptiveFormats").filter { it.s("type")?.startsWith("audio") == true }.mapNotNull { a ->
             val type = a.s("type") ?: return@mapNotNull null
             AudioOption(a.s("url") ?: return@mapNotNull null, a.i("itag") ?: 0, (a.i("bitrate") ?: 0) / 1000,
-                type.substringBefore(';'), suffixOf(type), codecOf(type), null, a.l("clen") ?: -1)
+                type.substringBefore(';'), suffixOf(type), codecOf(type), null, a.l("clen") ?: -1,
+                initRange = a.s("init"), indexRange = a.s("index"))
         }.sortedByDescending { it.bitrateKbps }
         if (videos.isEmpty() && audios.isEmpty()) throw IOException("No streams")
         val description = o.s("description").orEmpty()

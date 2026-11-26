@@ -124,6 +124,7 @@ import com.vidora.app.MainActivity
 import com.vidora.app.data.StreamDetails
 import com.vidora.app.data.VideoItem
 import com.vidora.app.player.PlayerUiState
+import com.vidora.app.player.qualityLabel
 import com.vidora.app.ui.Routes
 import com.vidora.app.ui.components.Avatar
 import com.vidora.app.ui.components.ErrorState
@@ -541,7 +542,7 @@ private fun LazyListScope.detailsSection(
                 }
             }
             item { ActionChip(stringResource(R.string.chip_equalizer), Icons.Rounded.GraphicEq, selected = Graph.settingsState.value.eqEnabled) { openSheet(Sheet.EQ) } }
-            item { ActionChip(state.quality?.label ?: stringResource(R.string.chip_quality), Icons.Rounded.HighQuality) { openSheet(Sheet.QUALITY) } }
+            item { ActionChip(if (state.details != null) state.qualityLabel else stringResource(R.string.chip_quality), Icons.Rounded.HighQuality) { openSheet(Sheet.QUALITY) } }
             item { ActionChip(if (state.audioOnly) "Audio only" else "Audio mode", Icons.Rounded.Audiotrack, selected = state.audioOnly) { Graph.player.setAudioOnly(!state.audioOnly) } }
             item { ActionChip("${trimSpeed(state.speed)}x", Icons.Rounded.Speed) { openSheet(Sheet.SPEED) } }
             item { ActionChip("Queue ${state.queue.size}", Icons.AutoMirrored.Rounded.QueueMusic) { openSheet(Sheet.QUEUE) } }
@@ -625,11 +626,22 @@ private fun QualitySheet(state: PlayerUiState, onDismiss: () -> Unit) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Text(stringResource(R.string.ui_video_quality), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
         LazyColumn(Modifier.navigationBarsPadding(), contentPadding = PaddingValues(bottom = 24.dp)) {
+            item {
+                val net = if (state.bandwidthKbps > 0) {
+                    if (state.bandwidthKbps >= 1000) " · network ≈ ${"%.1f".format(state.bandwidthKbps / 1000f)} Mbps" else " · network ≈ ${state.bandwidthKbps} kbps"
+                } else ""
+                ListItem(
+                    headlineContent = { Text(if (state.autoQuality && !state.audioOnly && state.playingHeight > 0) "Auto (${state.playingHeight}p)" else "Auto (recommended)") },
+                    supportingContent = { Text("Starts fast on slow networks and adjusts to your connection$net") },
+                    leadingContent = { RadioButton(selected = state.autoQuality && !state.audioOnly, onClick = null) },
+                    modifier = Modifier.clickable { Graph.player.setAutoQuality(); onDismiss() }
+                )
+            }
             items(options) { opt ->
                 ListItem(
                     headlineContent = { Text(opt.label) },
                     supportingContent = { Text(listOfNotNull(opt.suffix.uppercase(), opt.codec?.substringBefore('.')?.uppercase()).joinToString(" · ")) },
-                    leadingContent = { RadioButton(selected = state.quality?.label == opt.label && !state.audioOnly, onClick = null) },
+                    leadingContent = { RadioButton(selected = !state.autoQuality && state.quality?.label == opt.label && !state.audioOnly, onClick = null) },
                     modifier = Modifier.clickable { Graph.player.setQuality(opt); onDismiss() }
                 )
             }

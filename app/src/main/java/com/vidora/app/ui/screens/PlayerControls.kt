@@ -105,6 +105,7 @@ import coil.compose.AsyncImage
 import com.vidora.app.Graph
 import com.vidora.app.data.Chapter
 import com.vidora.app.player.PlayerUiState
+import com.vidora.app.player.qualityLabel
 import com.vidora.app.ui.theme.glass
 import com.vidora.app.ui.theme.glassOverlay
 import com.vidora.app.util.Format
@@ -454,7 +455,7 @@ internal fun PlayerSettingsSheet(state: PlayerUiState, openSheet: (Sheet) -> Uni
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.96f)) {
         Column(Modifier.navigationBarsPadding().padding(bottom = 16.dp)) {
             fun go(s: Sheet) { onDismiss(); openSheet(s) }
-            SettingRow(Icons.Rounded.HighQuality, "Quality", if (state.audioOnly) "Audio only" else state.quality?.label ?: "Auto") { go(Sheet.QUALITY) }
+            SettingRow(Icons.Rounded.HighQuality, "Quality", state.qualityLabel) { go(Sheet.QUALITY) }
             SettingRow(Icons.Rounded.Speed, "Playback speed", if (state.speed == 1f) "Normal" else "${trimSpeedLabel(state.speed)}×") { go(Sheet.SPEED) }
             SettingRow(Icons.Rounded.ClosedCaption, "Captions", state.subtitle?.label ?: "Off") { go(Sheet.CAPTIONS) }
             if (details != null && details.audioTracks.size > 1) {

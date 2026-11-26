@@ -116,7 +116,7 @@ class ContentRepository {
         if (!forceRefresh) {
             streamCache.get(url)?.let { (time, details) ->
                 // Stream URLs expire after a few hours; keep the cache short.
-                if (now - time < 30 * 60_000) return@io details
+                if (now - time < 90 * 60_000) return@io details
             }
         }
         val details = loadStream(url)
@@ -342,8 +342,13 @@ class ContentRepository {
             videoOnly = isVideoOnly,
             bitrate = bitrate,
             contentLength = itagItem?.contentLength ?: -1L,
+            width = width,
+            initRange = byteRange(initStart, initEnd),
+            indexRange = byteRange(indexStart, indexEnd),
         )
     }
+
+    private fun byteRange(start: Int, end: Int): String? = if (end > 0 && end > start && start >= 0) "$start-$end" else null
 
     private fun AudioStream.toOption(): AudioOption {
         val fmt: MediaFormat? = format
@@ -360,6 +365,8 @@ class ContentRepository {
             trackId = audioTrackId,
             trackType = audioTrackType?.name,
             language = audioLocale?.displayLanguage,
+            initRange = byteRange(initStart, initEnd),
+            indexRange = byteRange(indexStart, indexEnd),
         )
     }
 

@@ -102,6 +102,14 @@ data class AppSettings(
     val altFrontends: Boolean = true,
     val glassUi: Boolean = true,
     val ambientMode: Boolean = true,
+    /** Adaptive (DASH) quality: starts fast on slow networks and adapts like the official app. */
+    val smartQuality: Boolean = true,
+    /** Max quality on mobile data / metered networks (0 = same as Wi-Fi). */
+    val mobileQuality: Int = 480,
+    /** Fall back to audio-only when the network is too slow even for the lowest video quality. */
+    val autoAudioOnSlow: Boolean = true,
+    /** Resolve the next video in the background so it starts instantly. */
+    val prefetchNext: Boolean = true,
     val downloadConnections: Int = 3,
     val returnDislike: Boolean = true,
     val deArrow: Boolean = false,
@@ -170,6 +178,10 @@ class SettingsRepository(private val context: Context) {
         val altFrontends = booleanPreferencesKey("alt_frontends")
         val glassUi = booleanPreferencesKey("glass_ui")
         val ambientMode = booleanPreferencesKey("ambient_mode")
+        val smartQuality = booleanPreferencesKey("smart_quality")
+        val mobileQuality = intPreferencesKey("mobile_quality")
+        val autoAudioOnSlow = booleanPreferencesKey("auto_audio_slow")
+        val prefetchNext = booleanPreferencesKey("prefetch_next")
         val downloadConnections = intPreferencesKey("dl_connections")
         val returnDislike = booleanPreferencesKey("ryd")
         val deArrow = booleanPreferencesKey("dearrow")
@@ -239,6 +251,10 @@ class SettingsRepository(private val context: Context) {
             altFrontends = this[K.altFrontends] ?: d.altFrontends,
             glassUi = this[K.glassUi] ?: d.glassUi,
             ambientMode = this[K.ambientMode] ?: d.ambientMode,
+            smartQuality = this[K.smartQuality] ?: d.smartQuality,
+            mobileQuality = this[K.mobileQuality] ?: d.mobileQuality,
+            autoAudioOnSlow = this[K.autoAudioOnSlow] ?: d.autoAudioOnSlow,
+            prefetchNext = this[K.prefetchNext] ?: d.prefetchNext,
             downloadConnections = this[K.downloadConnections] ?: d.downloadConnections,
             returnDislike = this[K.returnDislike] ?: d.returnDislike,
             deArrow = this[K.deArrow] ?: d.deArrow,
@@ -307,6 +323,10 @@ class SettingsRepository(private val context: Context) {
             p[K.altFrontends] = s.altFrontends
             p[K.glassUi] = s.glassUi
             p[K.ambientMode] = s.ambientMode
+            p[K.smartQuality] = s.smartQuality
+            p[K.mobileQuality] = s.mobileQuality
+            p[K.autoAudioOnSlow] = s.autoAudioOnSlow
+            p[K.prefetchNext] = s.prefetchNext
             p[K.downloadConnections] = s.downloadConnections
             p[K.returnDislike] = s.returnDislike
             p[K.deArrow] = s.deArrow
