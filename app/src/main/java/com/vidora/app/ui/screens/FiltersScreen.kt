@@ -57,7 +57,7 @@ fun FiltersScreen(nav: NavHostController) {
             navigationIcon = { IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") } },
             colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
         )
-        LazyColumn(contentPadding = PaddingValues(bottom = 120.dp)) {
+        LazyColumn(contentPadding = PaddingValues(bottom = com.vidora.app.ui.theme.bottomChromePadding())) {
             item {
                 ListItem(
                     headlineContent = { Text(stringResource(R.string.ui_hide_shorts)) },

@@ -106,7 +106,7 @@ fun LocalPlaylistScreen(nav: NavHostController, actions: VideoActions, id: Strin
             TextButton(onClick = { editing = !editing }) { Text(if (editing) "Done" else "Edit") }
         }
         Text("${playlist.videos.size} videos", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp))
-        LazyColumn(contentPadding = PaddingValues(bottom = 120.dp)) {
+        LazyColumn(contentPadding = PaddingValues(bottom = com.vidora.app.ui.theme.bottomChromePadding())) {
             itemsIndexed(playlist.videos, key = { _, v -> v.url }) { index, v ->
                 if (editing) {
                     Row(verticalAlignment = Alignment.CenterVertically) {

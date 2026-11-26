@@ -23,6 +23,8 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -107,7 +109,8 @@ import kotlin.math.roundToInt
 // ======================================================================= gestures
 
 /** What the gesture overlay should currently show. */
-data class GestureFeedback(val icon: ImageVector, val text: String, val sticky: Boolean = false, val stamp: Long = System.nanoTime())
+/** [side]: −1 / +1 for double-tap seeks (drawn as a ripple on that half), 0 for a centred pill. */
+data class GestureFeedback(val icon: ImageVector, val text: String, val sticky: Boolean = false, val stamp: Long = System.nanoTime(), val side: Int = 0)
 
 fun Context.findActivity(): Activity? {
     var c: Context? = this
@@ -131,8 +134,12 @@ fun installPlayerGestures(
     view: PlayerView,
     enabled: () -> Boolean,
     allowSwipes: () -> Boolean,
+    onSingleTap: (() -> Unit)? = null,
     onFeedback: (GestureFeedback?) -> Unit,
 ) {
+    var lastSeekAt = 0L
+    var lastSeekSide = 0
+    var seekAcc = 0
     val ctx = view.context
     val audio = ctx.getSystemService(AudioManager::class.java)
     val maxVolume = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
@@ -144,7 +151,8 @@ fun installPlayerGestures(
         override fun onDown(e: MotionEvent): Boolean = true
 
         override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
-            if (view.isControllerFullyVisible) view.hideController() else view.showController()
+            if (onSingleTap != null) onSingleTap()
+            else if (view.isControllerFullyVisible) view.hideController() else view.showController()
             return true
         }
 
@@ -152,9 +160,14 @@ fun installPlayerGestures(
             if (!enabled()) return false
             val p = Graph.player.exoPlayer
             val back = e.x < view.width / 2f
+            val side = if (back) -1 else 1
+            val now = android.os.SystemClock.uptimeMillis()
+            // Repeated double taps on the same side add up (10 s, 20 s, 30 s…) like YouTube.
+            seekAcc = if (now - lastSeekAt < 1200 && lastSeekSide == side) seekAcc + 10 else 10
+            lastSeekAt = now; lastSeekSide = side
             val target = (p.currentPosition + if (back) -10_000 else 10_000).coerceIn(0, if (p.duration > 0) p.duration else Long.MAX_VALUE)
             p.seekTo(target)
-            onFeedback(GestureFeedback(if (back) Icons.Rounded.FastRewind else Icons.Rounded.FastForward, if (back) "−10 s" else "+10 s"))
+            onFeedback(GestureFeedback(if (back) Icons.Rounded.FastRewind else Icons.Rounded.FastForward, if (back) "−$seekAcc s" else "+$seekAcc s", side = side))
             return true
         }
 
@@ -247,6 +260,24 @@ fun GestureOverlay(feedback: GestureFeedback?, modifier: Modifier = Modifier) {
     }
     AnimatedVisibility(shown != null, enter = fadeIn(), exit = fadeOut(), modifier = modifier) {
         val f = shown ?: return@AnimatedVisibility
+        if (f.side != 0) {
+            // YouTube-style half-screen ripple with the accumulated seek
+            Box(Modifier.fillMaxSize()) {
+                val shape = if (f.side < 0) RoundedCornerShape(topEndPercent = 50, bottomEndPercent = 50) else RoundedCornerShape(topStartPercent = 50, bottomStartPercent = 50)
+                Box(
+                    Modifier.align(if (f.side < 0) Alignment.CenterStart else Alignment.CenterEnd)
+                        .fillMaxHeight().fillMaxWidth(0.36f)
+                        .clip(shape).background(Color.White.copy(alpha = 0.14f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(f.icon, null, tint = Color.White, modifier = Modifier.size(30.dp))
+                        Text(f.text, color = Color.White, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+            return@AnimatedVisibility
+        }
         Row(
             Modifier.clip(RoundedCornerShape(50)).background(Color.Black.copy(alpha = 0.65f)).padding(horizontal = 18.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically

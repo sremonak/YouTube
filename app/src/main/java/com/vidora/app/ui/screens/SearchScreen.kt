@@ -143,7 +143,7 @@ fun SearchScreen(nav: NavHostController, actions: VideoActions, initialQuery: St
 
         if (editing) {
             val history = if (text.isBlank()) library.searchHistory else library.searchHistory.filter { it.contains(text, true) }.take(4)
-            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 96.dp)) {
+            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = com.vidora.app.ui.theme.bottomChromePadding())) {
                 items(history.distinct(), key = { "h$it" }) { q ->
                     SuggestionRow(q, isHistory = true, onClick = { submit(q) }, onFill = { text = q }, onRemove = { Graph.library.removeSearch(q) })
                 }

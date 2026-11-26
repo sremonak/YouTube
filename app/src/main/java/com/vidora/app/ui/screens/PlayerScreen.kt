@@ -1,5 +1,9 @@
 package com.vidora.app.ui.screens
 
+import com.vidora.app.ui.theme.glass
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
 import com.vidora.app.R
 import android.app.Activity
@@ -98,6 +102,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -129,7 +134,7 @@ import com.vidora.app.ui.components.VideoCard
 import com.vidora.app.util.Format
 import kotlinx.coroutines.delay
 
-private enum class Sheet { NONE, QUALITY, SPEED, SLEEP, QUEUE, CAPTIONS, AUDIO, EQ, COMMENTS, PLAYLIST, STATS }
+internal enum class Sheet { NONE, QUALITY, SPEED, SLEEP, QUEUE, CAPTIONS, AUDIO, EQ, COMMENTS, PLAYLIST, STATS, SETTINGS, CHAPTERS }
 
 @Composable
 fun PlayerScreen(
@@ -173,16 +178,16 @@ fun PlayerScreen(
         return
     }
 
+    var sheet by remember { mutableStateOf(Sheet.NONE) }
+    val comments = remember(state.current?.url) { state.current?.url?.let { com.vidora.app.ui.UiCache.comments(it) } }
+
     if (fullscreen) {
         Box(Modifier.fillMaxSize().background(Color.Black)) {
-            VideoSurface(Modifier.fillMaxSize(), state, showControls = true, onFullscreen = exitFullscreen, fullscreen = true)
+            VideoSurface(Modifier.fillMaxSize(), state, showControls = true, onFullscreen = exitFullscreen, fullscreen = true, openSheet = { sheet = it })
         }
+        PlayerSheets(sheet, state, actions, comments) { sheet = Sheet.NONE }
         return
     }
-
-    var sheet by remember { mutableStateOf(Sheet.NONE) }
-    val commentsScope = rememberCoroutineScope()
-    val comments = remember(state.current?.url) { state.current?.url?.let { com.vidora.app.ui.UiCache.comments(it) } }
     val wide = config.screenWidthDp >= 840
     val onFullscreen = {
         fullscreenRequested = true
@@ -195,7 +200,7 @@ fun PlayerScreen(
                 item {
                     VideoSurface(
                         Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(16.dp)).background(Color.Black),
-                        state, true, onFullscreen, onSignIn = { nav.navigate(Routes.LOGIN) }
+                        state, true, onFullscreen, onSignIn = { nav.navigate(Routes.LOGIN) }, openSheet = { sheet = it }
                     )
                 }
                 detailsSection(state, nav, actions, activity, onDownload, comments) { sheet = it }
@@ -205,32 +210,63 @@ fun PlayerScreen(
             }
         }
     } else {
-        Column(Modifier.fillMaxSize().statusBarsPadding()) {
-            Box {
-                VideoSurface(Modifier.fillMaxWidth().aspectRatio(16f / 9f).background(Color.Black), state, true, onFullscreen, onSignIn = { nav.navigate(Routes.LOGIN) })
-                IconButton(onClick = { nav.popBackStack() }, modifier = Modifier.align(Alignment.TopStart)) {
-                    Icon(Icons.Rounded.KeyboardArrowDown, "Minimize", tint = Color.White)
-                }
+        val settings by Graph.settingsState.collectAsState()
+        Box(Modifier.fillMaxSize()) {
+            // Ambient mode: the video's colours glow behind the player and the title area
+            if (settings.ambientMode) {
+                AmbientGlow(
+                    state.current?.thumbnail,
+                    Modifier.fillMaxWidth().height((config.screenWidthDp * 9 / 16 + 260).dp),
+                    dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+                )
             }
-            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp)) {
-                detailsSection(state, nav, actions, activity, onDownload, comments) { sheet = it }
-                relatedSection(state, actions)
+            Column(Modifier.fillMaxSize().statusBarsPadding()) {
+                VideoSurface(
+                    Modifier.fillMaxWidth().aspectRatio(16f / 9f)
+                        .then(if (settings.ambientMode) Modifier.padding(horizontal = 0.dp) else Modifier)
+                        .background(Color.Black),
+                    state, true, onFullscreen, onSignIn = { nav.navigate(Routes.LOGIN) },
+                    openSheet = { sheet = it }, onMinimize = { nav.popBackStack() }
+                )
+                LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp)) {
+                    detailsSection(state, nav, actions, activity, onDownload, comments) { sheet = it }
+                    relatedSection(state, actions)
+                }
             }
         }
     }
 
+    PlayerSheets(sheet, state, actions, comments) { sheet = Sheet.NONE }
+}
+
+@Composable
+private fun PlayerSheets(sheet: Sheet, state: PlayerUiState, actions: VideoActions, comments: CommentsState?, close: () -> Unit) {
+    var next by remember { mutableStateOf(Sheet.NONE) }
+    // The gear menu opens another sheet after closing itself
+    val shown = if (next != Sheet.NONE) next else sheet
+    val dismiss = { next = Sheet.NONE; close() }
+    when (shown) {
+        Sheet.SETTINGS -> PlayerSettingsSheet(state, openSheet = { next = it }, onDismiss = { if (next == Sheet.NONE) close() })
+        Sheet.CHAPTERS -> ChaptersSheet(state, dismiss)
+        else -> LegacySheets(shown, state, actions, comments, dismiss)
+    }
+}
+
+@Composable
+private fun LegacySheets(sheet: Sheet, state: PlayerUiState, actions: VideoActions, comments: CommentsState?, close: () -> Unit) {
+    val onDismiss = close
     when (sheet) {
-        Sheet.QUALITY -> QualitySheet(state) { sheet = Sheet.NONE }
-        Sheet.SPEED -> SpeedSheet(state.speed) { sheet = Sheet.NONE }
-        Sheet.SLEEP -> SleepSheet(state) { sheet = Sheet.NONE }
-        Sheet.STATS -> StatsSheet { sheet = Sheet.NONE }
-        Sheet.QUEUE -> QueueSheet(state, actions) { sheet = Sheet.NONE }
-        Sheet.CAPTIONS -> CaptionsSheet(state) { sheet = Sheet.NONE }
-        Sheet.AUDIO -> AudioTrackSheet(state) { sheet = Sheet.NONE }
-        Sheet.EQ -> EqualizerSheet { sheet = Sheet.NONE }
-        Sheet.COMMENTS -> comments?.let { CommentsSheet(it, onSeek = { ms -> Graph.player.seekTo(ms) }) { sheet = Sheet.NONE } }
-        Sheet.PLAYLIST -> state.current?.let { AddToPlaylistSheet(it) { sheet = Sheet.NONE } }
-        Sheet.NONE -> Unit
+        Sheet.QUALITY -> QualitySheet(state, onDismiss)
+        Sheet.SPEED -> SpeedSheet(state.speed, onDismiss)
+        Sheet.SLEEP -> SleepSheet(state, onDismiss)
+        Sheet.STATS -> StatsSheet(onDismiss)
+        Sheet.QUEUE -> QueueSheet(state, actions, onDismiss)
+        Sheet.CAPTIONS -> CaptionsSheet(state, onDismiss)
+        Sheet.AUDIO -> AudioTrackSheet(state, onDismiss)
+        Sheet.EQ -> EqualizerSheet(onDismiss)
+        Sheet.COMMENTS -> comments?.let { CommentsSheet(it, onSeek = { ms -> Graph.player.seekTo(ms) }, onDismiss = onDismiss) }
+        Sheet.PLAYLIST -> state.current?.let { AddToPlaylistSheet(it, onDismiss) }
+        Sheet.NONE, Sheet.SETTINGS, Sheet.CHAPTERS -> Unit
     }
 }
 
@@ -250,22 +286,24 @@ private fun FullscreenEffect(activity: Activity, fullscreen: Boolean) {
 
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
-private fun VideoSurface(modifier: Modifier, state: PlayerUiState, showControls: Boolean, onFullscreen: () -> Unit, fullscreen: Boolean = false, onSignIn: (() -> Unit)? = null) {
+private fun VideoSurface(
+    modifier: Modifier, state: PlayerUiState, showControls: Boolean, onFullscreen: () -> Unit, fullscreen: Boolean = false,
+    onSignIn: (() -> Unit)? = null, openSheet: (Sheet) -> Unit = {}, onMinimize: (() -> Unit)? = null,
+) {
     val settings by Graph.settingsState.collectAsState()
-    val gesturesOn by rememberUpdatedState(settings.gestures && showControls)
-    val swipesOn by rememberUpdatedState(fullscreen)
+    var controlsVisible by remember { mutableStateOf(true) }
+    var locked by remember { mutableStateOf(false) }
+    if (!fullscreen && locked) locked = false
+    val gesturesOn by rememberUpdatedState(settings.gestures && showControls && !locked)
+    val swipesOn by rememberUpdatedState(fullscreen && !locked)
+    val tapToggles by rememberUpdatedState(showControls)
     var feedback by remember { mutableStateOf<GestureFeedback?>(null) }
-    var scrubMs by remember { mutableStateOf<Long?>(null) }
     Box(modifier, contentAlignment = Alignment.Center) {
         AndroidView(
             factory = { ctx ->
                 PlayerView(ctx).apply {
-                    installPlayerGestures(this, { gesturesOn }, { swipesOn }) { feedback = it }
-                    (findViewById<android.view.View>(androidx.media3.ui.R.id.exo_progress) as? TimeBar)?.addListener(object : TimeBar.OnScrubListener {
-                        override fun onScrubStart(timeBar: TimeBar, position: Long) { scrubMs = position }
-                        override fun onScrubMove(timeBar: TimeBar, position: Long) { scrubMs = position }
-                        override fun onScrubStop(timeBar: TimeBar, position: Long, canceled: Boolean) { scrubMs = null }
-                    })
+                    useController = false
+                    installPlayerGestures(this, { gesturesOn }, { swipesOn }, onSingleTap = { if (tapToggles) controlsVisible = !controlsVisible }) { feedback = it }
                     layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
                     player = Graph.player.sessionPlayer
                     resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
@@ -279,7 +317,7 @@ private fun VideoSurface(modifier: Modifier, state: PlayerUiState, showControls:
                 }
             },
             update = { view ->
-                view.useController = showControls
+                view.useController = false
                 // Chapter starts + SponsorBlock segments as markers on the seek bar
                 val markers = (state.details?.chapters.orEmpty().drop(1).map { it.startSeconds * 1000L } + state.segments.map { it.startMs })
                     .distinct().sorted().toLongArray()
@@ -301,18 +339,23 @@ private fun VideoSurface(modifier: Modifier, state: PlayerUiState, showControls:
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Rounded.Audiotrack, null, tint = Color.White, modifier = Modifier.size(48.dp))
                     Text(stringResource(R.string.ui_audio_only_mode), color = Color.White, style = MaterialTheme.typography.labelLarge)
-                    Spacer(Modifier.height(8.dp))
-                    IconButton(
-                        onClick = { Graph.player.togglePlay() },
-                        modifier = Modifier.clip(CircleShape).background(Color.White.copy(alpha = 0.2f))
-                    ) {
-                        Icon(if (state.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, null, tint = Color.White)
-                    }
                 }
             }
         }
-        GestureOverlay(feedback, Modifier.align(Alignment.Center))
-        scrubMs?.let { ms -> SeekPreview(state.details?.frames, ms, Modifier.align(Alignment.Center)) }
+        GestureOverlay(feedback, Modifier.fillMaxSize())
+        if (showControls && !(state.restored && !state.loading && state.error == null)) {
+            ProPlayerControls(
+                state = state,
+                visible = controlsVisible || (!state.isPlaying && !state.loading),
+                onVisibleChange = { controlsVisible = it },
+                fullscreen = fullscreen,
+                locked = locked,
+                onLockChange = { locked = it; controlsVisible = true },
+                onFullscreen = onFullscreen,
+                onMinimize = onMinimize,
+                openSheet = openSheet,
+            )
+        }
         if (state.loading) {
             val status by Graph.repository.loadStatus.collectAsState()
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -568,23 +611,7 @@ private fun LazyListScope.relatedSection(state: PlayerUiState, actions: VideoAct
 
 @Composable
 private fun ActionChip(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, selected: Boolean = false, onClick: () -> Unit) {
-    AssistChip(
-        onClick = onClick,
-        label = { Text(label) },
-        leadingIcon = { Icon(icon, null, Modifier.size(18.dp)) },
-        shape = RoundedCornerShape(50),
-        // YouTube's flat grey pills; "on" state = inverted colours.
-        colors = if (selected) AssistChipDefaults.assistChipColors(
-            containerColor = MaterialTheme.colorScheme.onSurface,
-            labelColor = MaterialTheme.colorScheme.surface,
-            leadingIconContentColor = MaterialTheme.colorScheme.surface,
-        ) else AssistChipDefaults.assistChipColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-            labelColor = MaterialTheme.colorScheme.onSurface,
-            leadingIconContentColor = MaterialTheme.colorScheme.onSurface,
-        ),
-        border = null,
-    )
+    GlassActionPill(label, icon, selected, onClick)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -695,11 +722,12 @@ private fun QueueSheet(state: PlayerUiState, actions: VideoActions, onDismiss: (
     }
 }
 
-/** Mini player shown above the navigation bar while browsing. */
+/** Mini player shown above the navigation bar while browsing (glass card; swipe sideways to close). */
 @Composable
 fun MiniPlayer(onOpen: () -> Unit, floating: Boolean = false) {
     val state by Graph.player.state.collectAsState()
     val item = state.current ?: return
+    val glassOn = com.vidora.app.ui.theme.LocalGlass.current.enabled
     var progress by remember { mutableStateOf(0f) }
     LaunchedEffect(item.url) {
         while (true) {
@@ -708,19 +736,30 @@ fun MiniPlayer(onOpen: () -> Unit, floating: Boolean = false) {
             delay(500)
         }
     }
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = if (floating) RoundedCornerShape(16.dp) else RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
-        tonalElevation = 4.dp,
-        shadowElevation = if (floating) 8.dp else 0.dp,
-        modifier = if (floating) Modifier.widthIn(max = 560.dp).fillMaxWidth() else Modifier.fillMaxWidth()
+    var dragX by remember { mutableStateOf(0f) }
+    val animX by androidx.compose.animation.core.animateFloatAsState(dragX, label = "miniDrag")
+    val shape = if (floating) RoundedCornerShape(20.dp) else RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+    val base = if (floating) Modifier.padding(horizontal = 10.dp, vertical = 6.dp).widthIn(max = 560.dp).fillMaxWidth() else Modifier.fillMaxWidth()
+    Box(
+        base
+            .graphicsLayer { translationX = animX; alpha = 1f - (kotlin.math.abs(animX) / 900f).coerceIn(0f, 0.8f) }
+            .pointerInput(item.url) {
+                detectHorizontalDragGestures(
+                    onDragEnd = { if (kotlin.math.abs(dragX) > size.width * 0.35f) Graph.player.stop(); dragX = 0f },
+                    onDragCancel = { dragX = 0f },
+                ) { change, d -> change.consume(); dragX += d }
+            }
+            .then(
+                if (glassOn) Modifier.glass(shape, tint = MaterialTheme.colorScheme.surfaceContainerHigh)
+                else Modifier.clip(shape).background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            )
     ) {
         Column {
             Row(
                 Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(Modifier.width(96.dp).aspectRatio(16f / 9f).clip(RoundedCornerShape(8.dp)).background(Color.Black)) {
+                Box(Modifier.width(100.dp).aspectRatio(16f / 9f).clip(RoundedCornerShape(10.dp)).background(Color.Black)) {
                     AsyncImage(item.thumbnail, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                 }
                 Spacer(Modifier.width(12.dp))
@@ -730,12 +769,18 @@ fun MiniPlayer(onOpen: () -> Unit, floating: Boolean = false) {
                 }
                 IconButton(onClick = { Graph.player.togglePlay() }) {
                     if (state.loading) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
-                    else Icon(if (state.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, "Play/Pause")
+                    else androidx.compose.animation.Crossfade(state.isPlaying, label = "miniPlay") { playing ->
+                        Icon(if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, "Play/Pause", Modifier.size(28.dp))
+                    }
                 }
                 IconButton(onClick = { Graph.player.playNext() }) { Icon(Icons.Rounded.SkipNext, "Next") }
                 IconButton(onClick = { Graph.player.stop() }) { Icon(Icons.Rounded.Close, "Close") }
             }
-            LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth().height(2.dp))
+            // Thin accent progress line
+            Box(Modifier.fillMaxWidth().padding(horizontal = if (floating) 14.dp else 0.dp).height(2.dp).clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))) {
+                Box(Modifier.fillMaxWidth(progress.coerceIn(0f, 1f)).fillMaxHeight().background(MaterialTheme.colorScheme.primary))
+            }
+            if (floating) Spacer(Modifier.height(6.dp))
         }
     }
 }

@@ -121,7 +121,7 @@ fun DownloadsScreen(nav: NavHostController) {
                 Icons.Rounded.Download
             )
         } else {
-            LazyColumn(contentPadding = PaddingValues(bottom = 120.dp)) {
+            LazyColumn(contentPadding = PaddingValues(bottom = com.vidora.app.ui.theme.bottomChromePadding())) {
                 items(visible, key = { it.id }) { record ->
                     DownloadRow(record, onPlay = {
                         val uri = record.uri?.toUri() ?: return@DownloadRow

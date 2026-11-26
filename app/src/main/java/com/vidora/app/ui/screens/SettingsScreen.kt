@@ -152,7 +152,7 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
             navigationIcon = { IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") } },
             colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
         )
-        LazyColumn(contentPadding = PaddingValues(bottom = 120.dp), modifier = Modifier.fillMaxWidth()) {
+        LazyColumn(contentPadding = PaddingValues(bottom = com.vidora.app.ui.theme.bottomChromePadding()), modifier = Modifier.fillMaxWidth()) {
             // ------------------------------------------------------------ account
             item { Header(stringResource(R.string.h_account)) }
             item {
@@ -277,6 +277,15 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
                     }
                 }
             }
+            item {
+                SwitchRow(
+                    "Glass UI",
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) "Frosted, see-through navigation bar, mini player and player controls (real blur)"
+                    else "Frosted, see-through bars (blur needs Android 12+, a tint is used here)",
+                    s.glassUi
+                ) { v -> update { it.copy(glassUi = v) } }
+            }
+            item { SwitchRow("Ambient mode", "Soft glow of the video's colours around the player, like YouTube", s.ambientMode) { v -> update { it.copy(ambientMode = v) } } }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 item { SwitchRow(stringResource(R.string.ui_material_you_colours), stringResource(R.string.ui_match_colours_to_your_wallpaper), s.dynamicColor) { v -> update { it.copy(dynamicColor = v) } } }
             }

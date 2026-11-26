@@ -96,7 +96,7 @@ fun LibraryScreen(nav: NavHostController, actions: VideoActions) {
             },
             colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
         )
-        LazyColumn(contentPadding = PaddingValues(bottom = 120.dp)) {
+        LazyColumn(contentPadding = PaddingValues(bottom = com.vidora.app.ui.theme.bottomChromePadding())) {
             // YouTube-style profile header
             item {
                 val s = session
@@ -293,7 +293,7 @@ fun VideoListScreen(nav: NavHostController, actions: VideoActions, kind: String)
         if (videos.isEmpty()) {
             EmptyState(stringResource(R.string.ui_nothing_here_yet), stringResource(R.string.ui_videos_you_add_will_appear_here))
         } else {
-            LazyColumn(contentPadding = PaddingValues(bottom = 120.dp)) {
+            LazyColumn(contentPadding = PaddingValues(bottom = com.vidora.app.ui.theme.bottomChromePadding())) {
                 items(videos, key = { it.url }) { v -> VideoCard(v, actions, compact = true) }
             }
         }

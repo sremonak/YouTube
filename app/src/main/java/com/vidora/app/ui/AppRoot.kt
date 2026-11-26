@@ -1,5 +1,8 @@
 package com.vidora.app.ui
 
+import com.vidora.app.ui.theme.glass
+import com.vidora.app.ui.theme.glassSource
+import androidx.compose.ui.layout.onSizeChanged
 import com.vidora.app.R
 import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
@@ -7,6 +10,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -168,46 +172,24 @@ fun AppRoot(activity: MainActivity, settings: AppSettings) {
     val showMini = playerState.current != null && route != Routes.PLAYER && route != Routes.LOGIN && route != Routes.SHORTS
     val showNav = route != Routes.PLAYER && route != Routes.LOGIN
 
-    Scaffold(
-        snackbarHost = { SnackbarHost(snackbar) },
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        bottomBar = {
-            if (!wide && showNav) {
-                Column {
-                    AnimatedVisibility(showMini, enter = slideInVertically { it } + fadeIn(), exit = slideOutVertically { it } + fadeOut()) {
-                        MiniPlayer(onOpen = { nav.navigate(Routes.PLAYER) { launchSingleTop = true } })
-                    }
-                    if (isTop || route == null) {
-                        val onShorts = route == Routes.SHORTS
-                        androidx.compose.material3.HorizontalDivider(
-                            thickness = 0.5.dp,
-                            color = if (onShorts) Color.White.copy(alpha = 0.15f) else MaterialTheme.colorScheme.outlineVariant
-                        )
-                        NavigationBar(
-                            containerColor = if (onShorts) Color.Black else MaterialTheme.colorScheme.background,
-                            tonalElevation = 0.dp,
-                        ) {
-                            val fg = if (onShorts) Color.White else MaterialTheme.colorScheme.onSurface
-                            topDestinations.forEach { d ->
-                                NavigationBarItem(
-                                    selected = route == d.route,
-                                    onClick = { nav.navigateTop(d.route) },
-                                    icon = { NavIcon(d, route == d.route, if (d.route == Routes.LIBRARY) activeDownloads else 0) },
-                                    label = { Text(androidx.compose.ui.res.stringResource(d.label), maxLines = 1, style = MaterialTheme.typography.labelSmall) },
-                                    colors = androidx.compose.material3.NavigationBarItemDefaults.colors(
-                                        selectedIconColor = fg, selectedTextColor = fg,
-                                        unselectedIconColor = fg, unselectedTextColor = fg,
-                                        indicatorColor = Color.Transparent,
-                                    ),
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    ) { padding ->
-        Row(Modifier.fillMaxSize().padding(padding)) {
+    val glassState = com.vidora.app.ui.theme.rememberGlassState()
+    val glassOn = settings.glassUi
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    var chromePx by remember { mutableStateOf(0) }
+    val bottomChrome = when {
+        !wide && showNav -> with(density) { chromePx.toDp() }
+        wide && showMini -> 96.dp
+        else -> 0.dp
+    }
+    // Content scrolls *under* the glass bars; Shorts (full-bleed video) and the plain style keep the old layout.
+    val padContent = !glassOn || route == Routes.SHORTS
+
+    androidx.compose.runtime.CompositionLocalProvider(
+        com.vidora.app.ui.theme.LocalGlass provides com.vidora.app.ui.theme.GlassPrefs(glassOn, glassState),
+        com.vidora.app.ui.theme.LocalBottomChrome provides if (padContent) 0.dp else bottomChrome,
+    ) {
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        Row(Modifier.fillMaxSize()) {
             if (wide && showNav) {
                 NavigationRail(Modifier.statusBarsPadding()) {
                     topDestinations.forEach { d ->
@@ -220,7 +202,16 @@ fun AppRoot(activity: MainActivity, settings: AppSettings) {
                     }
                 }
             }
-            Box(Modifier.weight(1f).fillMaxSize()) {
+            Box(
+                Modifier.weight(1f).fillMaxSize()
+                    .padding(bottom = if (padContent && !wide) bottomChrome else 0.dp)
+                    .glassSource(glassState, glassOn && !padContent)
+                    .background(MaterialTheme.colorScheme.background)
+            ) {
+                // Inside the captured content glass can't sample itself → frosted tint only.
+                androidx.compose.runtime.CompositionLocalProvider(
+                    com.vidora.app.ui.theme.LocalGlass provides com.vidora.app.ui.theme.GlassPrefs(glassOn, null)
+                ) {
                 NavHost(nav, startDestination = Routes.HOME, modifier = Modifier.fillMaxSize()) {
                     composable(Routes.HOME) { HomeScreen(nav, actions, settings) }
                     composable(Routes.SUBS) { SubscriptionsScreen(nav, actions) }
@@ -251,13 +242,67 @@ fun AppRoot(activity: MainActivity, settings: AppSettings) {
                         VideoListScreen(nav, actions, entry.arguments?.getString("kind").orEmpty())
                     }
                 }
-                if (wide && showMini) {
-                    Box(Modifier.align(androidx.compose.ui.Alignment.BottomCenter).fillMaxWidth().padding(12.dp), contentAlignment = androidx.compose.ui.Alignment.Center) {
-                        MiniPlayer(onOpen = { nav.navigate(Routes.PLAYER) { launchSingleTop = true } }, floating = true)
+                }
+            }
+        }
+        if (wide && showMini) {
+            Box(Modifier.align(androidx.compose.ui.Alignment.BottomCenter).fillMaxWidth().padding(12.dp), contentAlignment = androidx.compose.ui.Alignment.Center) {
+                MiniPlayer(onOpen = { nav.navigate(Routes.PLAYER) { launchSingleTop = true } }, floating = true)
+            }
+        }
+        if (!wide && showNav) {
+            Column(
+                Modifier.align(androidx.compose.ui.Alignment.BottomCenter).fillMaxWidth()
+                    .onSizeChanged { chromePx = it.height }
+            ) {
+                AnimatedVisibility(showMini, enter = slideInVertically { it } + fadeIn(), exit = slideOutVertically { it } + fadeOut()) {
+                    MiniPlayer(onOpen = { nav.navigate(Routes.PLAYER) { launchSingleTop = true } }, floating = glassOn)
+                }
+                if (isTop || route == null) {
+                    val onShorts = route == Routes.SHORTS
+                    val glassNav = glassOn && !onShorts
+                    if (!glassNav) {
+                        androidx.compose.material3.HorizontalDivider(
+                            thickness = 0.5.dp,
+                            color = if (onShorts) Color.White.copy(alpha = 0.15f) else MaterialTheme.colorScheme.outlineVariant
+                        )
+                    }
+                    NavigationBar(
+                        containerColor = when {
+                            onShorts -> Color.Black
+                            glassNav -> Color.Transparent
+                            else -> MaterialTheme.colorScheme.background
+                        },
+                        tonalElevation = 0.dp,
+                        modifier = if (glassNav) Modifier.glass(
+                            androidx.compose.foundation.shape.RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)
+                        ) else Modifier,
+                    ) {
+                        val fg = if (onShorts) Color.White else MaterialTheme.colorScheme.onSurface
+                        topDestinations.forEach { d ->
+                            val selected = route == d.route
+                            NavigationBarItem(
+                                selected = selected,
+                                onClick = { nav.navigateTop(d.route) },
+                                icon = { NavIcon(d, selected, if (d.route == Routes.LIBRARY) activeDownloads else 0) },
+                                label = { Text(androidx.compose.ui.res.stringResource(d.label), maxLines = 1, style = MaterialTheme.typography.labelSmall, fontWeight = if (selected) androidx.compose.ui.text.font.FontWeight.Bold else null) },
+                                colors = androidx.compose.material3.NavigationBarItemDefaults.colors(
+                                    selectedIconColor = fg, selectedTextColor = fg,
+                                    unselectedIconColor = fg.copy(alpha = if (glassNav) 0.75f else 1f), unselectedTextColor = fg.copy(alpha = if (glassNav) 0.75f else 1f),
+                                    // Glass: a soft luminous pill behind the selected tab
+                                    indicatorColor = if (glassNav) fg.copy(alpha = 0.10f) else Color.Transparent,
+                                ),
+                            )
+                        }
                     }
                 }
             }
         }
+        SnackbarHost(
+            snackbar,
+            Modifier.align(androidx.compose.ui.Alignment.BottomCenter).padding(bottom = bottomChrome + 8.dp)
+        )
+    }
     }
 
     downloadTarget?.let { video -> DownloadSheet(video = video, onDismiss = { downloadTarget = null }) }

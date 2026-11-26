@@ -319,7 +319,7 @@ fun EntryGrid(
     actions: VideoActions,
     modifier: Modifier = Modifier,
     state: LazyGridState = rememberLazyGridState(),
-    contentPadding: PaddingValues = PaddingValues(bottom = 96.dp),
+    contentPadding: PaddingValues = PaddingValues(bottom = com.vidora.app.ui.theme.bottomChromePadding()),
     header: (@Composable () -> Unit)? = null,
     filter: (Entry) -> Boolean = { true },
 ) {

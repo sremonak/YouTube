@@ -100,6 +100,8 @@ data class AppSettings(
     val downloadEmbedMetadata: Boolean = true,
     val downloadSubtitles: Boolean = false,
     val altFrontends: Boolean = true,
+    val glassUi: Boolean = true,
+    val ambientMode: Boolean = true,
     val downloadConnections: Int = 3,
     val returnDislike: Boolean = true,
     val deArrow: Boolean = false,
@@ -166,6 +168,8 @@ class SettingsRepository(private val context: Context) {
         val downloadEmbedMetadata = booleanPreferencesKey("dl_metadata")
         val downloadSubtitles = booleanPreferencesKey("dl_subs")
         val altFrontends = booleanPreferencesKey("alt_frontends")
+        val glassUi = booleanPreferencesKey("glass_ui")
+        val ambientMode = booleanPreferencesKey("ambient_mode")
         val downloadConnections = intPreferencesKey("dl_connections")
         val returnDislike = booleanPreferencesKey("ryd")
         val deArrow = booleanPreferencesKey("dearrow")
@@ -233,6 +237,8 @@ class SettingsRepository(private val context: Context) {
             downloadEmbedMetadata = this[K.downloadEmbedMetadata] ?: d.downloadEmbedMetadata,
             downloadSubtitles = this[K.downloadSubtitles] ?: d.downloadSubtitles,
             altFrontends = this[K.altFrontends] ?: d.altFrontends,
+            glassUi = this[K.glassUi] ?: d.glassUi,
+            ambientMode = this[K.ambientMode] ?: d.ambientMode,
             downloadConnections = this[K.downloadConnections] ?: d.downloadConnections,
             returnDislike = this[K.returnDislike] ?: d.returnDislike,
             deArrow = this[K.deArrow] ?: d.deArrow,
@@ -299,6 +305,8 @@ class SettingsRepository(private val context: Context) {
             p[K.downloadEmbedMetadata] = s.downloadEmbedMetadata
             p[K.downloadSubtitles] = s.downloadSubtitles
             p[K.altFrontends] = s.altFrontends
+            p[K.glassUi] = s.glassUi
+            p[K.ambientMode] = s.ambientMode
             p[K.downloadConnections] = s.downloadConnections
             p[K.returnDislike] = s.returnDislike
             p[K.deArrow] = s.deArrow
