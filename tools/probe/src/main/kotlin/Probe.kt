@@ -118,20 +118,32 @@ fun probeClient(c: Client, videoId: String, visitor: String?, sts: Int?): String
     val otf = all.count { it.s("type") == "FORMAT_STREAM_TYPE_OTF" }
     val sb = StringBuilder("OK fmts=${all.size} url=$withUrl cipher=$cipher drm=$drm otf=$otf sabr=${sd.s("serverAbrStreamingUrl") != null} hls=${sd.s("hlsManifestUrl") != null}")
     // Try one audio-ish adaptive format (itag 140/251) or any
-    val f = all.firstOrNull { it.s("itag") == "140" && it["drmFamilies"] == null }
+    val f = all.firstOrNull { it.s("itag") == "140" && it["drmFamilies"] == null && (it.s("url") != null || it.s("signatureCipher") != null) }
         ?: all.firstOrNull { it["drmFamilies"] == null && (it.s("url") != null || it.s("signatureCipher") != null) }
     if (f != null) {
         var url = f.s("url")
+        var sigChallenge: String? = null
+        var sc: Map<String, String> = emptyMap()
         if (url == null) {
-            val sc = q(f.s("signatureCipher")!!)
-            val sig = runCatching { YoutubeJavaScriptPlayerManager.deobfuscateSignature(videoId, sc["s"]!!) }
-            sb.append(" sig=").append(sig.fold({ "ok" }, { "FAIL(${it.javaClass.simpleName}: ${it.message?.take(80)})" }))
-            url = sig.getOrNull()?.let { "${sc["url"]}&${sc["sp"] ?: "signature"}=${URLEncoder.encode(it, "UTF-8")}" }
+            sc = q(f.s("signatureCipher")!!)
+            sigChallenge = sc["s"]; url = sc["url"]
+        }
+        val nChallenge = url?.let { u -> Regex("[?&]n=([^&]+)").find(u)?.groupValues?.get(1)?.let { URLDecoder.decode(it, "UTF-8") } }
+        val solved = runCatching { ejsSolve(listOfNotNull(sigChallenge), listOfNotNull(nChallenge)) }
+        solved.exceptionOrNull()?.let { sb.append(" EJS=FAIL(${it.message?.take(160)})") }
+        val (sigs, ns) = solved.getOrDefault(emptyMap<String, String>() to emptyMap())
+        if (sigChallenge != null) {
+            val sig = sigs[sigChallenge]
+            sb.append(" sig=").append(if (sig != null) "ok" else "FAIL")
+            url = sig?.let { "$url&${sc["sp"] ?: "signature"}=${URLEncoder.encode(it, "UTF-8")}" }
+        }
+        if (url != null && nChallenge != null) {
+            val n = ns[nChallenge]
+            sb.append(" n=").append(if (n != null && n != nChallenge) "ok" else "FAIL")
+            if (n != null) url = url!!.replace("n=" + URLEncoder.encode(nChallenge, "UTF-8"), "n=" + URLEncoder.encode(n, "UTF-8"))
+                .replace("n=$nChallenge", "n=$n")
         }
         if (url != null) {
-            val n = runCatching { YoutubeJavaScriptPlayerManager.getUrlWithThrottlingParameterDeobfuscated(videoId, url!!) }
-            sb.append(" n=").append(n.fold({ if (it != url) "ok" else "same" }, { "FAIL(${it.message?.take(80)})" }))
-            url = n.getOrDefault(url)
             sb.append(" itag=${f.s("itag")} GET0=${rangeStatus(url!!, c.ua, 0)} GET1.5M=${rangeStatus(url, c.ua, 1_500_000)}")
         }
     }
@@ -140,6 +152,46 @@ fun probeClient(c: Client, videoId: String, visitor: String?, sts: Int?): String
         sb.append(" hlsGET=$st")
     }
     return sb.toString()
+}
+
+lateinit var PLAYER_JS: String
+lateinit var PLAYER_ID: String
+
+fun loadPlayer() {
+    val iframe = http.newCall(okhttp3.Request.Builder().url("https://www.youtube.com/iframe_api").header("User-Agent", FIREFOX).build()).execute().use { it.body.string() }
+    PLAYER_ID = Regex("""player\\?/([0-9a-fA-F]{8})\\?/""").find(iframe)!!.groupValues[1]
+    PLAYER_JS = http.newCall(okhttp3.Request.Builder().url("https://www.youtube.com/s/player/$PLAYER_ID/tv-player-ias.vflset/tv-player-ias.js").header("User-Agent", FIREFOX).build()).execute().use { it.body.string() }
+}
+
+fun playerSts(): Int? = Regex("""(?:signatureTimestamp|sts)\s*:\s*([0-9]{5})""").find(PLAYER_JS)?.groupValues?.get(1)?.toInt()
+
+/** Runs yt-dlp's EJS solver (same assets the app ships) in node — the app runs it in a WebView. */
+fun ejsSolve(sigs: List<String>, ns: List<String>): Pair<Map<String, String>, Map<String, String>> {
+    if (sigs.isEmpty() && ns.isEmpty()) return emptyMap<String, String>() to emptyMap()
+    val assets = java.io.File(System.getenv("EJS_DIR") ?: "../../app/src/main/assets/ejs")
+    val reqs = buildList {
+        if (ns.isNotEmpty()) add("""{"type":"n","challenges":${Json.encodeToString(kotlinx.serialization.builtins.ListSerializer(kotlinx.serialization.builtins.serializer<String>()), ns)}}""")
+        if (sigs.isNotEmpty()) add("""{"type":"sig","challenges":${Json.encodeToString(kotlinx.serialization.builtins.ListSerializer(kotlinx.serialization.builtins.serializer<String>()), sigs)}}""")
+    }
+    val data = """{"type":"player","player":${Json.encodeToString(kotlinx.serialization.builtins.serializer<String>(), PLAYER_JS)},"requests":[${reqs.joinToString(",")}],"output_preprocessed":false}"""
+    val script = java.io.File.createTempFile("ejs", ".js")
+    script.writeText(java.io.File(assets, "lib.min.js").readText() + "\nObject.assign(globalThis, lib);\n" +
+        java.io.File(assets, "core.min.js").readText() + "\nconsole.log(JSON.stringify(jsc(" + data + ")));\n")
+    val p = ProcessBuilder("node", script.absolutePath).redirectErrorStream(true).start()
+    val out = p.inputStream.bufferedReader().readText()
+    p.waitFor()
+    val res = json.parseToJsonElement(out.trim().lines().last()).jsonObject
+    if (res.s("type") == "error") error(res.s("error") ?: "error")
+    val responses = res.a("responses").map { it as JsonObject }
+    var i = 0
+    fun next(): Map<String, String> {
+        val r = responses[i++]
+        if (r.s("type") == "error") error("challenge: " + r.s("error"))
+        return r.o("data").mapValues { (it.value as JsonPrimitive).content }
+    }
+    val nMap = if (ns.isNotEmpty()) next() else emptyMap()
+    val sMap = if (sigs.isNotEmpty()) next() else emptyMap()
+    return sMap to nMap
 }
 
 fun notice(title: String, lines: List<String>) {
@@ -156,19 +208,21 @@ fun main() {
         YoutubeParsingHelper.getVisitorDataFromInnertube(info, Localization("en", "US"), ContentCountry("US"),
             YoutubeParsingHelper.getYouTubeHeaders(), YoutubeParsingHelper.YOUTUBEI_V1_URL, null, false)
     }.getOrNull()
+    loadPlayer()
+    val ejsSts = playerSts()
     val videos = listOf("kJQP7kiw5Fk", "dQw4w9WgXcQ", "jNQXAC9IVRw")
     for (v in videos) {
         val lines = mutableListOf("runner ip=$ip visitor=${visitor != null}")
         val sts = runCatching { YoutubeJavaScriptPlayerManager.getSignatureTimestamp(v) }
-        lines += "sts=" + sts.fold({ "$it" }, { "FAIL ${it.message?.take(100)}" })
+        lines += "sts(NPE)=" + sts.fold({ "$it" }, { "FAIL ${it.message?.take(100)}" }) + " player=$PLAYER_ID sts(tv js)=$ejsSts js=${PLAYER_JS.length}B"
         lines += "NPE(visionOS): " + runCatching {
             val i = StreamInfo.getInfo(ServiceList.YouTube, "https://www.youtube.com/watch?v=$v")
             val a = i.audioStreams.firstOrNull()
             "OK video=${i.videoOnlyStreams.size} audio=${i.audioStreams.size}" + (a?.let { " GET=${rangeStatus(it.content, YoutubeParsingHelper.getVisionOsUserAgent(null), 0)}" } ?: "")
         }.getOrElse { "FAIL ${it.javaClass.simpleName}: ${it.message?.take(160)}" }
         for (c in CLIENTS) {
-            lines += "${c.key}: " + runCatching { probeClient(c, v, visitor, sts.getOrNull()) }.getOrElse { "CRASH ${it.message}" }
-            lines += "${c.key}(no visitor): " + runCatching { probeClient(c, v, null, sts.getOrNull()) }.getOrElse { "CRASH ${it.message}" }
+            lines += "${c.key}: " + runCatching { probeClient(c, v, visitor, ejsSts ?: sts.getOrNull()) }.getOrElse { "CRASH ${it.message}" }
+            lines += "${c.key}(no visitor): " + runCatching { probeClient(c, v, null, ejsSts ?: sts.getOrNull()) }.getOrElse { "CRASH ${it.message}" }
         }
         notice("probe $v", lines)
         lines.forEach(::println)
