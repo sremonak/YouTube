@@ -9,8 +9,10 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.drawable.BitmapDrawable
 import android.widget.RemoteViews
-import coil.imageLoader
-import coil.request.ImageRequest
+import coil3.imageLoader
+import coil3.request.ImageRequest
+import coil3.request.allowHardware
+import coil3.toBitmap
 import com.vidora.app.Graph
 import com.vidora.app.MainActivity
 import com.vidora.app.R
@@ -78,7 +80,7 @@ class NowPlayingWidget : AppWidgetProvider() {
         private suspend fun loadArt(context: Context, url: String): Bitmap? = withContext(Dispatchers.IO) {
             runCatching {
                 val req = ImageRequest.Builder(context).data(url).size(320, 180).allowHardware(false).build()
-                (context.imageLoader.execute(req).drawable as? BitmapDrawable)?.bitmap
+                context.imageLoader.execute(req).image?.toBitmap()
             }.getOrNull()
         }
 

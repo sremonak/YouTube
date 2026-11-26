@@ -15,15 +15,15 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.AccountCircle
-import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material.icons.outlined.FileDownload
+import com.vidora.app.ui.icons.AccountCircle
+import com.vidora.app.ui.icons.PlayArrow
+import com.vidora.app.ui.icons.FileDownload
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.height
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.sp
-import androidx.compose.material.icons.rounded.Search
+import com.vidora.app.ui.icons.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -101,7 +101,7 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
         if (shownTab != tab.key) { shownTab = tab.key; gridState.scrollToItem(0) }
     }
 
-    Column(Modifier.fillMaxSize()) {
+    com.vidora.app.ui.theme.GlassPage(header = {
         TopAppBar(
             title = { BrandLogo(settings.displayName.ifBlank { "Vidora" }) },
             actions = {
@@ -113,7 +113,7 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
                     else Icon(Icons.Rounded.AccountCircle, if (signedIn) "Account" else "Sign in")
                 }
             },
-            colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+            colors = com.vidora.app.ui.theme.glassBarColors()
         )
         LazyRow(
             contentPadding = PaddingValues(horizontal = 12.dp),
@@ -126,7 +126,8 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
                 }
             }
         }
-        PullToRefreshBox(isRefreshing = paged.refreshing, onRefresh = { paged.load(refresh = true) }, modifier = Modifier.fillMaxSize()) {
+    }) {
+        com.vidora.app.ui.theme.GlassRefreshBox(isRefreshing = paged.refreshing, onRefresh = { paged.load(refresh = true) }, modifier = Modifier.fillMaxSize()) {
             val library by Graph.library.data.collectAsState()
             val resume = remember(library.history) { com.vidora.app.data.ContinueWatching.pick(library.history) }
             EntryGrid(
@@ -200,7 +201,11 @@ fun YtChip(selected: Boolean, onClick: () -> Unit, content: @Composable androidx
     androidx.compose.material3.Surface(
         onClick = onClick,
         shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
-        color = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.surfaceContainerHigh,
+        color = when {
+            selected -> MaterialTheme.colorScheme.onSurface
+            com.vidora.app.ui.theme.LocalGlass.current.enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+            else -> MaterialTheme.colorScheme.surfaceContainerHigh
+        },
         contentColor = if (selected) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.onSurface,
     ) {
         Row(Modifier.height(32.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically, content = content)

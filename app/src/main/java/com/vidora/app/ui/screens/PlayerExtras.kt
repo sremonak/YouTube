@@ -1,5 +1,6 @@
 package com.vidora.app.ui.screens
 
+import com.vidora.app.ui.theme.GlassBottomSheet
 import androidx.compose.ui.res.stringResource
 import com.vidora.app.R
 import android.annotation.SuppressLint
@@ -35,19 +36,19 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.VolumeUp
-import androidx.compose.material.icons.automirrored.rounded.Send
-import androidx.compose.material.icons.rounded.BrightnessMedium
-import androidx.compose.material.icons.rounded.Download
-import androidx.compose.material.icons.rounded.ZoomInMap
-import androidx.compose.material.icons.rounded.ZoomOutMap
-import androidx.compose.material.icons.rounded.FastForward
-import androidx.compose.material.icons.rounded.FastRewind
-import androidx.compose.material.icons.rounded.Favorite
-import androidx.compose.material.icons.rounded.KeyboardDoubleArrowRight
-import androidx.compose.material.icons.rounded.PushPin
-import androidx.compose.material.icons.rounded.ThumbUp
-import androidx.compose.material.icons.rounded.Verified
+import com.vidora.app.ui.icons.VolumeUp
+import com.vidora.app.ui.icons.Send
+import com.vidora.app.ui.icons.BrightnessMedium
+import com.vidora.app.ui.icons.Download
+import com.vidora.app.ui.icons.ZoomInMap
+import com.vidora.app.ui.icons.ZoomOutMap
+import com.vidora.app.ui.icons.FastForward
+import com.vidora.app.ui.icons.FastRewind
+import com.vidora.app.ui.icons.Favorite
+import com.vidora.app.ui.icons.KeyboardDoubleArrowRight
+import com.vidora.app.ui.icons.PushPin
+import com.vidora.app.ui.icons.ThumbUp
+import com.vidora.app.ui.icons.Verified
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -90,8 +91,10 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.PlayerView
-import coil.imageLoader
-import coil.request.ImageRequest
+import coil3.imageLoader
+import coil3.request.ImageRequest
+import coil3.request.allowHardware
+import coil3.toBitmap
 import com.vidora.app.Graph
 import com.vidora.app.data.AppSettings
 import com.vidora.app.data.CommentItem
@@ -300,7 +303,7 @@ fun SeekPreview(frames: FrameSet?, positionMs: Long, modifier: Modifier = Modifi
         val url = frame?.first ?: return@LaunchedEffect
         if (cache.containsKey(url)) return@LaunchedEffect
         val req = ImageRequest.Builder(context).data(url).allowHardware(false).build()
-        val bmp = (context.imageLoader.execute(req).drawable as? BitmapDrawable)?.bitmap?.asImageBitmap()
+        val bmp = context.imageLoader.execute(req).image?.toBitmap()?.asImageBitmap()
         if (bmp != null) cache[url] = bmp
     }
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
@@ -335,7 +338,7 @@ fun CaptionsSheet(state: PlayerUiState, onDismiss: () -> Unit) {
     val details = state.details ?: run { onDismiss(); return }
     val settings by Graph.settingsState.collectAsState()
     val scope = rememberCoroutineScope()
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    GlassBottomSheet(onDismissRequest = onDismiss) {
         Text(stringResource(R.string.ui_captions), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
         ListItem(
             headlineContent = { Text("Auto-translate to ${java.util.Locale.getDefault().displayLanguage}") },
@@ -387,7 +390,7 @@ fun AudioTrackSheet(state: PlayerUiState, onDismiss: () -> Unit) {
     val details = state.details ?: run { onDismiss(); return }
     val tracks = details.audioTracks
     val currentId = state.audioTrackId ?: details.audioStreams.firstOrNull()?.trackId
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    GlassBottomSheet(onDismissRequest = onDismiss) {
         Text(stringResource(R.string.ui_audio_language), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
         LazyColumn(Modifier.navigationBarsPadding(), contentPadding = PaddingValues(bottom = 24.dp)) {
             items(tracks, key = { it.id ?: "default" }) { t ->
@@ -427,7 +430,7 @@ fun EqualizerSheet(onDismiss: () -> Unit) {
     val scope = rememberCoroutineScope()
     val fx = Graph.player.effects
     fun update(block: (AppSettings) -> AppSettings) = scope.launch { Graph.settings.update(block) }
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    GlassBottomSheet(onDismissRequest = onDismiss) {
         LazyColumn(Modifier.navigationBarsPadding(), contentPadding = PaddingValues(start = 24.dp, end = 24.dp, bottom = 32.dp)) {
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -633,7 +636,7 @@ fun CommentsSheet(state: CommentsState, onSeek: (Long) -> Unit, onDismiss: () ->
     var draft by remember { mutableStateOf("") }
     var replyTo by remember { mutableStateOf<CommentItem?>(null) }
     val toast: (String) -> Unit = { android.widget.Toast.makeText(ctx, it, android.widget.Toast.LENGTH_SHORT).show() }
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    GlassBottomSheet(onDismissRequest = onDismiss) {
         Text(
             "Comments" + if (state.total > 0) " · ${Format.count(state.total.toLong())}" else "",
             style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
@@ -865,7 +868,7 @@ fun StatsSheet(onDismiss: () -> Unit) {
             add("Volume" to "${(player.volume * 100).toInt()} %")
         }
     }
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    GlassBottomSheet(onDismissRequest = onDismiss) {
         Text("Stats for nerds", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
         Column(Modifier.padding(horizontal = 24.dp).padding(bottom = 32.dp).navigationBarsPadding()) {
             rows.forEach { (k, v) ->

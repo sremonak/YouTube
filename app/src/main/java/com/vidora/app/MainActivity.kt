@@ -38,6 +38,7 @@ class MainActivity : ComponentActivity() {
     /** Links shared to / opened with the app. */
     val incomingLinks = MutableSharedFlow<String>(replay = 1, extraBufferCapacity = 4)
     val openPlayerRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 2)
+    val openAboutRequests = MutableSharedFlow<Unit>(replay = 1, extraBufferCapacity = 2)
 
     var isInPip by mutableStateOf(false)
         private set
@@ -112,6 +113,7 @@ class MainActivity : ComponentActivity() {
                 Regex("https?://\\S+").find(text)?.value?.let { incomingLinks.tryEmit(it) }
             }
             ACTION_OPEN_PLAYER -> openPlayerRequests.tryEmit(Unit)
+            ACTION_OPEN_ABOUT -> openAboutRequests.tryEmit(Unit)
         }
     }
 
@@ -155,5 +157,6 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         const val ACTION_OPEN_PLAYER = "com.vidora.app.OPEN_PLAYER"
+        const val ACTION_OPEN_ABOUT = "com.vidora.app.OPEN_ABOUT"
     }
 }

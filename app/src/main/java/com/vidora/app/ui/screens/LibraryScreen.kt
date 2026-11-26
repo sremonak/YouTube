@@ -1,5 +1,6 @@
 package com.vidora.app.ui.screens
 
+import com.vidora.app.ui.theme.GlassAlertDialog
 import androidx.compose.ui.res.stringResource
 import com.vidora.app.R
 import androidx.compose.foundation.clickable
@@ -19,26 +20,26 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Visibility
-import androidx.compose.material.icons.rounded.VisibilityOff
+import com.vidora.app.ui.icons.Visibility
+import com.vidora.app.ui.icons.VisibilityOff
 import kotlinx.coroutines.launch
-import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
-import androidx.compose.material.icons.rounded.AccountCircle
-import androidx.compose.material.icons.rounded.Download
-import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material.icons.rounded.AutoAwesome
-import androidx.compose.material.icons.rounded.DeleteSweep
-import androidx.compose.material.icons.rounded.ThumbUp
-import androidx.compose.material.icons.rounded.Favorite
-import androidx.compose.material.icons.rounded.History
-import androidx.compose.material.icons.rounded.Person
-import androidx.compose.material.icons.rounded.Album
-import androidx.compose.material.icons.rounded.LibraryMusic
-import androidx.compose.material.icons.rounded.Settings
-import androidx.compose.material.icons.rounded.Subscriptions
-import androidx.compose.material.icons.rounded.WatchLater
+import com.vidora.app.ui.icons.PlaylistPlay
+import com.vidora.app.ui.icons.ArrowBack
+import com.vidora.app.ui.icons.KeyboardArrowRight
+import com.vidora.app.ui.icons.AccountCircle
+import com.vidora.app.ui.icons.Download
+import com.vidora.app.ui.icons.Search
+import com.vidora.app.ui.icons.AutoAwesome
+import com.vidora.app.ui.icons.DeleteSweep
+import com.vidora.app.ui.icons.ThumbUp
+import com.vidora.app.ui.icons.Favorite
+import com.vidora.app.ui.icons.History
+import com.vidora.app.ui.icons.Person
+import com.vidora.app.ui.icons.Album
+import com.vidora.app.ui.icons.LibraryMusic
+import com.vidora.app.ui.icons.Settings
+import com.vidora.app.ui.icons.Subscriptions
+import com.vidora.app.ui.icons.WatchLater
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -78,7 +79,7 @@ import com.vidora.app.ui.components.VideoCard
 fun LibraryScreen(nav: NavHostController, actions: VideoActions) {
     val library by Graph.library.data.collectAsState()
     val session by Graph.account.session.collectAsState()
-    Column(Modifier.fillMaxSize()) {
+    com.vidora.app.ui.theme.GlassPage(header = {
         TopAppBar(
             title = { Text(stringResource(R.string.nav_you)) },
             actions = {
@@ -94,9 +95,10 @@ fun LibraryScreen(nav: NavHostController, actions: VideoActions) {
                 IconButton(onClick = { nav.navigate(Routes.search()) }) { Icon(Icons.Rounded.Search, "Search") }
                 IconButton(onClick = { nav.navigate(Routes.SETTINGS) }) { Icon(Icons.Rounded.Settings, "Settings") }
             },
-            colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+            colors = com.vidora.app.ui.theme.glassBarColors()
         )
-        LazyColumn(contentPadding = PaddingValues(bottom = com.vidora.app.ui.theme.bottomChromePadding())) {
+    }) {
+        LazyColumn(contentPadding = PaddingValues(top = com.vidora.app.ui.theme.topChromePadding(), bottom = com.vidora.app.ui.theme.bottomChromePadding())) {
             // YouTube-style profile header
             item {
                 val s = session
@@ -276,7 +278,7 @@ fun VideoListScreen(nav: NavHostController, actions: VideoActions, kind: String)
         "later" -> "Watch later" to library.watchLater
         else -> "History" to library.history.map { it.video }
     }
-    Column(Modifier.fillMaxSize()) {
+    com.vidora.app.ui.theme.GlassPage(header = {
         TopAppBar(
             title = { Text(title) },
             navigationIcon = { IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") } },
@@ -288,18 +290,22 @@ fun VideoListScreen(nav: NavHostController, actions: VideoActions, kind: String)
                     IconButton(onClick = { confirmClear = true }) { Icon(Icons.Rounded.DeleteSweep, "Clear history") }
                 }
             },
-            colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+            colors = com.vidora.app.ui.theme.glassBarColors()
         )
+    }) {
         if (videos.isEmpty()) {
-            EmptyState(stringResource(R.string.ui_nothing_here_yet), stringResource(R.string.ui_videos_you_add_will_appear_here))
+            Column {
+                com.vidora.app.ui.theme.TopChromeSpacer()
+                EmptyState(stringResource(R.string.ui_nothing_here_yet), stringResource(R.string.ui_videos_you_add_will_appear_here))
+            }
         } else {
-            LazyColumn(contentPadding = PaddingValues(bottom = com.vidora.app.ui.theme.bottomChromePadding())) {
+            LazyColumn(contentPadding = PaddingValues(top = com.vidora.app.ui.theme.topChromePadding(), bottom = com.vidora.app.ui.theme.bottomChromePadding())) {
                 items(videos, key = { it.url }) { v -> VideoCard(v, actions, compact = true) }
             }
         }
     }
     if (confirmClear) {
-        AlertDialog(
+        GlassAlertDialog(
             onDismissRequest = { confirmClear = false },
             title = { Text(stringResource(R.string.ui_clear_watch_history)) },
             text = { Text(stringResource(R.string.ui_this_removes_all_watched_videos_and_resu)) },

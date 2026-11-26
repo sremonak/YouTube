@@ -1,5 +1,6 @@
 package com.vidora.app.ui
 
+import com.vidora.app.ui.theme.GlassBottomSheet
 import androidx.compose.ui.res.stringResource
 import com.vidora.app.R
 import android.widget.Toast
@@ -19,9 +20,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Audiotrack
-import androidx.compose.material.icons.rounded.Download
-import androidx.compose.material.icons.rounded.Movie
+import com.vidora.app.ui.icons.Audiotrack
+import com.vidora.app.ui.icons.Download
+import com.vidora.app.ui.icons.Movie
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -88,7 +89,7 @@ fun DownloadSheet(video: VideoItem, onDismiss: () -> Unit) {
             .onFailure { error = it.message ?: "Could not load streams" }
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+    GlassBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(Modifier.padding(horizontal = 20.dp).navigationBarsPadding()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Thumbnail(video, Modifier.width(112.dp))

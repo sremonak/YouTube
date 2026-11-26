@@ -93,7 +93,20 @@ object Updater {
         )
     }
 
+    /**
+     * Installs [apk] through a PackageInstaller session. On Android 12+ the update is applied
+     * silently once Vidora itself installed the current version (it is then the "installer of
+     * record"); otherwise Android shows its one-tap confirmation. Falls back to the classic
+     * installer intent if the session API fails.
+     */
     fun install(context: Context, apk: File) {
+        runCatching { installSession(context, apk) }.onFailure {
+            android.util.Log.w("Updater", "session install failed, using installer intent", it)
+            installWithIntent(context, apk)
+        }
+    }
+
+    fun installWithIntent(context: Context, apk: File) {
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", apk)
         context.startActivity(
             Intent(Intent.ACTION_VIEW)
@@ -101,4 +114,70 @@ object Updater {
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
         )
     }
+
+    private fun installSession(context: Context, apk: File) {
+        val installer = context.packageManager.packageInstaller
+        val params = android.content.pm.PackageInstaller.SessionParams(android.content.pm.PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
+            setAppPackageName(context.packageName)
+            setSize(apk.length())
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                setRequireUserAction(android.content.pm.PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                setInstallReason(android.content.pm.PackageManager.INSTALL_REASON_USER)
+            }
+        }
+        val id = installer.createSession(params)
+        installer.openSession(id).use { session ->
+            apk.inputStream().use { input ->
+                session.openWrite("vidora.apk", 0, apk.length()).use { out ->
+                    input.copyTo(out, 256 * 1024)
+                    session.fsync(out)
+                }
+            }
+            val flags = android.app.PendingIntent.FLAG_UPDATE_CURRENT or
+                (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) android.app.PendingIntent.FLAG_MUTABLE else 0)
+            val pi = android.app.PendingIntent.getBroadcast(
+                context, id,
+                Intent(context, UpdateInstallReceiver::class.java).setAction(UpdateInstallReceiver.ACTION).putExtra("apk", apk.absolutePath),
+                flags,
+            )
+            session.commit(pi.intentSender)
+        }
+    }
+
+    /** Last check result, shared by the About screen, the startup dialog and the worker. */
+    val state = kotlinx.coroutines.flow.MutableStateFlow<UpdateState>(UpdateState.Idle)
+
+    /** Check → (optionally) download → install, reporting progress through [state]. */
+    suspend fun checkAndMaybeInstall(context: Context, install: Boolean): UpdateInfo? {
+        state.value = UpdateState.Checking
+        val info = runCatching { check() }.getOrElse { state.value = UpdateState.Failed(it.message ?: "Update check failed"); return null }
+        if (info == null) { state.value = UpdateState.UpToDate(System.currentTimeMillis()); return null }
+        state.value = UpdateState.Available(info)
+        if (install) downloadAndInstall(context, info)
+        return info
+    }
+
+    suspend fun downloadAndInstall(context: Context, info: UpdateInfo) {
+        if (!canInstall(context)) { state.value = UpdateState.NeedsPermission(info); return }
+        state.value = UpdateState.Downloading(info, 0f)
+        runCatching { download(context, info) { p -> state.value = UpdateState.Downloading(info, p) } }
+            .onSuccess { apk ->
+                state.value = UpdateState.Installing(info)
+                withContext(Dispatchers.Main) { install(context, apk) }
+            }
+            .onFailure { state.value = UpdateState.Failed(it.message ?: "Download failed", info) }
+    }
+}
+
+sealed interface UpdateState {
+    data object Idle : UpdateState
+    data object Checking : UpdateState
+    data class UpToDate(val at: Long) : UpdateState
+    data class Available(val info: UpdateInfo) : UpdateState
+    data class NeedsPermission(val info: UpdateInfo) : UpdateState
+    data class Downloading(val info: UpdateInfo, val progress: Float) : UpdateState
+    data class Installing(val info: UpdateInfo) : UpdateState
+    data class Failed(val message: String, val info: UpdateInfo? = null) : UpdateState
 }

@@ -132,6 +132,7 @@ dependencies {
     implementation(libs.androidx.palette)
 
     implementation(libs.coil.compose)
+    implementation(libs.coil.network.okhttp)
     // Compiles the bundled baseline profiles (Compose, Media3 + ours) on sideloaded installs → faster start & scrolling
     implementation(libs.androidx.profileinstaller)
     implementation(libs.okhttp)

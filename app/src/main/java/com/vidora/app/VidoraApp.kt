@@ -3,10 +3,14 @@ package com.vidora.app
 import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import coil.ImageLoader
-import coil.ImageLoaderFactory
-import coil.disk.DiskCache
-import coil.memory.MemoryCache
+import coil3.ImageLoader
+import coil3.PlatformContext
+import coil3.SingletonImageLoader
+import coil3.disk.DiskCache
+import coil3.memory.MemoryCache
+import coil3.network.okhttp.OkHttpNetworkFetcherFactory
+import coil3.request.crossfade
+import okio.Path.Companion.toOkioPath
 import com.vidora.app.account.AccountApi
 import com.vidora.app.account.AccountManager
 import com.vidora.app.data.ContentRepository
@@ -62,6 +66,7 @@ object Graph {
     val player by lazy { PlayerManager(app, appScope) }
     val account by lazy { AccountManager(app, appScope) }
     val accountApi by lazy { AccountApi() }
+    val about by lazy { com.vidora.app.data.AboutRepository(app) }
 
     /** Always-current settings snapshot for non-UI code (filters, player, workers). */
     val settingsState: StateFlow<AppSettings> by lazy {
@@ -73,7 +78,7 @@ object Graph {
     }
 }
 
-class VidoraApp : Application(), ImageLoaderFactory {
+class VidoraApp : Application(), SingletonImageLoader.Factory {
 
     override fun onCreate() {
         super.onCreate()
@@ -97,6 +102,7 @@ class VidoraApp : Application(), ImageLoaderFactory {
         }
         Graph.appScope.launch { runCatching { Graph.settings.migrateDesign() } }
         NewVideosWorker.schedule(this)
+        com.vidora.app.util.UpdateWorker.schedule(this)
         if (com.vidora.app.remote.NowPlayingWidget.hasWidgets(this)) com.vidora.app.remote.NowPlayingWidget.observe(this)
         createChannels()
     }
@@ -112,17 +118,18 @@ class VidoraApp : Application(), ImageLoaderFactory {
         )
     }
 
-    override fun newImageLoader(): ImageLoader = ImageLoader.Builder(this)
-        .okHttpClient(Graph.http)
+    // Coil 3: OkHttp fetcher shares the app's connection pool; the default cache strategy ignores
+    // Cache-Control headers (= Coil 2's respectCacheHeaders(false)), so thumbnails stay cached offline.
+    override fun newImageLoader(context: PlatformContext): ImageLoader = ImageLoader.Builder(context)
+        .components { add(OkHttpNetworkFetcherFactory(callFactory = { Graph.http })) }
         .crossfade(true)
-        .memoryCache { MemoryCache.Builder(this).maxSizePercent(0.20).build() }
+        .memoryCache { MemoryCache.Builder().maxSizePercent(context, 0.20).build() }
         .diskCache {
             DiskCache.Builder()
-                .directory(cacheDir.resolve("image_cache"))
+                .directory(cacheDir.resolve("image_cache_v3").toOkioPath())
                 .maxSizeBytes(256L * 1024 * 1024)
                 .build()
         }
-        .respectCacheHeaders(false)
         .build()
 
     companion object {

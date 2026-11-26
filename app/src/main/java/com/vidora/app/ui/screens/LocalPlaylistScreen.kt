@@ -1,5 +1,6 @@
 package com.vidora.app.ui.screens
 
+import com.vidora.app.ui.theme.GlassAlertDialog
 import androidx.compose.ui.res.stringResource
 import com.vidora.app.R
 import android.content.Intent
@@ -15,16 +16,16 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.Delete
-import androidx.compose.material.icons.rounded.Download
-import androidx.compose.material.icons.rounded.Edit
-import androidx.compose.material.icons.rounded.KeyboardArrowDown
-import androidx.compose.material.icons.rounded.KeyboardArrowUp
-import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material.icons.rounded.RemoveCircleOutline
-import androidx.compose.material.icons.rounded.Share
-import androidx.compose.material.icons.rounded.Shuffle
+import com.vidora.app.ui.icons.ArrowBack
+import com.vidora.app.ui.icons.Delete
+import com.vidora.app.ui.icons.Download
+import com.vidora.app.ui.icons.Edit
+import com.vidora.app.ui.icons.KeyboardArrowDown
+import com.vidora.app.ui.icons.KeyboardArrowUp
+import com.vidora.app.ui.icons.PlayArrow
+import com.vidora.app.ui.icons.RemoveCircleOutline
+import com.vidora.app.ui.icons.Share
+import com.vidora.app.ui.icons.Shuffle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -71,7 +72,7 @@ fun LocalPlaylistScreen(nav: NavHostController, actions: VideoActions, id: Strin
         return
     }
 
-    Column(Modifier.fillMaxSize()) {
+    com.vidora.app.ui.theme.GlassPage(header = {
         TopAppBar(
             title = { Text(playlist.name) },
             navigationIcon = { IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") } },
@@ -86,13 +87,9 @@ fun LocalPlaylistScreen(nav: NavHostController, actions: VideoActions, id: Strin
                 if (playlist.videos.isNotEmpty()) IconButton(onClick = { batch = true }) { Icon(Icons.Rounded.Download, "Download all") }
                 IconButton(onClick = { deleting = true }) { Icon(Icons.Rounded.Delete, "Delete") }
             },
-            colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+            colors = com.vidora.app.ui.theme.glassBarColors()
         )
-        if (playlist.videos.isEmpty()) {
-            EmptyState(stringResource(R.string.ui_empty_playlist), stringResource(R.string.ui_use_save_to_playlist_on_any_video_to_add))
-            return@Column
-        }
-        Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (playlist.videos.isNotEmpty()) Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Button(onClick = { Graph.player.play(playlist.videos.first(), playlist.videos); nav.navigate(Routes.PLAYER) }) {
                 Icon(Icons.Rounded.PlayArrow, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.ui_play_all))
             }
@@ -105,8 +102,14 @@ fun LocalPlaylistScreen(nav: NavHostController, actions: VideoActions, id: Strin
             Spacer(Modifier.weight(1f))
             TextButton(onClick = { editing = !editing }) { Text(if (editing) "Done" else "Edit") }
         }
-        Text("${playlist.videos.size} videos", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp))
-        LazyColumn(contentPadding = PaddingValues(bottom = com.vidora.app.ui.theme.bottomChromePadding())) {
+        if (playlist.videos.isNotEmpty()) Text("${playlist.videos.size} videos", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 6.dp))
+    }) {
+        if (playlist.videos.isEmpty()) {
+            Column {
+                com.vidora.app.ui.theme.TopChromeSpacer()
+                EmptyState(stringResource(R.string.ui_empty_playlist), stringResource(R.string.ui_use_save_to_playlist_on_any_video_to_add))
+            }
+        } else LazyColumn(contentPadding = PaddingValues(top = com.vidora.app.ui.theme.topChromePadding(), bottom = com.vidora.app.ui.theme.bottomChromePadding())) {
             itemsIndexed(playlist.videos, key = { _, v -> v.url }) { index, v ->
                 if (editing) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -131,7 +134,7 @@ fun LocalPlaylistScreen(nav: NavHostController, actions: VideoActions, id: Strin
         }
     }
     if (deleting) {
-        AlertDialog(
+        GlassAlertDialog(
             onDismissRequest = { deleting = false },
             title = { Text("Delete “${playlist.name}”?") },
             text = { Text(stringResource(R.string.ui_the_videos_themselves_are_not_affected)) },

@@ -5,7 +5,7 @@ import com.vidora.app.R
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import com.vidora.app.ui.icons.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -59,7 +59,7 @@ fun AccountFeedScreen(nav: NavHostController, actions: VideoActions, feedName: S
     }
     LaunchedEffect(paged) { paged.ensureLoaded() }
 
-    Column(Modifier.fillMaxSize()) {
+    com.vidora.app.ui.theme.GlassPage(header = {
         TopAppBar(
             title = { Text(feed.label) },
             navigationIcon = { IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") } },
@@ -69,7 +69,7 @@ fun AccountFeedScreen(nav: NavHostController, actions: VideoActions, feedName: S
                     TextButton(onClick = { Graph.player.play(videos.first(), videos); nav.navigate(Routes.PLAYER) }) { Text(stringResource(R.string.ui_play_all)) }
                 }
             },
-            colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+            colors = com.vidora.app.ui.theme.glassBarColors()
         )
         if (chips.size > 1) {
             LazyRow(
@@ -85,7 +85,8 @@ fun AccountFeedScreen(nav: NavHostController, actions: VideoActions, feedName: S
                 }
             }
         }
-        PullToRefreshBox(isRefreshing = paged.refreshing, onRefresh = { paged.load(refresh = true) }, modifier = Modifier.fillMaxSize()) {
+    }) {
+        com.vidora.app.ui.theme.GlassRefreshBox(isRefreshing = paged.refreshing, onRefresh = { paged.load(refresh = true) }, modifier = Modifier.fillMaxSize()) {
             EntryGrid(paged = paged, actions = actions)
         }
     }

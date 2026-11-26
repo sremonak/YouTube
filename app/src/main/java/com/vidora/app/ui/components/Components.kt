@@ -41,11 +41,11 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
-import androidx.compose.material.icons.rounded.CloudOff
-import androidx.compose.material.icons.rounded.Download
-import androidx.compose.material.icons.rounded.MoreVert
-import androidx.compose.material.icons.rounded.Verified
+import com.vidora.app.ui.icons.PlaylistPlay
+import com.vidora.app.ui.icons.CloudOff
+import com.vidora.app.ui.icons.Download
+import com.vidora.app.ui.icons.MoreVert
+import com.vidora.app.ui.icons.Verified
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -73,7 +73,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
+import coil3.compose.AsyncImage
 import com.vidora.app.Graph
 import com.vidora.app.data.ChannelItem
 import com.vidora.app.data.Entry
@@ -319,7 +319,7 @@ fun EntryGrid(
     actions: VideoActions,
     modifier: Modifier = Modifier,
     state: LazyGridState = rememberLazyGridState(),
-    contentPadding: PaddingValues = PaddingValues(bottom = com.vidora.app.ui.theme.bottomChromePadding()),
+    contentPadding: PaddingValues = PaddingValues(top = com.vidora.app.ui.theme.topChromePadding(), bottom = com.vidora.app.ui.theme.bottomChromePadding()),
     header: (@Composable () -> Unit)? = null,
     filter: (Entry) -> Boolean = { true },
 ) {

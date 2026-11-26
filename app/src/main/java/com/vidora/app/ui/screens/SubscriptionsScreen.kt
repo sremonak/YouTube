@@ -1,5 +1,6 @@
 package com.vidora.app.ui.screens
 
+import com.vidora.app.ui.theme.GlassBottomSheet
 import androidx.compose.ui.res.stringResource
 import com.vidora.app.R
 import androidx.compose.foundation.layout.Row
@@ -8,8 +9,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.Edit
+import com.vidora.app.ui.icons.Add
+import com.vidora.app.ui.icons.Edit
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -34,8 +35,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material.icons.rounded.Subscriptions
+import com.vidora.app.ui.icons.Search
+import com.vidora.app.ui.icons.Subscriptions
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -97,46 +98,55 @@ fun SubscriptionsScreen(nav: NavHostController, actions: VideoActions) {
     val groupSet = remember(group) { group?.channels?.toHashSet() }
     val shownSubs = if (groupSet == null) subs else subs.filter { it.url in groupSet }
 
-    Column(Modifier.fillMaxSize()) {
+    com.vidora.app.ui.theme.GlassPage(header = {
         TopAppBar(
             title = { Text(stringResource(R.string.ui_subscriptions)) },
             actions = { IconButton(onClick = { nav.navigate(Routes.search()) }) { Icon(Icons.Rounded.Search, "Search") } },
-            colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+            colors = com.vidora.app.ui.theme.glassBarColors()
         )
+        if (!(subs.isEmpty() && !signedIn)) {
+            LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                item { FilterChip(selected = group == null, onClick = { groupId = null }, label = { Text(stringResource(R.string.ui_all)) }) }
+                items(library.groups, key = { "g:" + it.id }) { g ->
+                    FilterChip(
+                        selected = g.id == groupId,
+                        onClick = { groupId = if (groupId == g.id) null else g.id },
+                        label = { Text("${g.name} · ${g.channels.size}") },
+                        trailingIcon = if (g.id == groupId) ({ Icon(Icons.Rounded.Edit, "Edit group", Modifier.size(16.dp).clickable { editing = g }) }) else null,
+                    )
+                }
+                item { AssistChip(onClick = { creating = true }, label = { Text(stringResource(R.string.ui_new_group)) }, leadingIcon = { Icon(Icons.Rounded.Add, null, Modifier.size(16.dp)) }) }
+            }
+        }
+    }) {
         if (subs.isEmpty() && !signedIn) {
-            EmptyState(
+            Column {
+                com.vidora.app.ui.theme.TopChromeSpacer()
+                EmptyState(
                 stringResource(R.string.ui_no_subscriptions_yet),
                 stringResource(R.string.ui_subscribe_to_channels_they_are_stored_pr),
                 Icons.Rounded.Subscriptions
             )
-            return@Column
-        }
-        LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            item { FilterChip(selected = group == null, onClick = { groupId = null }, label = { Text(stringResource(R.string.ui_all)) }) }
-            items(library.groups, key = { "g:" + it.id }) { g ->
-                FilterChip(
-                    selected = g.id == groupId,
-                    onClick = { groupId = if (groupId == g.id) null else g.id },
-                    label = { Text("${g.name} · ${g.channels.size}") },
-                    trailingIcon = if (g.id == groupId) ({ Icon(Icons.Rounded.Edit, "Edit group", Modifier.size(16.dp).clickable { editing = g }) }) else null,
-                )
             }
-            item { AssistChip(onClick = { creating = true }, label = { Text(stringResource(R.string.ui_new_group)) }, leadingIcon = { Icon(Icons.Rounded.Add, null, Modifier.size(16.dp)) }) }
-        }
-        LazyRow(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            items(shownSubs, key = { it.url }) { c ->
-                Column(
-                    Modifier.width(68.dp).clickable { nav.navigate(Routes.channel(c.url)) },
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Avatar(c.avatar, 56)
-                    Text(c.name, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                        textAlign = TextAlign.Center, modifier = Modifier.padding(top = 4.dp))
-                }
-            }
-        }
-        PullToRefreshBox(isRefreshing = paged.refreshing, onRefresh = { paged.load(refresh = true) }, modifier = Modifier.fillMaxSize()) {
-            EntryGrid(paged = paged, actions = actions, filter = { e -> useAccountFeed || groupSet == null || (e is Entry.Video && e.video.uploaderUrl in groupSet) })
+        } else com.vidora.app.ui.theme.GlassRefreshBox(isRefreshing = paged.refreshing, onRefresh = { paged.load(refresh = true) }, modifier = Modifier.fillMaxSize()) {
+            EntryGrid(
+                paged = paged, actions = actions,
+                filter = { e -> useAccountFeed || groupSet == null || (e is Entry.Video && e.video.uploaderUrl in groupSet) },
+                header = {
+                    LazyRow(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                        items(shownSubs, key = { it.url }) { c ->
+                            Column(
+                                Modifier.width(68.dp).clickable { nav.navigate(Routes.channel(c.url)) },
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Avatar(c.avatar, 56)
+                                Text(c.name, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                    textAlign = TextAlign.Center, modifier = Modifier.padding(top = 4.dp))
+                            }
+                        }
+                    }
+                },
+            )
         }
     }
     if (creating || editing != null) {
@@ -152,7 +162,7 @@ fun SubscriptionsScreen(nav: NavHostController, actions: VideoActions) {
 private fun GroupEditor(initial: SubscriptionGroup?, channels: List<ChannelItem>, onDismiss: () -> Unit, onDone: (String?) -> Unit) {
     var name by remember { mutableStateOf(initial?.name.orEmpty()) }
     val selected = remember { mutableStateListOf<String>().apply { addAll(initial?.channels.orEmpty()) } }
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    GlassBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.padding(horizontal = 20.dp)) {
             Text(if (initial == null) "New group" else "Edit group", style = MaterialTheme.typography.titleLarge)
             OutlinedTextField(name, { name = it }, label = { Text(stringResource(R.string.ui_name)) }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))

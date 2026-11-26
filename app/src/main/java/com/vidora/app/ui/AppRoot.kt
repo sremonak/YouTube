@@ -20,18 +20,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Download
-import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.Subscriptions
-import androidx.compose.material.icons.outlined.VideoLibrary
-import androidx.compose.material.icons.outlined.AccountCircle
-import androidx.compose.material.icons.outlined.SlowMotionVideo
-import androidx.compose.material.icons.rounded.AccountCircle
-import androidx.compose.material.icons.rounded.SlowMotionVideo
-import androidx.compose.material.icons.rounded.Download
-import androidx.compose.material.icons.rounded.Home
-import androidx.compose.material.icons.rounded.Subscriptions
-import androidx.compose.material.icons.rounded.VideoLibrary
+import com.vidora.app.ui.icons.Download
+import com.vidora.app.ui.icons.Home
+import com.vidora.app.ui.icons.Subscriptions
+import com.vidora.app.ui.icons.VideoLibrary
+import com.vidora.app.ui.icons.AccountCircle
+import com.vidora.app.ui.icons.SlowMotionVideo
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
@@ -103,6 +97,7 @@ object Routes {
     const val LOCAL_PLAYLIST = "local/{id}"
     const val FILTERS = "filters"
     const val SHORTS = "shorts"
+    const val ABOUT = "about"
 
     fun search(q: String = "") = "search?q=" + Uri.encode(q)
     fun channel(url: String) = "channel/" + Uri.encode(url)
@@ -154,6 +149,12 @@ fun AppRoot(activity: MainActivity, settings: AppSettings) {
 
     // Player events (SponsorBlock skips, sleep timer, queue changes) → snackbar
     LaunchedEffect(Unit) { Graph.player.events.collect { snackbar.showSnackbar(it) } }
+    LaunchedEffect(Unit) {
+        activity.openAboutRequests.collect {
+            activity.openAboutRequests.resetReplayCache()
+            nav.navigate(Routes.ABOUT) { launchSingleTop = true }
+        }
+    }
     LaunchedEffect(Unit) { activity.openPlayerRequests.collect { if (Graph.player.state.value.current != null) nav.navigate(Routes.PLAYER) { launchSingleTop = true } } }
     LaunchedEffect(Unit) {
         activity.incomingLinks.collect { link ->
@@ -174,6 +175,7 @@ fun AppRoot(activity: MainActivity, settings: AppSettings) {
 
     val glassState = com.vidora.app.ui.theme.rememberGlassState()
     val glassOn = settings.glassUi
+    androidx.compose.runtime.SideEffect { com.vidora.app.ui.icons.IconStyle.ios = settings.iosIcons }
     val density = androidx.compose.ui.platform.LocalDensity.current
     var chromePx by remember { mutableStateOf(0) }
     val bottomChrome = when {
@@ -218,6 +220,7 @@ fun AppRoot(activity: MainActivity, settings: AppSettings) {
                     composable(Routes.DOWNLOADS) { DownloadsScreen(nav) }
                     composable(Routes.LIBRARY) { LibraryScreen(nav, actions) }
                     composable(Routes.SETTINGS) { SettingsScreen(nav, settings) }
+                    composable(Routes.ABOUT) { com.vidora.app.ui.screens.AboutScreen(nav) }
                     composable(
                         Routes.SEARCH,
                         arguments = listOf(navArgument("q") { type = NavType.StringType; defaultValue = "" })

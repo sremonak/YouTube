@@ -1,5 +1,6 @@
 package com.vidora.app.ui.components
 
+import com.vidora.app.ui.theme.GlassAlertDialog
 import androidx.compose.ui.res.stringResource
 import com.vidora.app.R
 import android.content.ClipData
@@ -22,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -54,10 +56,17 @@ fun StartupDialogs() {
         if (!Graph.settingsState.value.autoUpdateCheck) return@LaunchedEffect
         val prefs = context.getSharedPreferences("updater", Context.MODE_PRIVATE)
         val last = prefs.getLong("last_check", 0)
-        if (System.currentTimeMillis() - last < 12 * 3600_000L) return@LaunchedEffect
+        if (System.currentTimeMillis() - last < 4 * 3600_000L) return@LaunchedEffect
         val info = runCatching { Updater.check() }.getOrNull()
         prefs.edit().putLong("last_check", System.currentTimeMillis()).apply()
-        if (info != null && prefs.getString("skipped", null) != info.version) update = info
+        if (info == null || prefs.getString("skipped", null) == info.version) return@LaunchedEffect
+        Updater.state.value = com.vidora.app.util.UpdateState.Available(info)
+        val s = Graph.settingsState.value
+        if (s.autoInstallUpdates && info.apkUrl != null && Updater.canInstall(context)) {
+            // New version → download in the background and hand it to the installer automatically.
+            Toast.makeText(context, "Downloading Vidora ${info.version}…", Toast.LENGTH_SHORT).show()
+            Graph.appScope.launch { Updater.downloadAndInstall(context.applicationContext, info) }
+        } else update = info
     }
 
     crash?.let { report ->
@@ -75,7 +84,7 @@ fun StartupDialogs() {
 @Composable
 fun CrashDialog(report: String, onDismiss: () -> Unit) {
     val context = LocalContext.current
-    AlertDialog(
+    GlassAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.ui_vidora_closed_unexpectedly)) },
         text = {
@@ -113,9 +122,11 @@ fun CrashDialog(report: String, onDismiss: () -> Unit) {
 fun UpdateDialog(info: UpdateInfo, onSkip: (() -> Unit)? = null, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var progress by remember { mutableStateOf<Float?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
-    AlertDialog(
+    val st by Updater.state.collectAsState()
+    val progress = (st as? com.vidora.app.util.UpdateState.Downloading)?.progress
+    val error = (st as? com.vidora.app.util.UpdateState.Failed)?.message
+    LaunchedEffect(st) { if (st is com.vidora.app.util.UpdateState.Installing) onDismiss() }
+    GlassAlertDialog(
         onDismissRequest = { if (progress == null) onDismiss() },
         title = { Text("Update available · ${info.version}") },
         text = {
@@ -141,13 +152,7 @@ fun UpdateDialog(info: UpdateInfo, onSkip: (() -> Unit)? = null, onDismiss: () -
                     Toast.makeText(context, "Allow Vidora to install updates, then tap Update again", Toast.LENGTH_LONG).show()
                     Updater.openInstallPermission(context); return@TextButton
                 }
-                error = null
-                progress = 0f
-                scope.launch {
-                    runCatching { Updater.download(context, info) { p -> progress = p } }
-                        .onSuccess { apk -> progress = null; Updater.install(context, apk); onDismiss() }
-                        .onFailure { progress = null; error = it.message ?: "Download failed" }
-                }
+                Graph.appScope.launch { Updater.downloadAndInstall(context.applicationContext, info) }
             }) { Text(if (progress != null) "Downloading…" else "Update") }
         },
         dismissButton = {

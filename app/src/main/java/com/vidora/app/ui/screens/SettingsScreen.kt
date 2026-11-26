@@ -1,5 +1,6 @@
 package com.vidora.app.ui.screens
 
+import com.vidora.app.ui.theme.GlassAlertDialog
 import androidx.compose.ui.res.stringResource
 import com.vidora.app.R
 import android.content.Intent
@@ -30,10 +31,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.AccountCircle
-import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.PlayArrow
+import com.vidora.app.ui.icons.ArrowBack
+import com.vidora.app.ui.icons.AccountCircle
+import com.vidora.app.ui.icons.Check
+import com.vidora.app.ui.icons.PlayArrow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -146,13 +147,14 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
         Toast.makeText(context, if (ok) "Library restored" else "Invalid backup file", Toast.LENGTH_SHORT).show()
     }
 
-    Column(Modifier.fillMaxSize()) {
+    com.vidora.app.ui.theme.GlassPage(header = {
         TopAppBar(
             title = { Text(stringResource(R.string.settings)) },
             navigationIcon = { IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") } },
-            colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+            colors = com.vidora.app.ui.theme.glassBarColors()
         )
-        LazyColumn(contentPadding = PaddingValues(bottom = com.vidora.app.ui.theme.bottomChromePadding()), modifier = Modifier.fillMaxWidth()) {
+    }) {
+        LazyColumn(contentPadding = PaddingValues(top = com.vidora.app.ui.theme.topChromePadding(), bottom = com.vidora.app.ui.theme.bottomChromePadding()), modifier = Modifier.fillMaxWidth()) {
             // ------------------------------------------------------------ account
             item { Header(stringResource(R.string.h_account)) }
             item {
@@ -235,7 +237,7 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
                         }
                     }
                     report?.let { text ->
-                        AlertDialog(
+                        GlassAlertDialog(
                             onDismissRequest = { report = null },
                             title = { Text("Account check") },
                             text = { Text(text, style = MaterialTheme.typography.bodySmall, modifier = Modifier.verticalScroll(rememberScrollState())) },
@@ -285,6 +287,7 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
                     s.glassUi
                 ) { v -> update { it.copy(glassUi = v) } }
             }
+            item { SwitchRow("iPhone-style icons", "Clean iOS-style line icons everywhere (Framework7 Icons). Turn off for Material icons", s.iosIcons) { v -> update { it.copy(iosIcons = v) } } }
             item { SwitchRow("Ambient mode", "Soft glow of the video's colours around the player, like YouTube", s.ambientMode) { v -> update { it.copy(ambientMode = v) } } }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 item { SwitchRow(stringResource(R.string.ui_material_you_colours), stringResource(R.string.ui_match_colours_to_your_wallpaper), s.dynamicColor) { v -> update { it.copy(dynamicColor = v) } } }
@@ -376,6 +379,9 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
             item { ClickRow("Mobile data quality limit", if (s.mobileQuality == 0) "No limit" else "${s.mobileQuality}p") { dialog = "mobilequality" } }
             item { SwitchRow("Audio-only on very slow network", "When even 144p keeps buffering, keep listening with audio and bring the video back once the network recovers", s.autoAudioOnSlow) { v -> update { it.copy(autoAudioOnSlow = v) } } }
             item { SwitchRow("Preload next video", "Gets the next video ready in the background so it starts instantly", s.prefetchNext) { v -> update { it.copy(prefetchNext = v) } } }
+            item { SwitchRow("Data saver", "Caps video at 360p, smaller thumbnails, lower-bitrate audio and no preloading — on mobile data", s.dataSaver) { v -> update { it.copy(dataSaver = v) } } }
+            item { SwitchRow("Video cache", "Keeps recently watched parts on disk (up to 512 MB) so replays and seeking back don't use data", s.mediaCache) { v -> update { it.copy(mediaCache = v) } } }
+            item { SwitchRow("Efficient codecs (AV1 / VP9)", "Uses AV1 or VP9 when your phone decodes them in hardware — sharper picture with less data and battery", s.efficientCodecs) { v -> update { it.copy(efficientCodecs = v) } } }
             item { ClickRow(stringResource(R.string.ui_default_playback_speed), "${s.defaultSpeed}x") { dialog = "speed" } }
             item { SwitchRow(stringResource(R.string.ui_background_playback), stringResource(R.string.ui_keep_playing_when_the_app_is_closed_or_t), s.backgroundPlay) { v -> update { it.copy(backgroundPlay = v) } } }
             item { SwitchRow(stringResource(R.string.ui_picture_in_picture), stringResource(R.string.ui_automatically_shrink_the_video_when_you), s.autoPip) { v -> update { it.copy(autoPip = v) } } }
@@ -484,6 +490,7 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
                 }
             }
             item { SwitchRow(stringResource(R.string.ui_check_for_updates_automatically), "From github.com/${com.vidora.app.util.Updater.REPO} releases", s.autoUpdateCheck) { v -> update { it.copy(autoUpdateCheck = v) } } }
+            item { SwitchRow("Download & install updates automatically", "New versions download in the background and install on their own (Android 12+ after the first in-app update)", s.autoInstallUpdates) { v -> update { it.copy(autoInstallUpdates = v) } } }
             item {
                 ClickRow(if (checkingUpdate) "Checking…" else "Check for updates now", "Current version ${BuildConfig.VERSION_NAME}") {
                     if (checkingUpdate) return@ClickRow
@@ -507,17 +514,18 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
 
             // ------------------------------------------------------------ about
             item { Header(stringResource(R.string.h_about)) }
+            item { ClickRow("About ${s.displayName}", "Version ${BuildConfig.VERSION_NAME} · updates · live news from the developer") { nav.navigate(com.vidora.app.ui.Routes.ABOUT) } }
             item {
-                Card(
+                com.vidora.app.ui.theme.GlassCard(
                     Modifier.fillMaxWidth().padding(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                    tint = MaterialTheme.colorScheme.primaryContainer
                 ) {
                     Column(Modifier.padding(16.dp)) {
                         Text("${s.displayName} ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         Text(
                             "Ad-free · background play · downloads · optional sign-in, no tracking. " +
                                 "Powered by the open-source NewPipe Extractor (GPLv3), Media3/ExoPlayer, SponsorBlock, " +
-                                "DeArrow and Return YouTube Dislike (returnyoutubedislike.com).",
+                                "DeArrow, Return YouTube Dislike (returnyoutubedislike.com) and Framework7 Icons (MIT).",
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
@@ -543,7 +551,7 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
             update { it.copy(notifyHours = v) }
             if (v > 0 && Build.VERSION.SDK_INT >= 33) notifPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
         }
-        "signout" -> AlertDialog(
+        "signout" -> GlassAlertDialog(
             onDismissRequest = { dialog = null },
             title = { Text(stringResource(R.string.ui_sign_out_2)) },
             text = { Text(stringResource(R.string.ui_your_youtube_session_will_be_removed_fro)) },
@@ -562,7 +570,7 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
             update { it.copy(contentCountry = v) }
             Toast.makeText(context, "Restart the app to apply", Toast.LENGTH_SHORT).show()
         }
-        "reset" -> AlertDialog(
+        "reset" -> GlassAlertDialog(
             onDismissRequest = { dialog = null },
             title = { Text(stringResource(R.string.ui_reset_all_settings)) },
             text = { Text(stringResource(R.string.ui_your_library_history_likes_subscriptions)) },
@@ -603,7 +611,7 @@ private fun ClickRow(title: String, subtitle: String?, onClick: () -> Unit) {
 
 @Composable
 private fun <T> ChoiceDialog(title: String, options: List<Pair<T, String>>, selected: T, onDismiss: () -> Unit, onSelect: (T) -> Unit) {
-    AlertDialog(
+    GlassAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
@@ -628,7 +636,7 @@ private fun <T> ChoiceDialog(title: String, options: List<Pair<T, String>>, sele
 @Composable
 private fun TextDialog(title: String, initial: String, onDismiss: () -> Unit, onSave: (String) -> Unit) {
     var text by remember { mutableStateOf(initial) }
-    AlertDialog(
+    GlassAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = { OutlinedTextField(value = text, onValueChange = { text = it }, singleLine = true) },

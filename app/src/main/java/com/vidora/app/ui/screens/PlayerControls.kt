@@ -1,5 +1,6 @@
 package com.vidora.app.ui.screens
 
+import com.vidora.app.ui.theme.GlassBottomSheet
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
@@ -36,33 +37,33 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
-import androidx.compose.material.icons.automirrored.rounded.QueueMusic
-import androidx.compose.material.icons.rounded.Audiotrack
-import androidx.compose.material.icons.rounded.Bedtime
-import androidx.compose.material.icons.rounded.ClosedCaption
-import androidx.compose.material.icons.rounded.ClosedCaptionDisabled
-import androidx.compose.material.icons.rounded.Forward10
-import androidx.compose.material.icons.rounded.Fullscreen
-import androidx.compose.material.icons.rounded.FullscreenExit
-import androidx.compose.material.icons.rounded.GraphicEq
-import androidx.compose.material.icons.rounded.HighQuality
-import androidx.compose.material.icons.rounded.Info
-import androidx.compose.material.icons.rounded.KeyboardArrowDown
-import androidx.compose.material.icons.rounded.Lock
-import androidx.compose.material.icons.rounded.LockOpen
-import androidx.compose.material.icons.rounded.Pause
-import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material.icons.rounded.Repeat
-import androidx.compose.material.icons.rounded.RepeatOne
-import androidx.compose.material.icons.rounded.Replay
-import androidx.compose.material.icons.rounded.Replay10
-import androidx.compose.material.icons.rounded.Settings
-import androidx.compose.material.icons.rounded.SkipNext
-import androidx.compose.material.icons.rounded.SkipPrevious
-import androidx.compose.material.icons.rounded.Speed
-import androidx.compose.material.icons.rounded.Toc
-import androidx.compose.material.icons.rounded.Translate
+import com.vidora.app.ui.icons.KeyboardArrowRight
+import com.vidora.app.ui.icons.QueueMusic
+import com.vidora.app.ui.icons.Audiotrack
+import com.vidora.app.ui.icons.Bedtime
+import com.vidora.app.ui.icons.ClosedCaption
+import com.vidora.app.ui.icons.ClosedCaptionDisabled
+import com.vidora.app.ui.icons.Forward10
+import com.vidora.app.ui.icons.Fullscreen
+import com.vidora.app.ui.icons.FullscreenExit
+import com.vidora.app.ui.icons.GraphicEq
+import com.vidora.app.ui.icons.HighQuality
+import com.vidora.app.ui.icons.Info
+import com.vidora.app.ui.icons.KeyboardArrowDown
+import com.vidora.app.ui.icons.Lock
+import com.vidora.app.ui.icons.LockOpen
+import com.vidora.app.ui.icons.Pause
+import com.vidora.app.ui.icons.PlayArrow
+import com.vidora.app.ui.icons.Repeat
+import com.vidora.app.ui.icons.RepeatOne
+import com.vidora.app.ui.icons.Replay
+import com.vidora.app.ui.icons.Replay10
+import com.vidora.app.ui.icons.Settings
+import com.vidora.app.ui.icons.SkipNext
+import com.vidora.app.ui.icons.SkipPrevious
+import com.vidora.app.ui.icons.Speed
+import com.vidora.app.ui.icons.Toc
+import com.vidora.app.ui.icons.Translate
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -101,7 +102,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
+import coil3.compose.AsyncImage
+import coil3.request.crossfade
 import com.vidora.app.Graph
 import com.vidora.app.data.Chapter
 import com.vidora.app.player.PlayerUiState
@@ -452,7 +454,7 @@ private fun ProSeekBar(
 internal fun PlayerSettingsSheet(state: PlayerUiState, openSheet: (Sheet) -> Unit, onDismiss: () -> Unit) {
     val details = state.details
     val settings by Graph.settingsState.collectAsState()
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.96f)) {
+    GlassBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.96f)) {
         Column(Modifier.navigationBarsPadding().padding(bottom = 16.dp)) {
             fun go(s: Sheet) { onDismiss(); openSheet(s) }
             SettingRow(Icons.Rounded.HighQuality, "Quality", state.qualityLabel) { go(Sheet.QUALITY) }
@@ -510,7 +512,7 @@ internal fun ChaptersSheet(state: PlayerUiState, onDismiss: () -> Unit) {
     val chapters = state.details?.chapters.orEmpty()
     val (pos, _, _) = rememberPlaybackClock(state.current?.url, true)
     val current = currentChapter(chapters, pos)
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    GlassBottomSheet(onDismissRequest = onDismiss) {
         Text("Chapters", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
         LazyColumn(Modifier.navigationBarsPadding(), contentPadding = PaddingValues(bottom = 24.dp)) {
             items(chapters) { ch ->
@@ -548,7 +550,7 @@ internal fun AmbientGlow(thumbnail: String?, modifier: Modifier, dark: Boolean) 
     if (thumbnail == null) return
     val context = androidx.compose.ui.platform.LocalContext.current
     val request = remember(thumbnail) {
-        coil.request.ImageRequest.Builder(context).data(thumbnail).size(64, 36).crossfade(600).build()
+        coil3.request.ImageRequest.Builder(context).data(thumbnail).size(64, 36).crossfade(600).build()
     }
     Box(modifier) {
         AsyncImage(

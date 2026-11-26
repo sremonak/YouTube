@@ -1,5 +1,6 @@
 package com.vidora.app.ui.screens
 
+import com.vidora.app.ui.theme.GlassAlertDialog
 import androidx.compose.ui.res.stringResource
 import com.vidora.app.R
 import android.annotation.SuppressLint
@@ -25,10 +26,10 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.Lock
-import androidx.compose.material.icons.rounded.Shield
-import androidx.compose.material.icons.rounded.VerifiedUser
+import com.vidora.app.ui.icons.ArrowBack
+import com.vidora.app.ui.icons.Lock
+import com.vidora.app.ui.icons.Shield
+import com.vidora.app.ui.icons.VerifiedUser
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedTextField
@@ -136,7 +137,7 @@ private fun Point(icon: ImageVector, text: String) {
 private fun CookieDialog(onDismiss: () -> Unit, onSave: (String) -> Unit) {
     var text by remember { mutableStateOf("") }
     val valid = AccountManager.hasSessionCookies(text.trim())
-    AlertDialog(
+    GlassAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.ui_paste_youtube_cookies)) },
         text = {

@@ -20,14 +20,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ArrowDropDown
+import com.vidora.app.ui.icons.ArrowDropDown
 import androidx.compose.foundation.layout.Box
-import androidx.compose.material.icons.rounded.Mic
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.History
-import androidx.compose.material.icons.rounded.NorthWest
-import androidx.compose.material.icons.rounded.Search
+import com.vidora.app.ui.icons.Mic
+import com.vidora.app.ui.icons.ArrowBack
+import com.vidora.app.ui.icons.Close
+import com.vidora.app.ui.icons.History
+import com.vidora.app.ui.icons.NorthWest
+import com.vidora.app.ui.icons.Search
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -114,8 +114,8 @@ fun SearchScreen(nav: NavHostController, actions: VideoActions, initialQuery: St
             .onFailure { android.widget.Toast.makeText(context, "Voice search isn't available on this device", android.widget.Toast.LENGTH_SHORT).show() }
     }
 
-    Column(Modifier.fillMaxSize().statusBarsPadding()) {
-        Row(Modifier.padding(horizontal = 4.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+    com.vidora.app.ui.theme.GlassPage(header = {
+        Row(Modifier.statusBarsPadding().padding(horizontal = 4.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") }
             TextField(
                 value = text,
@@ -133,25 +133,19 @@ fun SearchScreen(nav: NavHostController, actions: VideoActions, initialQuery: St
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = { submit(text) }),
                 shape = RoundedCornerShape(28.dp),
-                colors = TextFieldDefaults.colors(
+                colors = if (com.vidora.app.ui.theme.LocalGlass.current.enabled) TextFieldDefaults.colors(
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                    focusedContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.09f),
+                    unfocusedContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f),
+                ) else TextFieldDefaults.colors(
                     focusedIndicatorColor = Color.Transparent,
                     unfocusedIndicatorColor = Color.Transparent,
                 ),
                 modifier = Modifier.weight(1f).padding(end = 8.dp).focusRequester(focusRequester)
             )
         }
-
-        if (editing) {
-            val history = if (text.isBlank()) library.searchHistory else library.searchHistory.filter { it.contains(text, true) }.take(4)
-            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = com.vidora.app.ui.theme.bottomChromePadding())) {
-                items(history.distinct(), key = { "h$it" }) { q ->
-                    SuggestionRow(q, isHistory = true, onClick = { submit(q) }, onFill = { text = q }, onRemove = { Graph.library.removeSearch(q) })
-                }
-                items(suggestions.distinct().filter { s -> history.none { it.equals(s, true) } }, key = { "s$it" }) { q ->
-                    SuggestionRow(q, isHistory = false, onClick = { submit(q) }, onFill = { text = "$q " })
-                }
-            }
-        } else {
+        if (!editing) {
             LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(SearchFilter.entries) { f ->
                     FilterChip(selected = f == filter, onClick = { filter = f }, label = { Text(f.label) })
@@ -166,6 +160,19 @@ fun SearchScreen(nav: NavHostController, actions: VideoActions, initialQuery: St
                     item { FilterChip(selected = hideLive, onClick = { hideLive = !hideLive }, label = { Text("Hide live") }) }
                 }
             }
+        }
+    }) {
+        if (editing) {
+            val history = if (text.isBlank()) library.searchHistory else library.searchHistory.filter { it.contains(text, true) }.take(4)
+            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = com.vidora.app.ui.theme.topChromePadding(), bottom = com.vidora.app.ui.theme.bottomChromePadding())) {
+                items(history.distinct(), key = { "h$it" }) { q ->
+                    SuggestionRow(q, isHistory = true, onClick = { submit(q) }, onFill = { text = q }, onRemove = { Graph.library.removeSearch(q) })
+                }
+                items(suggestions.distinct().filter { s -> history.none { it.equals(s, true) } }, key = { "s$it" }) { q ->
+                    SuggestionRow(q, isHistory = false, onClick = { submit(q) }, onFill = { text = "$q " })
+                }
+            }
+        } else {
             EntryGrid(
                 paged = paged, actions = actions,
                 filter = { e ->

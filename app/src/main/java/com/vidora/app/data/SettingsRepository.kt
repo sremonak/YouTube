@@ -110,6 +110,16 @@ data class AppSettings(
     val autoAudioOnSlow: Boolean = true,
     /** Resolve the next video in the background so it starts instantly. */
     val prefetchNext: Boolean = true,
+    /** iPhone-style (Framework7 / SF-like) icons instead of Material icons. */
+    val iosIcons: Boolean = true,
+    /** Data saver: 360p cap, small thumbnails, low-bitrate audio, no prefetching. */
+    val dataSaver: Boolean = false,
+    /** Keep recently streamed media on disk so replays / seeks back need no network. */
+    val mediaCache: Boolean = true,
+    /** Prefer AV1 / VP9 when the phone has a hardware decoder (same quality, less data). */
+    val efficientCodecs: Boolean = true,
+    /** Download and install new versions automatically (Android may ask to confirm). */
+    val autoInstallUpdates: Boolean = true,
     val downloadConnections: Int = 3,
     val returnDislike: Boolean = true,
     val deArrow: Boolean = false,
@@ -182,6 +192,11 @@ class SettingsRepository(private val context: Context) {
         val mobileQuality = intPreferencesKey("mobile_quality")
         val autoAudioOnSlow = booleanPreferencesKey("auto_audio_slow")
         val prefetchNext = booleanPreferencesKey("prefetch_next")
+        val iosIcons = booleanPreferencesKey("ios_icons")
+        val dataSaver = booleanPreferencesKey("data_saver")
+        val mediaCache = booleanPreferencesKey("media_cache")
+        val efficientCodecs = booleanPreferencesKey("efficient_codecs")
+        val autoInstallUpdates = booleanPreferencesKey("auto_install_updates")
         val downloadConnections = intPreferencesKey("dl_connections")
         val returnDislike = booleanPreferencesKey("ryd")
         val deArrow = booleanPreferencesKey("dearrow")
@@ -255,6 +270,11 @@ class SettingsRepository(private val context: Context) {
             mobileQuality = this[K.mobileQuality] ?: d.mobileQuality,
             autoAudioOnSlow = this[K.autoAudioOnSlow] ?: d.autoAudioOnSlow,
             prefetchNext = this[K.prefetchNext] ?: d.prefetchNext,
+            iosIcons = this[K.iosIcons] ?: d.iosIcons,
+            dataSaver = this[K.dataSaver] ?: d.dataSaver,
+            mediaCache = this[K.mediaCache] ?: d.mediaCache,
+            efficientCodecs = this[K.efficientCodecs] ?: d.efficientCodecs,
+            autoInstallUpdates = this[K.autoInstallUpdates] ?: d.autoInstallUpdates,
             downloadConnections = this[K.downloadConnections] ?: d.downloadConnections,
             returnDislike = this[K.returnDislike] ?: d.returnDislike,
             deArrow = this[K.deArrow] ?: d.deArrow,
@@ -327,6 +347,11 @@ class SettingsRepository(private val context: Context) {
             p[K.mobileQuality] = s.mobileQuality
             p[K.autoAudioOnSlow] = s.autoAudioOnSlow
             p[K.prefetchNext] = s.prefetchNext
+            p[K.iosIcons] = s.iosIcons
+            p[K.dataSaver] = s.dataSaver
+            p[K.mediaCache] = s.mediaCache
+            p[K.efficientCodecs] = s.efficientCodecs
+            p[K.autoInstallUpdates] = s.autoInstallUpdates
             p[K.downloadConnections] = s.downloadConnections
             p[K.returnDislike] = s.returnDislike
             p[K.deArrow] = s.deArrow

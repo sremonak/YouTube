@@ -1,5 +1,6 @@
 package com.vidora.app.ui.screens
 
+import com.vidora.app.ui.theme.GlassBottomSheet
 import com.vidora.app.ui.theme.glass
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
@@ -40,38 +41,38 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Info
-import androidx.compose.material.icons.automirrored.rounded.QueueMusic
-import androidx.compose.material.icons.rounded.Audiotrack
-import androidx.compose.material.icons.rounded.Bedtime
-import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.Download
-import androidx.compose.material.icons.rounded.NotificationsActive
-import androidx.compose.material.icons.rounded.Favorite
-import androidx.compose.material.icons.rounded.FavoriteBorder
-import androidx.compose.material.icons.rounded.HighQuality
-import androidx.compose.material.icons.rounded.KeyboardArrowDown
-import androidx.compose.material.icons.rounded.Pause
-import androidx.compose.material.icons.rounded.PictureInPictureAlt
-import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material.icons.rounded.Repeat
-import androidx.compose.material.icons.rounded.RepeatOne
-import androidx.compose.material.icons.rounded.Share
-import androidx.compose.material.icons.rounded.SkipNext
-import androidx.compose.material.icons.rounded.Speed
-import androidx.compose.material.icons.rounded.ThumbUp
-import androidx.compose.material.icons.rounded.ThumbDown
-import androidx.compose.material.icons.rounded.ClosedCaption
-import androidx.compose.material.icons.rounded.Translate
-import androidx.compose.material.icons.rounded.GraphicEq
-import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
+import com.vidora.app.ui.icons.Info
+import com.vidora.app.ui.icons.QueueMusic
+import com.vidora.app.ui.icons.Audiotrack
+import com.vidora.app.ui.icons.Bedtime
+import com.vidora.app.ui.icons.Close
+import com.vidora.app.ui.icons.Download
+import com.vidora.app.ui.icons.NotificationsActive
+import com.vidora.app.ui.icons.Favorite
+import com.vidora.app.ui.icons.FavoriteBorder
+import com.vidora.app.ui.icons.HighQuality
+import com.vidora.app.ui.icons.KeyboardArrowDown
+import com.vidora.app.ui.icons.Pause
+import com.vidora.app.ui.icons.PictureInPictureAlt
+import com.vidora.app.ui.icons.PlayArrow
+import com.vidora.app.ui.icons.Repeat
+import com.vidora.app.ui.icons.RepeatOne
+import com.vidora.app.ui.icons.Share
+import com.vidora.app.ui.icons.SkipNext
+import com.vidora.app.ui.icons.Speed
+import com.vidora.app.ui.icons.ThumbUp
+import com.vidora.app.ui.icons.ThumbDown
+import com.vidora.app.ui.icons.ClosedCaption
+import com.vidora.app.ui.icons.Translate
+import com.vidora.app.ui.icons.GraphicEq
+import com.vidora.app.ui.icons.PlaylistAdd
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.media3.ui.SubtitleView
 import androidx.media3.ui.TimeBar
 import com.vidora.app.ui.components.AddToPlaylistSheet
-import androidx.compose.material.icons.rounded.Verified
-import androidx.compose.material.icons.rounded.WatchLater
+import com.vidora.app.ui.icons.Verified
+import com.vidora.app.ui.icons.WatchLater
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
@@ -118,7 +119,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import androidx.navigation.NavHostController
-import coil.compose.AsyncImage
+import coil3.compose.AsyncImage
 import com.vidora.app.Graph
 import com.vidora.app.MainActivity
 import com.vidora.app.data.StreamDetails
@@ -623,7 +624,7 @@ private fun QualitySheet(state: PlayerUiState, onDismiss: () -> Unit) {
         .groupBy { it.label }
         .map { (_, list) -> list.firstOrNull { it.codec?.startsWith("avc") == true } ?: list.first() }
         .sortedByDescending { it.height * 1000 + it.fps }
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    GlassBottomSheet(onDismissRequest = onDismiss) {
         Text(stringResource(R.string.ui_video_quality), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
         LazyColumn(Modifier.navigationBarsPadding(), contentPadding = PaddingValues(bottom = 24.dp)) {
             item {
@@ -661,7 +662,7 @@ private fun QualitySheet(state: PlayerUiState, onDismiss: () -> Unit) {
 @Composable
 private fun SpeedSheet(current: Float, onDismiss: () -> Unit) {
     val speeds = listOf(0.25f, 0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f, 2.5f, 3f)
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    GlassBottomSheet(onDismissRequest = onDismiss) {
         Text(stringResource(R.string.ui_playback_speed), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
         LazyColumn(Modifier.navigationBarsPadding(), contentPadding = PaddingValues(bottom = 24.dp)) {
             items(speeds) { s ->
@@ -680,7 +681,7 @@ private fun SpeedSheet(current: Float, onDismiss: () -> Unit) {
 private fun SleepSheet(state: PlayerUiState, onDismiss: () -> Unit) {
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) { while (true) { delay(1000); now = System.currentTimeMillis() } }
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    GlassBottomSheet(onDismissRequest = onDismiss) {
         Text(stringResource(R.string.ui_sleep_timer), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
         if (state.sleepTimerEndsAt > 0) {
             val left = ((state.sleepTimerEndsAt - now) / 1000).coerceAtLeast(0)
@@ -709,7 +710,7 @@ private fun SleepSheet(state: PlayerUiState, onDismiss: () -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun QueueSheet(state: PlayerUiState, actions: VideoActions, onDismiss: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    GlassBottomSheet(onDismissRequest = onDismiss) {
         Text(stringResource(R.string.ui_queue), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
         LazyColumn(Modifier.navigationBarsPadding(), contentPadding = PaddingValues(bottom = 24.dp)) {
             itemsIndexed(state.queue, key = { _, v -> v.url }) { index, v ->

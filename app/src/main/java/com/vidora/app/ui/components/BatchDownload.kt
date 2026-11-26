@@ -1,5 +1,6 @@
 package com.vidora.app.ui.components
 
+import com.vidora.app.ui.theme.GlassAlertDialog
 import androidx.compose.ui.res.stringResource
 import com.vidora.app.R
 import android.widget.Toast
@@ -28,7 +29,7 @@ fun BatchDownloadDialog(videos: List<VideoItem>, onDismiss: () -> Unit) {
             withContext(Dispatchers.Main) { Toast.makeText(context, "$n downloads queued", Toast.LENGTH_SHORT).show() }
         }
     }
-    AlertDialog(
+    GlassAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Download ${videos.size} videos?") },
         text = { Text(stringResource(R.string.ui_each_video_is_saved_with_your_default_do)) },

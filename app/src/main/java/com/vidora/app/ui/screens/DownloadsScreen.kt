@@ -1,5 +1,6 @@
 package com.vidora.app.ui.screens
 
+import com.vidora.app.ui.theme.GlassAlertDialog
 import androidx.compose.ui.res.stringResource
 import com.vidora.app.R
 import android.Manifest
@@ -22,14 +23,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.OpenInNew
-import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.Delete
-import androidx.compose.material.icons.rounded.Download
-import androidx.compose.material.icons.rounded.MoreVert
-import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material.icons.rounded.Refresh
-import androidx.compose.material.icons.rounded.Share
+import com.vidora.app.ui.icons.OpenInNew
+import com.vidora.app.ui.icons.Close
+import com.vidora.app.ui.icons.Delete
+import com.vidora.app.ui.icons.Download
+import com.vidora.app.ui.icons.MoreVert
+import com.vidora.app.ui.icons.PlayArrow
+import com.vidora.app.ui.icons.Refresh
+import com.vidora.app.ui.icons.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -98,7 +99,7 @@ fun DownloadsScreen(nav: NavHostController) {
     }
     val totalSize = items.filter { it.status == DownloadStatus.COMPLETED }.sumOf { it.totalBytes }
 
-    Column(Modifier.fillMaxSize()) {
+    com.vidora.app.ui.theme.GlassPage(header = {
         TopAppBar(
             title = {
                 Column {
@@ -107,21 +108,25 @@ fun DownloadsScreen(nav: NavHostController) {
                         style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             },
-            colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+            colors = com.vidora.app.ui.theme.glassBarColors()
         )
         LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
             items(listOf("All", "Video", "Audio").withIndex().toList()) { (i, label) ->
                 FilterChip(selected = filter == i, onClick = { filter = i }, label = { Text(label) })
             }
         }
+    }) {
         if (visible.isEmpty()) {
-            EmptyState(
-                stringResource(R.string.ui_no_downloads_yet),
-                stringResource(R.string.ui_tap_download_on_any_video_to_save_it_as),
-                Icons.Rounded.Download
-            )
+            Column {
+                com.vidora.app.ui.theme.TopChromeSpacer()
+                EmptyState(
+                    stringResource(R.string.ui_no_downloads_yet),
+                    stringResource(R.string.ui_tap_download_on_any_video_to_save_it_as),
+                    Icons.Rounded.Download
+                )
+            }
         } else {
-            LazyColumn(contentPadding = PaddingValues(bottom = com.vidora.app.ui.theme.bottomChromePadding())) {
+            LazyColumn(contentPadding = PaddingValues(top = com.vidora.app.ui.theme.topChromePadding(), bottom = com.vidora.app.ui.theme.bottomChromePadding())) {
                 items(visible, key = { it.id }) { record ->
                     DownloadRow(record, onPlay = {
                         val uri = record.uri?.toUri() ?: return@DownloadRow
@@ -138,7 +143,7 @@ fun DownloadsScreen(nav: NavHostController) {
     }
 
     deleteTarget?.let { r ->
-        AlertDialog(
+        GlassAlertDialog(
             onDismissRequest = { deleteTarget = null },
             title = { Text(stringResource(R.string.ui_delete_download)) },
             text = { Text(r.video.title) },

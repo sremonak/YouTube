@@ -1,5 +1,7 @@
 package com.vidora.app.ui.components
 
+import com.vidora.app.ui.theme.GlassBottomSheet
+import com.vidora.app.ui.theme.GlassAlertDialog
 import androidx.compose.ui.res.stringResource
 import com.vidora.app.R
 import androidx.compose.foundation.clickable
@@ -9,9 +11,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
-import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.CheckCircle
+import com.vidora.app.ui.icons.PlaylistAdd
+import com.vidora.app.ui.icons.Add
+import com.vidora.app.ui.icons.CheckCircle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -74,7 +76,7 @@ fun AddToPlaylistSheet(video: VideoItem, onDismiss: () -> Unit) {
             }
         }
     }
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    GlassBottomSheet(onDismissRequest = onDismiss) {
         Text(stringResource(R.string.ui_save_to_playlist), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
         LazyColumn(Modifier.navigationBarsPadding(), contentPadding = PaddingValues(bottom = 24.dp)) {
             item {
@@ -152,7 +154,7 @@ fun AddToPlaylistSheet(video: VideoItem, onDismiss: () -> Unit) {
 @Composable
 fun NameDialog(title: String, initial: String, confirm: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
     var text by remember { mutableStateOf(initial) }
-    AlertDialog(
+    GlassAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = { OutlinedTextField(text, { text = it }, singleLine = true, label = { Text(stringResource(R.string.ui_name)) }) },
