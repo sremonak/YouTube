@@ -145,11 +145,35 @@ fun probeClient(c: Client, videoId: String, visitor: String?, sts: Int?): String
         }
         if (url != null) {
             sb.append(" itag=${f.s("itag")} GET0=${rangeStatus(url!!, c.ua, 0)} GET1.5M=${rangeStatus(url, c.ua, 1_500_000)}")
+            if (c.key == "tv_samsung") {
+                val u = url!!
+                sb.append(" keys=" + u.substringAfter('?').split('&').map { it.substringBefore('=') }.joinToString(","))
+                sb.append(" rangeParam=" + runCatching { http.newCall(okhttp3.Request.Builder().url("$u&range=0-4095").header("User-Agent", c.ua).build()).execute().use { "${it.code}" } }.getOrElse { "ERR" })
+                sb.append(" ffUA=" + rangeStatus(u, FIREFOX, 0))
+                sb.append(" post=" + runCatching { http.newCall(okhttp3.Request.Builder().url("$u&rn=1").header("User-Agent", c.ua).post(byteArrayOf(0x78, 0).toRequestBody()).build()).execute().use { "${it.code}" } }.getOrElse { "ERR" })
+                sb.append(" noSig=" + rangeStatus(u.replace(Regex("&sig=[^&]*"), ""), c.ua, 0))
+            }
         }
     }
-    sd.s("hlsManifestUrl")?.let { h ->
-        val st = runCatching { http.newCall(okhttp3.Request.Builder().url(h).header("User-Agent", c.ua).build()).execute().use { "${it.code}" } }.getOrElse { "ERR" }
-        sb.append(" hlsGET=$st")
+    sd.s("hlsManifestUrl")?.let { h0 ->
+        fun get(u: String) = http.newCall(okhttp3.Request.Builder().url(u).header("User-Agent", c.ua).build()).execute().use { it.code to it.body.string() }
+        val nCh = Regex("/n/([^/]+)/").find(h0)?.groupValues?.get(1)
+        val nSol = nCh?.let { runCatching { ejsSolve(emptyList(), listOf(it)).second[it] }.getOrNull() }
+        for ((label, h) in listOf("raw" to h0, "nfix" to (if (nCh != null && nSol != null) h0.replace("/n/$nCh/", "/n/$nSol/") else null))) {
+            if (h == null) { sb.append(" hls[$label]=no-n"); continue }
+            val r = runCatching {
+                val (code, master) = get(h)
+                val variant = master.lines().lastOrNull { it.startsWith("http") } ?: return@runCatching "master=$code(no variants)"
+                val (vc, pl) = get(variant)
+                val segs = pl.lines().filter { it.startsWith("http") }
+                val seg = segs.firstOrNull() ?: return@runCatching "master=$code variant=$vc(no segs)"
+                val mid = segs.getOrNull(segs.size / 2) ?: seg
+                val s1 = http.newCall(okhttp3.Request.Builder().url(seg).header("User-Agent", c.ua).build()).execute().use { "${it.code}(${it.body.bytes().size}B)" }
+                val s2 = http.newCall(okhttp3.Request.Builder().url(mid).header("User-Agent", c.ua).build()).execute().use { "${it.code}(${it.body.bytes().size}B)" }
+                "master=$code variants=${master.lines().count { it.startsWith("http") }} variant=$vc segs=${segs.size} seg0=$s1 segMid=$s2"
+            }.getOrElse { "ERR ${it.message}" }
+            sb.append(" hls[$label]=$r")
+        }
     }
     return sb.toString()
 }
@@ -210,7 +234,7 @@ fun main() {
     }.getOrNull()
     loadPlayer()
     val ejsSts = playerSts()
-    val videos = listOf("kJQP7kiw5Fk", "dQw4w9WgXcQ", "jNQXAC9IVRw")
+    val videos = listOf("dQw4w9WgXcQ", "aqz-KE-bpKQ", "M7lc1UVf-VE")
     for (v in videos) {
         val lines = mutableListOf("runner ip=$ip visitor=${visitor != null}")
         val sts = runCatching { YoutubeJavaScriptPlayerManager.getSignatureTimestamp(v) }

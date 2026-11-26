@@ -31,7 +31,9 @@ jobs:
           pip install -q --upgrade "yt-dlp[default]"
           curl -fsSL https://deno.land/install.sh | sh -s -- -y >/dev/null 2>&1 || true
           export PATH="$HOME/.deno/bin:$PATH"
-          for c in default tv_samsung web_embedded mweb android_vr; do
+          dl=$(yt-dlp --no-colors -v -f 140 --extractor-args "youtube:player_client=tv_samsung" -o /tmp/a.m4a "https://www.youtube.com/watch?v=dQw4w9WgXcQ" 2>&1 | grep -E "ERROR|WARNING|100%|download\]|HTTP Error" | tail -8 | sed 's/%/%25/g' | tr '\n' '\001' | sed 's/\x01/%0A/g')
+          echo "::notice title=yt-dlp download tv_samsung 140::$dl"
+          for c in default; do
             out=$(yt-dlp -v --no-colors -F --extractor-args "youtube:player_client=$c" "https://www.youtube.com/watch?v=dQw4w9WgXcQ" 2>&1 | grep -E "WARNING|ERROR|^[0-9]{2,3} |player API JSON|\[debug\] yt-dlp version|JS runtimes" | head -40 | sed 's/%/%25/g' | tr '\n' '\001' | sed 's/\x01/%0A/g')
             echo "::notice title=yt-dlp $c::$out"
           done
