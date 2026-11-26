@@ -110,7 +110,9 @@ Priority: **P0** = keeps the app working, **P1** = premium features users notice
 | OkHttp 5 | ✅ 5.1.0 (5.5.x needs compileSdk 37) |
 | Unit tests in CI | ✅ `testDebugUnitTest` (versions, PoToken base64, imports, filters, storyboards, EQ, search refine, continue watching) |
 | F-Droid / fastlane metadata | ✅ `fastlane/metadata/android` |
-| Room, Baseline Profiles, Coil 3, lint/detekt, Piped proxy | ⏳ Later — need larger migrations or an emulator in CI |
+| Baseline Profiles | ✅ ProfileInstaller + app `baseline-prof.txt` (library profiles compiled on sideloaded installs) |
+| Piped / Invidious fallback | ✅ Last-resort stream source when YouTube blocks the network |
+| Room, Coil 3, lint/detekt | ⏳ Later — large migrations with little user-visible gain today |
 | Incognito mode | ✅ Settings + one-tap toggle in Library — no watch/search history |
 | Voice search | ✅ Mic button in the search bar |
 | Search refinements | ✅ Length, upload date, hide live (client-side; the extractor only supports content type server-side) |
@@ -118,4 +120,10 @@ Priority: **P0** = keeps the app working, **P1** = premium features users notice
 | Seek-bar markers | ✅ Chapters and SponsorBlock segments marked on the seek bar |
 | Sleep timer "end of video" | ✅ Done |
 | Stats for nerds | ✅ Codec, resolution, bitrate, buffer, dropped frames |
-| Loudness normalisation | ⏳ Needs `loudnessDb` from the extractor (not exposed in v0.27.1) |
+| Loudness normalisation | ✅ "Stable volume" from YouTube's `playerConfig.audioConfig.loudnessDb` |
+| Download post-processing | ✅ Parallel multi-connection fetch, SponsorBlock cut (keyframe, lossless), MP4 metadata + cover art, subtitle .vtt |
+| Comments write / like / reply | ✅ Signed in, YouTube's own comment API |
+| YouTube Music library | ✅ Liked songs, library playlists, albums, artists |
+| PoToken player client | ✅ MWEB with WebView BotGuard tokens (full quality ladder) in the fallback chain |
+| History controls | ✅ Clear on device, manage/pause YouTube history (My Activity) |
+| Chromecast | ⏳ Needs Google Cast SDK (Play Services) + IP-bound URL handling |

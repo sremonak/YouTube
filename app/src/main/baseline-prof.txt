@@ -1,0 +1,9 @@
+# Startup + hot paths of Vidora (merged with library profiles by AGP, installed by ProfileInstaller).
+HSPLcom/vidora/app/VidoraApp;->**(**)**
+HSPLcom/vidora/app/Graph;->**(**)**
+HSPLcom/vidora/app/MainActivity;->**(**)**
+HSPLcom/vidora/app/ui/**;->**(**)**
+HSPLcom/vidora/app/data/**;->**(**)**
+HSPLcom/vidora/app/player/**;->**(**)**
+HSPLcom/vidora/app/account/**;->**(**)**
+Lcom/vidora/app/**;
