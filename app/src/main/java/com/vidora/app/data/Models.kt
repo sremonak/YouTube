@@ -150,6 +150,11 @@ data class CommentItem(
     val verified: Boolean,
     val byCreator: Boolean,
     val loadReplies: (suspend () -> CommentsPage)?,
+    /** Signed-in actions (YouTube's own tokens): like / remove like / reply. */
+    val likeAction: String? = null,
+    val unlikeAction: String? = null,
+    val replyParams: String? = null,
+    val liked: Boolean = false,
 )
 
 class CommentsPage(
@@ -157,6 +162,8 @@ class CommentsPage(
     val next: (suspend () -> CommentsPage)?,
     val totalCount: Int = -1,
     val disabled: Boolean = false,
+    /** Token for posting a new top-level comment (signed in only). */
+    val createParams: String? = null,
 )
 
 data class Chapter(val title: String, val startSeconds: Int, val thumbnail: String?)

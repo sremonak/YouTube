@@ -34,6 +34,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
+import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.rounded.BrightnessMedium
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.ZoomInMap
@@ -474,6 +475,48 @@ class CommentsState(private val url: String, private val scope: CoroutineScope) 
 
     val replies = mutableStateMapOf<String, List<CommentItem>>()
     val loadingReplies = mutableStateMapOf<String, Boolean>()
+    var createParams by mutableStateOf<String?>(null)
+        private set
+    var posting by mutableStateOf(false)
+        private set
+    /** Local like state (id → liked) for instant feedback. */
+    val likedOverride = mutableStateMapOf<String, Boolean>()
+
+    fun toggleLike(c: CommentItem, onError: (String) -> Unit) {
+        val liked = likedOverride[c.id] ?: c.liked
+        val action = (if (liked) c.unlikeAction else c.likeAction) ?: return onError("Sign in to like comments")
+        likedOverride[c.id] = !liked
+        scope.launch {
+            runCatching { Graph.accountApi.commentAction(action) }.onFailure {
+                likedOverride[c.id] = liked
+                onError(it.message ?: "Couldn't like")
+            }
+        }
+    }
+
+    /** Posts a comment (or a reply to [parent]) and shows it right away, like the app. */
+    fun post(text: String, parent: CommentItem?, onDone: (Boolean, String?) -> Unit) {
+        val params = (if (parent != null) parent.replyParams else createParams) ?: return onDone(false, "Sign in to comment")
+        posting = true
+        scope.launch {
+            val r = runCatching {
+                if (parent != null) Graph.accountApi.replyComment(params, text) else Graph.accountApi.createComment(params, text)
+            }
+            posting = false
+            val ok = r.getOrDefault(false)
+            if (ok) {
+                val mine = CommentItem(
+                    id = "local-" + System.currentTimeMillis(), author = Graph.account.session.value?.name ?: "You", authorAvatar = Graph.account.session.value?.avatar,
+                    authorUrl = null, text = android.text.TextUtils.htmlEncode(text), likes = 0, published = "now", replyCount = 0,
+                    pinned = false, hearted = false, verified = false, byCreator = false, loadReplies = null,
+                )
+                if (parent != null) replies[parent.id] = listOf(mine) + (replies[parent.id] ?: emptyList())
+                else { items.add(0, mine); if (total >= 0) total += 1 }
+                com.vidora.app.ui.UiCache.invalidate("comments:")
+            }
+            onDone(ok, r.exceptionOrNull()?.message ?: if (!ok) "YouTube rejected the comment" else null)
+        }
+    }
 
     fun start() {
         if (started) return
@@ -481,7 +524,7 @@ class CommentsState(private val url: String, private val scope: CoroutineScope) 
         loading = true
         scope.launch {
             runCatching { Graph.repository.comments(url) }
-                .onSuccess { p -> items.addAll(p.items); next = p.next; total = p.totalCount; disabled = p.disabled }
+                .onSuccess { p -> items.addAll(p.items); next = p.next; total = p.totalCount; disabled = p.disabled; createParams = p.createParams }
                 .onFailure { error = it.message ?: it.javaClass.simpleName }
             loading = false
         }
@@ -555,15 +598,55 @@ fun CommentsSheet(state: CommentsState, onSeek: (Long) -> Unit, onDismiss: () ->
     val listState = rememberLazyListState()
     val nearEnd by remember { derivedStateOf { (listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0) >= listState.layoutInfo.totalItemsCount - 4 } }
     LaunchedEffect(nearEnd, state.items.size) { if (nearEnd && state.hasMore) state.loadMore() }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var draft by remember { mutableStateOf("") }
+    var replyTo by remember { mutableStateOf<CommentItem?>(null) }
+    val toast: (String) -> Unit = { android.widget.Toast.makeText(ctx, it, android.widget.Toast.LENGTH_SHORT).show() }
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Text(
             "Comments" + if (state.total > 0) " · ${Format.count(state.total.toLong())}" else "",
             style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
         )
+        // Write a comment / reply (signed in, like the official app)
+        if (state.createParams != null || replyTo != null) {
+            Column(Modifier.padding(horizontal = 16.dp)) {
+                replyTo?.let { r ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Replying to ${r.author}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
+                        TextButton(onClick = { replyTo = null }) { Text("Cancel") }
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Avatar(Graph.account.session.value?.avatar, 28)
+                    Spacer(Modifier.width(8.dp))
+                    androidx.compose.material3.OutlinedTextField(
+                        value = draft, onValueChange = { draft = it.take(10_000) },
+                        placeholder = { Text(if (replyTo != null) "Add a reply…" else "Add a comment…") },
+                        modifier = Modifier.weight(1f), maxLines = 4, shape = RoundedCornerShape(20.dp),
+                    )
+                    androidx.compose.material3.IconButton(
+                        enabled = draft.isNotBlank() && !state.posting,
+                        onClick = {
+                            state.post(draft.trim(), replyTo) { ok, err ->
+                                if (ok) { draft = ""; replyTo = null; toast("Posted") } else toast(err ?: "Couldn't post")
+                            }
+                        }
+                    ) {
+                        if (state.posting) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                        else Icon(Icons.AutoMirrored.Rounded.Send, "Post")
+                    }
+                }
+            }
+        }
         LazyColumn(state = listState, modifier = Modifier.navigationBarsPadding(), contentPadding = PaddingValues(bottom = 32.dp)) {
             items(state.items, key = { "c" + it.id }) { c ->
                 Column {
-                    CommentRow(c, onSeek)
+                    CommentRow(
+                        c, onSeek,
+                        liked = state.likedOverride[c.id] ?: c.liked,
+                        onLike = if (c.likeAction != null || c.unlikeAction != null) ({ state.toggleLike(c, toast) }) else null,
+                        onReply = if (c.replyParams != null) ({ replyTo = c }) else null,
+                    )
                     if (c.replyCount > 0 && c.loadReplies != null) {
                         TextButton(onClick = { state.toggleReplies(c) }, modifier = Modifier.padding(start = 52.dp)) {
                             Text(if (state.replies.containsKey(c.id)) "Hide replies" else "${c.replyCount} replies")
@@ -593,7 +676,10 @@ fun CommentsSheet(state: CommentsState, onSeek: (Long) -> Unit, onDismiss: () ->
 private val timestampRegex = Regex("\\b(?:(\\d{1,2}):)?(\\d{1,2}):(\\d{2})\\b")
 
 @Composable
-private fun CommentRow(c: CommentItem, onSeek: (Long) -> Unit) {
+private fun CommentRow(
+    c: CommentItem, onSeek: (Long) -> Unit,
+    liked: Boolean = c.liked, onLike: (() -> Unit)? = null, onReply: (() -> Unit)? = null,
+) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Avatar(c.authorAvatar, 32)
         Spacer(Modifier.width(12.dp))
@@ -623,9 +709,22 @@ private fun CommentRow(c: CommentItem, onSeek: (Long) -> Unit) {
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
-                Icon(Icons.Rounded.ThumbUp, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (c.likes > 0) Text(" ${Format.count(c.likes.toLong())}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                val likeTint = if (liked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                val shownLikes = c.likes + (if (liked && !c.liked) 1 else 0) - (if (!liked && c.liked) 1 else 0)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.clip(RoundedCornerShape(50)).clickable(enabled = onLike != null) { onLike?.invoke() }.padding(4.dp)
+                ) {
+                    Icon(Icons.Rounded.ThumbUp, if (liked) "Unlike" else "Like", Modifier.size(14.dp), tint = likeTint)
+                    if (shownLikes > 0) Text(" ${Format.count(shownLikes.toLong())}", style = MaterialTheme.typography.labelSmall, color = likeTint)
+                }
                 if (c.hearted) Icon(Icons.Rounded.Favorite, "Hearted by creator", Modifier.padding(start = 10.dp).size(14.dp), tint = Color(0xFFFF3B5C))
+                if (onReply != null) {
+                    Text(
+                        "Reply", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 12.dp).clip(RoundedCornerShape(50)).clickable(onClick = onReply).padding(horizontal = 6.dp, vertical = 4.dp)
+                    )
+                }
             }
         }
     }

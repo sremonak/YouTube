@@ -33,6 +33,9 @@ import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.ThumbUp
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.Album
+import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Subscriptions
 import androidx.compose.material.icons.rounded.WatchLater
@@ -244,6 +247,10 @@ private fun AccountFeed.icon(): ImageVector = when (this) {
     AccountFeed.WATCH_LATER -> Icons.Rounded.WatchLater
     AccountFeed.HISTORY -> Icons.Rounded.History
     AccountFeed.PLAYLISTS -> Icons.AutoMirrored.Rounded.PlaylistPlay
+    AccountFeed.MUSIC_LIKED -> Icons.Rounded.Favorite
+    AccountFeed.MUSIC_PLAYLISTS -> Icons.Rounded.LibraryMusic
+    AccountFeed.MUSIC_ALBUMS -> Icons.Rounded.Album
+    AccountFeed.MUSIC_ARTISTS -> Icons.Rounded.Person
 }
 
 @Composable

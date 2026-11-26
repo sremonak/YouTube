@@ -42,8 +42,16 @@ object YtComments {
         val res = api.webPost("next", buildJsonObject { put("context", api.webContext()); put("continuation", token) })
 
         val entities = HashMap<String, JsonObject>()
+        val surfaces = HashMap<String, JsonObject>()
+        val states = HashMap<String, JsonObject>()
         ((res.obj("frameworkUpdates").obj("entityBatchUpdate")["mutations"]) as? JsonArray)?.forEach { m ->
-            val payload = (m as? JsonObject)?.obj("payload")?.obj("commentEntityPayload") ?: return@forEach
+            val mo = m as? JsonObject ?: return@forEach
+            val key = mo.str("entityKey")
+            if (key != null) {
+                mo.obj("payload")["engagementToolbarSurfaceEntityPayload"]?.let { surfaces[key] = it as JsonObject }
+                mo.obj("payload")["engagementToolbarStateEntityPayload"]?.let { states[key] = it as JsonObject }
+            }
+            val payload = mo.obj("payload").obj("commentEntityPayload").takeIf { it.isNotEmpty() } ?: return@forEach
             val id = payload.obj("properties").str("commentId") ?: return@forEach
             entities[id] = payload
         }
@@ -68,20 +76,27 @@ object YtComments {
                         val vm = thread.obj("commentViewModel").obj("commentViewModel")
                         val repliesToken = (thread.obj("replies").obj("commentRepliesRenderer")["contents"] as? JsonArray)
                             ?.firstNotNullOfOrNull { findToken(it) }
-                        build(vm, entities, repliesToken)?.let(items::add)
+                        build(vm, entities, repliesToken, surfaces, states)?.let(items::add)
                     }
-                    o["commentViewModel"] != null -> build(o.obj("commentViewModel"), entities, null)?.let(items::add)
+                    o["commentViewModel"] != null -> build(o.obj("commentViewModel"), entities, null, surfaces, states)?.let(items::add)
                     o["continuationItemRenderer"] != null -> next = findToken(o)
                 }
             }
         }
-        if (items.isEmpty() && next == null && !replies && total <= 0) return CommentsPage(emptyList(), null, 0)
+        val createParams = findFirst(res, "createCommentEndpoint")?.str("createCommentParams")
+        if (items.isEmpty() && next == null && !replies && total <= 0) return CommentsPage(emptyList(), null, 0, createParams = createParams)
         val nextToken = next
         val nextFn: (suspend () -> CommentsPage)? = nextToken?.let { t -> suspend { page(t, replies) } }
-        return CommentsPage(items, nextFn, total)
+        return CommentsPage(items, nextFn, total, createParams = createParams)
     }
 
-    private fun build(vm: JsonObject, entities: Map<String, JsonObject>, repliesToken: String?): CommentItem? {
+    private fun build(
+        vm: JsonObject, entities: Map<String, JsonObject>, repliesToken: String?,
+        surfaces: Map<String, JsonObject> = emptyMap(), states: Map<String, JsonObject> = emptyMap(),
+    ): CommentItem? {
+        val surface = vm.str("toolbarSurfaceKey")?.let { surfaces[it] }
+        val state = vm.str("toolbarStateKey")?.let { states[it] }
+        fun action(cmd: String) = surface?.get(cmd)?.let { findFirst(it, "performCommentActionEndpoint") }?.str("action")
         val id = vm.str("commentId") ?: return null
         val e = entities[id] ?: return null
         val props = e.obj("properties")
@@ -104,6 +119,10 @@ object YtComments {
             verified = author.bool("isVerified") == true,
             byCreator = author.bool("isCreator") == true,
             loadReplies = repliesFn,
+            likeAction = action("likeCommand"),
+            unlikeAction = action("unlikeCommand"),
+            replyParams = surface?.let { findFirst(it, "createCommentReplyEndpoint") }?.str("createReplyParams"),
+            liked = state?.str("likeState") == "TOOLBAR_LIKE_STATE_LIKED",
         )
     }
 

@@ -372,6 +372,7 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
             item { SwitchRow(stringResource(R.string.ui_skip_silence), stringResource(R.string.ui_speeds_through_silent_parts), s.skipSilence) { v -> update { it.copy(skipSilence = v) } } }
             item { SwitchRow(stringResource(R.string.ui_gestures), stringResource(R.string.ui_double_tap_to_seek_hold_for_2_swipe_for), s.gestures) { v -> update { it.copy(gestures = v) } } }
             item { SwitchRow(stringResource(R.string.ui_remember_queue), stringResource(R.string.ui_restore_what_you_were_watching_after_res), s.persistQueue) { v -> update { it.copy(persistQueue = v) } } }
+            item { SwitchRow("Piped / Invidious fallback", "If YouTube blocks your network, play through public privacy servers as a last resort", s.altFrontends) { v -> update { it.copy(altFrontends = v) } } }
             item { SwitchRow("Stable volume", "Evens out loud and quiet videos using YouTube's loudness data", s.stableVolume) { v -> update { it.copy(stableVolume = v) } } }
             item { ClickRow(stringResource(R.string.ui_equalizer_audio_boost), if (s.eqEnabled || s.volumeBoost > 0) "On" else "Off") { showEq = true } }
 

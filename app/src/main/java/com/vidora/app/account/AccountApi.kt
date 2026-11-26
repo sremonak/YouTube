@@ -40,13 +40,17 @@ data class FeedChip(val label: String, val token: String?, val selected: Boolean
 class AccountPage(val page: PageResult, val chips: List<FeedChip>)
 
 /** Account-only feeds of the signed-in user. */
-enum class AccountFeed(val label: String, val browseId: String) {
+enum class AccountFeed(val label: String, val browseId: String, val music: Boolean = false) {
     RECOMMENDED("Recommended for you", "FEwhat_to_watch"),
     SUBSCRIPTIONS("Subscriptions feed", "FEsubscriptions"),
     LIKED("Liked videos", "VLLL"),
     WATCH_LATER("Watch later", "VLWL"),
     HISTORY("Watch history", "FEhistory"),
     PLAYLISTS("Your playlists", "FEplaylist_aggregation"),
+    MUSIC_LIKED("YouTube Music · Liked songs", "FEmusic_liked_videos", music = true),
+    MUSIC_PLAYLISTS("YouTube Music · Library playlists", "FEmusic_liked_playlists", music = true),
+    MUSIC_ALBUMS("YouTube Music · Albums", "FEmusic_liked_albums", music = true),
+    MUSIC_ARTISTS("YouTube Music · Subscribed artists", "FEmusic_library_corpus_track_artists", music = true),
 }
 
 /**
@@ -62,6 +66,30 @@ class AccountApi {
     suspend fun webPost(endpoint: String, body: JsonObject): JsonObject = post(endpoint, body, requireAuth = false)
 
     suspend fun webContext(): JsonObject = context()
+
+    // ------------------------------------------------------------------ comments (signed in)
+
+    /** Like / unlike a comment with YouTube's action token. */
+    suspend fun commentAction(action: String) {
+        post("comment/perform_comment_action", buildJsonObject {
+            put("context", context()); put("actions", JsonArray(listOf(JsonPrimitive(action))))
+        })
+    }
+
+    /** Posts a top-level comment; returns true when YouTube accepted it. */
+    suspend fun createComment(params: String, text: String): Boolean {
+        val res = post("comment/create_comment", buildJsonObject {
+            put("context", context()); put("createCommentParams", params); put("commentText", text)
+        })
+        return res["actionResult"]?.toString()?.contains("STATUS_SUCCEEDED") != false
+    }
+
+    suspend fun replyComment(params: String, text: String): Boolean {
+        val res = post("comment/create_comment_reply", buildJsonObject {
+            put("context", context()); put("createReplyParams", params); put("commentText", text)
+        })
+        return res["actionResult"]?.toString()?.contains("STATUS_SUCCEEDED") != false
+    }
 
     private suspend fun post(endpoint: String, body: JsonObject, requireAuth: Boolean = true): JsonObject =
         post(endpoint, body, requireAuth, WEB_HOST)
@@ -199,6 +227,10 @@ class AccountApi {
 
     /** A feed's first page together with YouTube's own chips for it (Home: All / Music / Mixes / Gaming…). */
     suspend fun feedWithChips(feed: AccountFeed): AccountPage {
+        if (feed.music) {
+            val res = post("browse", buildJsonObject { put("context", context(music = true)); put("browseId", feed.browseId) }, true, MUSIC_HOST)
+            return AccountPage(toPage(res, music = true), emptyList())
+        }
         val res = post("browse", buildJsonObject { put("context", context()); put("browseId", feed.browseId) })
         return AccountPage(toPage(res), collectChips(res))
     }

@@ -171,6 +171,17 @@ class ContentRepository {
                     if (withAccount || last === anonError) last = t
                 }
             }
+            if (Graph.settingsState.value.altFrontends) {
+                videoId(url)?.let { id ->
+                    try {
+                        _loadStatus.value = "Trying Piped / Invidious…"
+                        return AltFrontends.load(id, url).details
+                    } catch (t: Throwable) {
+                        if (t is kotlinx.coroutines.CancellationException) throw t
+                        android.util.Log.w("ContentRepository", "Piped/Invidious failed", t)
+                    }
+                }
+            }
             throw StreamBlockedException(explain(anonError, last, signed), anonError)
         } finally {
             _loadStatus.value = null
@@ -359,6 +370,14 @@ class ContentRepository {
      * parser — which also uses the account when signed in.
      */
     suspend fun comments(url: String): CommentsPage = io {
+        // Signed in: YouTube's own comments API first, so like / reply / write work like the app.
+        if (Graph.account.isSignedIn) {
+            videoId(url)?.let { id ->
+                runCatching { withTimeout(15_000) { YtComments.first(id) } }
+                    .onFailure { if (it is kotlinx.coroutines.CancellationException && it !is kotlinx.coroutines.TimeoutCancellationException) throw it }
+                    .getOrNull()?.let { return@io it }
+            }
+        }
         val npe = runCatching {
             withTimeout(15_000) { runInterruptible { authFallback { CommentsInfo.getInfo(service, url) } } }
         }.onFailure { if (it is kotlinx.coroutines.CancellationException && it !is kotlinx.coroutines.TimeoutCancellationException) throw it }

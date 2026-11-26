@@ -99,6 +99,7 @@ data class AppSettings(
     val downloadCutSponsors: Boolean = false,
     val downloadEmbedMetadata: Boolean = true,
     val downloadSubtitles: Boolean = false,
+    val altFrontends: Boolean = true,
     val downloadConnections: Int = 3,
     val returnDislike: Boolean = true,
     val deArrow: Boolean = false,
@@ -164,6 +165,7 @@ class SettingsRepository(private val context: Context) {
         val downloadCutSponsors = booleanPreferencesKey("dl_cut_sponsors")
         val downloadEmbedMetadata = booleanPreferencesKey("dl_metadata")
         val downloadSubtitles = booleanPreferencesKey("dl_subs")
+        val altFrontends = booleanPreferencesKey("alt_frontends")
         val downloadConnections = intPreferencesKey("dl_connections")
         val returnDislike = booleanPreferencesKey("ryd")
         val deArrow = booleanPreferencesKey("dearrow")
@@ -230,6 +232,7 @@ class SettingsRepository(private val context: Context) {
             downloadCutSponsors = this[K.downloadCutSponsors] ?: d.downloadCutSponsors,
             downloadEmbedMetadata = this[K.downloadEmbedMetadata] ?: d.downloadEmbedMetadata,
             downloadSubtitles = this[K.downloadSubtitles] ?: d.downloadSubtitles,
+            altFrontends = this[K.altFrontends] ?: d.altFrontends,
             downloadConnections = this[K.downloadConnections] ?: d.downloadConnections,
             returnDislike = this[K.returnDislike] ?: d.returnDislike,
             deArrow = this[K.deArrow] ?: d.deArrow,
@@ -295,6 +298,7 @@ class SettingsRepository(private val context: Context) {
             p[K.downloadCutSponsors] = s.downloadCutSponsors
             p[K.downloadEmbedMetadata] = s.downloadEmbedMetadata
             p[K.downloadSubtitles] = s.downloadSubtitles
+            p[K.altFrontends] = s.altFrontends
             p[K.downloadConnections] = s.downloadConnections
             p[K.returnDislike] = s.returnDislike
             p[K.deArrow] = s.deArrow

@@ -42,7 +42,11 @@ import java.util.concurrent.TimeUnit
 class NewVideosWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
-        val subs = Graph.library.data.value.subscriptions.take(150)
+        // Local subscriptions plus, when signed in, the YouTube account's subscriptions (bell parity).
+        val accountSubs = if (Graph.account.isSignedIn) {
+            runCatching { Graph.accountApi.subscriptions().map { it.url } }.getOrDefault(emptyList())
+        } else emptyList()
+        val subs = (Graph.library.data.value.subscriptions.map { it.url } + accountSubs).distinct().take(200)
         if (subs.isEmpty()) return@withContext Result.success()
         val prefs = applicationContext.getSharedPreferences("new_videos", Context.MODE_PRIVATE)
         val gate = Semaphore(6)
@@ -50,7 +54,7 @@ class NewVideosWorker(context: Context, params: WorkerParameters) : CoroutineWor
             async {
                 gate.withPermit {
                     runCatching {
-                        val id = resolveChannelId(ch.url, prefs) ?: return@runCatching emptyList<VideoItem>()
+                        val id = resolveChannelId(ch, prefs) ?: return@runCatching emptyList<VideoItem>()
                         val videos = RssFeed.fetch(id)
                         val newest = videos.maxOfOrNull { it.uploadedEpoch } ?: return@runCatching emptyList<VideoItem>()
                         val lastSeen = prefs.getLong("seen_$id", 0L)
