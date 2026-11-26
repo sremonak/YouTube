@@ -158,7 +158,7 @@ fun probeClient(c: Client, videoId: String, visitor: String?, sts: Int?): String
                 sb.append(" rangeParam=" + runCatching { http.newCall(okhttp3.Request.Builder().url("$u&range=0-4095").header("User-Agent", c.ua).build()).execute().use { "${it.code}" } }.getOrElse { "ERR" })
                 sb.append(" ffUA=" + rangeStatus(u, FIREFOX, 0))
                 sb.append(" post=" + runCatching { http.newCall(okhttp3.Request.Builder().url("$u&rn=1").header("User-Agent", c.ua).post(byteArrayOf(0x78, 0).toRequestBody()).build()).execute().use { "${it.code}" } }.getOrElse { "ERR" })
-                sb.append(" h1=" + rangeStatusH1(u, c.ua, 0))
+                sb.append(" sChLen=${sigChallenge?.length} sigLen=${sigs[sigChallenge]?.length} nCh=$nChallenge nRes=${ns[nChallenge]}")
                 sb.append(" noSig=" + rangeStatus(u.replace(Regex("&sig=[^&]*"), ""), c.ua, 0))
             }
         }

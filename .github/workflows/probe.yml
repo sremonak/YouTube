@@ -56,7 +56,18 @@ jobs:
           t('tvUA', {**H, 'User-Agent': 'Mozilla/5.0 (SMART-TV; Linux; Tizen 2.4.0) AppleWebKit/538.1 (KHTML, like Gecko) Version/2.4.0 TV Safari/538.1'})
           t('onlyUA+Range', {'User-Agent': H['User-Agent'], 'Range': H['Range']})
           t('onlyRange', {'Range': H['Range']})
-          print('keys=', ','.join(k.split('=')[0] for k in path.split('?',1)[1].split('&')))
+          import urllib.parse, subprocess
+          q = dict(urllib.parse.parse_qsl(path.split('?',1)[1]))
+          print('\nDL: n=%s siglen=%d sig=%s lsiglen=%d' % (q.get('n'), len(q.get('sig','')), q.get('sig','')[:12], len(q.get('lsig',''))))
+          for label, extra in (('g-cached', []), ('g-nocache', ['--no-cache-dir'])):
+              g = subprocess.run(['yt-dlp', '-g', '-f', '140', *extra, '--extractor-args', 'youtube:player_client=tv_samsung', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'], capture_output=True, text=True).stdout.strip().splitlines()
+              if not g: print(label, 'no url'); continue
+              gq = dict(urllib.parse.parse_qsl(g[0].split('?',1)[1]))
+              try:
+                  st = urllib.request.urlopen(urllib.request.Request(g[0], headers={'Range': 'bytes=0-4095'})).status
+              except Exception as e:
+                  st = getattr(e, 'code', e)
+              print('\n%s: status=%s n=%s siglen=%d sig=%s' % (label, st, gq.get('n'), len(gq.get('sig','')), gq.get('sig','')[:12]))
           PY
           rp=$(cat /tmp/replay.txt | sed 's/%/%25/g' | tr '\n' '\001' | sed 's/\x01/%0A/g')
           echo "::notice title=yt-dlp replay tv_samsung 140::$rp"
