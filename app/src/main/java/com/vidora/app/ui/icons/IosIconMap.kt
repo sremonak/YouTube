@@ -27,6 +27,8 @@ import androidx.compose.material.icons.rounded.Audiotrack as MRAudiotrack
 import androidx.compose.material.icons.rounded.AutoAwesome as MRAutoAwesome
 import androidx.compose.material.icons.rounded.Bedtime as MRBedtime
 import androidx.compose.material.icons.rounded.BrightnessMedium as MRBrightnessMedium
+import androidx.compose.material.icons.rounded.Cast as MRCast
+import androidx.compose.material.icons.rounded.CastConnected as MRCastConnected
 import androidx.compose.material.icons.rounded.Check as MRCheck
 import androidx.compose.material.icons.rounded.CheckCircle as MRCheckCircle
 import androidx.compose.material.icons.rounded.Close as MRClose
@@ -117,6 +119,8 @@ val Icons.Rounded.Audiotrack: ImageVector get() = if (IconStyle.ios) IosGlyphs.m
 val Icons.Rounded.AutoAwesome: ImageVector get() = if (IconStyle.ios) IosGlyphs.sparkles else Icons.Rounded.MRAutoAwesome
 val Icons.Rounded.Bedtime: ImageVector get() = if (IconStyle.ios) IosGlyphs.moonFill else Icons.Rounded.MRBedtime
 val Icons.Rounded.BrightnessMedium: ImageVector get() = if (IconStyle.ios) IosGlyphs.sunMaxFill else Icons.Rounded.MRBrightnessMedium
+val Icons.Rounded.Cast: ImageVector get() = if (IconStyle.ios) IosGlyphs.tv else Icons.Rounded.MRCast
+val Icons.Rounded.CastConnected: ImageVector get() = if (IconStyle.ios) IosGlyphs.tvFill else Icons.Rounded.MRCastConnected
 val Icons.Rounded.Check: ImageVector get() = if (IconStyle.ios) IosGlyphs.checkmark else Icons.Rounded.MRCheck
 val Icons.Rounded.CheckCircle: ImageVector get() = if (IconStyle.ios) IosGlyphs.checkmarkCircleFill else Icons.Rounded.MRCheckCircle
 val Icons.Rounded.Close: ImageVector get() = if (IconStyle.ios) IosGlyphs.xmark else Icons.Rounded.MRClose

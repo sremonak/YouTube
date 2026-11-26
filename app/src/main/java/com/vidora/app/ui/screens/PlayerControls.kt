@@ -38,6 +38,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import com.vidora.app.ui.icons.KeyboardArrowRight
+import com.vidora.app.ui.icons.Cast
+import com.vidora.app.ui.icons.CastConnected
 import com.vidora.app.ui.icons.QueueMusic
 import com.vidora.app.ui.icons.Audiotrack
 import com.vidora.app.ui.icons.Bedtime
@@ -242,6 +244,11 @@ internal fun ProPlayerControls(
                         GlassIconButton(Icons.Rounded.LockOpen, "Lock controls") { onLockChange(true); touch() }
                         Spacer(Modifier.width(6.dp))
                     }
+                    if (com.vidora.app.player.CastManager.available) {
+                        val castingTo by com.vidora.app.player.CastManager.castingTo.collectAsState()
+                        GlassIconButton(if (castingTo != null) Icons.Rounded.CastConnected else Icons.Rounded.Cast, "Cast to TV") { openSheet(Sheet.CAST); touch() }
+                        Spacer(Modifier.width(6.dp))
+                    }
                     GlassIconButton(Icons.Rounded.Settings, "Player settings") { openSheet(Sheet.SETTINGS); touch() }
                 }
 
@@ -258,6 +265,7 @@ internal fun ProPlayerControls(
                         Box(
                             Modifier.size((if (fullscreen) 76 else 64).dp * playScale).glassOverlay(CircleShape, alpha = 0.42f)
                                 .clickable {
+                                    if (com.vidora.app.player.CastManager.isCasting) { openSheet(Sheet.CAST); return@clickable }
                                     if (ended) Graph.player.seekTo(0)
                                     Graph.player.togglePlay(); touch()
                                 },

@@ -1,5 +1,7 @@
 package com.vidora.app.ui.screens
 
+import com.vidora.app.ui.theme.glassOverlay
+import androidx.compose.foundation.border
 import androidx.compose.ui.res.stringResource
 import com.vidora.app.R
 import android.view.ViewGroup
@@ -166,7 +168,12 @@ fun ShortsScreen(nav: NavHostController, actions: VideoActions) {
                 ShortOverlay(item, if (active) state.details?.likes ?: -1 else -1, actions, Modifier.align(Alignment.BottomStart))
             }
         }
-        IconButton(onClick = { nav.popBackStack() }, modifier = Modifier.statusBarsPadding().padding(4.dp)) {
+        IconButton(
+            onClick = { nav.popBackStack() },
+            modifier = Modifier.statusBarsPadding().padding(8.dp).size(42.dp)
+                .glassOverlay(androidx.compose.foundation.shape.CircleShape, alpha = 0.32f)
+                .border(0.7.dp, Color.White.copy(alpha = 0.22f), androidx.compose.foundation.shape.CircleShape)
+        ) {
             Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back", tint = Color.White)
         }
         // Progress line
@@ -226,7 +233,14 @@ private fun ShortOverlay(item: VideoItem, likes: Long, actions: VideoActions, mo
 @Composable
 private fun ShortAction(icon: ImageVector, label: String, onClick: () -> Unit) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable(onClick = onClick).padding(4.dp)) {
-        Icon(icon, label, tint = Color.White, modifier = Modifier.size(30.dp))
+        // Frosted-glass bubble behind each action, like iOS controls over video.
+        Box(
+            Modifier.size(50.dp)
+                .glassOverlay(androidx.compose.foundation.shape.CircleShape, alpha = 0.30f)
+                .border(0.7.dp, Color.White.copy(alpha = 0.22f), androidx.compose.foundation.shape.CircleShape),
+            contentAlignment = Alignment.Center,
+        ) { Icon(icon, label, tint = Color.White, modifier = Modifier.size(26.dp)) }
+        Spacer(Modifier.height(4.dp))
         Text(label, color = Color.White, style = MaterialTheme.typography.labelSmall)
     }
 }

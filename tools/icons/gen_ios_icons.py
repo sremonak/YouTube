@@ -86,6 +86,8 @@ MAP = {
  'rounded.SkipPrevious': 'backward_end_fill',
  'rounded.SlowMotionVideo': 'play_circle_fill',
  'rounded.Speed': 'speedometer',
+ 'rounded.Cast': 'tv',
+ 'rounded.CastConnected': 'tv_fill',
  'rounded.Subscriptions': 'rectangle_stack_fill',
  'rounded.ThumbDown': 'hand_thumbsdown',
  'rounded.ThumbUp': 'hand_thumbsup',

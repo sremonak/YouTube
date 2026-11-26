@@ -6,6 +6,7 @@ import android.os.Build
 import android.util.LruCache
 import com.vidora.app.Graph
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -119,10 +120,24 @@ class ContentRepository {
                 if (now - time < 90 * 60_000) return@io details
             }
         }
-        val details = loadStream(url)
-        streamCache.put(url, now to details)
-        details
+        // Share one extraction between a touch-prefetch / next-video prefetch and the real tap.
+        val job = synchronized(inFlight) {
+            inFlight[url] ?: Graph.appScope.async(Dispatchers.IO) {
+                try {
+                    loadStream(url).also { streamCache.put(url, System.currentTimeMillis() to it) }
+                } finally {
+                    synchronized(inFlight) { inFlight.remove(url) }
+                }
+            }.also { inFlight[url] = it }
+        }
+        job.await()
     }
+
+    private val inFlight = HashMap<String, kotlinx.coroutines.Deferred<StreamDetails>>()
+
+    /** True when [url]'s streams are already resolved (used by the start-time metric). */
+    fun isStreamCached(url: String): Boolean =
+        streamCache.get(url)?.let { System.currentTimeMillis() - it.first < 90 * 60_000 } == true
 
     /** Until when anonymous extraction is known to be bot-blocked on this network. */
     @Volatile private var anonBlockedUntil = 0L

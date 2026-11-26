@@ -103,6 +103,7 @@ class VidoraApp : Application(), SingletonImageLoader.Factory {
         Graph.appScope.launch { runCatching { Graph.settings.migrateDesign() } }
         NewVideosWorker.schedule(this)
         com.vidora.app.util.UpdateWorker.schedule(this)
+        android.os.Handler(mainLooper).postDelayed({ com.vidora.app.player.CastManager.init(this) }, 1500)
         if (com.vidora.app.remote.NowPlayingWidget.hasWidgets(this)) com.vidora.app.remote.NowPlayingWidget.observe(this)
         createChannels()
     }
@@ -121,7 +122,7 @@ class VidoraApp : Application(), SingletonImageLoader.Factory {
     // Coil 3: OkHttp fetcher shares the app's connection pool; the default cache strategy ignores
     // Cache-Control headers (= Coil 2's respectCacheHeaders(false)), so thumbnails stay cached offline.
     override fun newImageLoader(context: PlatformContext): ImageLoader = ImageLoader.Builder(context)
-        .components { add(OkHttpNetworkFetcherFactory(callFactory = { Graph.http })) }
+        .components { add(OkHttpNetworkFetcherFactory(callFactory = { imageClient })) }
         .crossfade(true)
         .memoryCache { MemoryCache.Builder().maxSizePercent(context, 0.20).build() }
         .diskCache {
@@ -131,6 +132,23 @@ class VidoraApp : Application(), SingletonImageLoader.Factory {
                 .build()
         }
         .build()
+
+    /** Image client: with Data Saver on mobile data, YouTube thumbnails are fetched at 320×180. */
+    private val imageClient by lazy {
+        Graph.http.newBuilder().addInterceptor { chain ->
+            val req = chain.request()
+            val url = req.url
+            if (url.host == "i.ytimg.com" && com.vidora.app.player.DataSaver.active()) {
+                val small = Regex("/(hq720|maxresdefault|sddefault|hqdefault|hq2|hq1|hq3)(_\\w+)?\\.(jpg|webp)$")
+                val path = url.encodedPath
+                if (small.containsMatchIn(path)) {
+                    val newUrl = url.newBuilder().encodedPath(path.replace(small, "/mqdefault.\$3")).query(null).build()
+                    return@addInterceptor chain.proceed(req.newBuilder().url(newUrl).build())
+                }
+            }
+            chain.proceed(req)
+        }.build()
+    }
 
     companion object {
         const val CHANNEL_DOWNLOADS = "downloads"

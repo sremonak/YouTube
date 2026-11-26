@@ -19,6 +19,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import com.vidora.app.player.touchPrefetch
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -162,7 +163,8 @@ fun VideoCard(original: VideoItem, actions: VideoActions, modifier: Modifier = M
         )
         return
     }
-    val clickModifier = modifier.dpadFocusRing().combinedClickable(onClick = { actions.open(original) }, onLongClick = { menu = true })
+    val clickModifier = modifier.dpadFocusRing().then(if (original.isShort) Modifier else Modifier.touchPrefetch(original))
+        .combinedClickable(onClick = { actions.open(original) }, onLongClick = { menu = true })
 
     if (compact) {
         Row(clickModifier.padding(horizontal = 12.dp, vertical = 6.dp)) {

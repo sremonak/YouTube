@@ -76,14 +76,18 @@ fun LoginScreen(nav: NavHostController) {
     var started by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    Column(Modifier.fillMaxSize()) {
+    com.vidora.app.ui.theme.GlassPage(header = {
         TopAppBar(
             title = { Text(if (started) "Sign in with Google" else "Sign in") },
             navigationIcon = { IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") } },
-            colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+            colors = com.vidora.app.ui.theme.glassBarColors()
         )
-        if (!started) Intro(onContinue = { started = true }, onCookiesPasted = { finishWithCookies(it, nav, context, scope) })
-        else SignInWebView(nav)
+    }) {
+        Column(Modifier.fillMaxSize()) {
+            com.vidora.app.ui.theme.TopChromeSpacer()
+            if (!started) Intro(onContinue = { started = true }, onCookiesPasted = { finishWithCookies(it, nav, context, scope) })
+            else SignInWebView(nav)
+        }
     }
 }
 

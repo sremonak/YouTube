@@ -21,13 +21,7 @@ object AdaptiveManifest {
     private fun AudioOption.usable() =
         initRange != null && indexRange != null && !codec.isNullOrBlank() && url.isNotBlank()
 
-    private fun family(codec: String?) = when {
-        codec == null -> "?"
-        codec.startsWith("avc") -> "avc"
-        codec.startsWith("vp9") || codec.startsWith("vp09") -> "vp9"
-        codec.startsWith("av01") -> "av1"
-        else -> codec.substringBefore('.')
-    }
+    private fun family(codec: String?) = CodecSupport.family(codec)
 
     /**
      * @param maxHeight upper limit chosen by the user (Wi-Fi quality / mobile-data cap)
@@ -38,12 +32,21 @@ object AdaptiveManifest {
         allAudios: List<AudioOption>,
         durationSec: Long,
         maxHeight: Int,
+        /** Codec families best-first (see [CodecSupport.preference]); default H.264 then VP9. */
+        families: List<String> = listOf("avc", "vp9"),
+        /** Data Saver: only the smallest audio stream. */
+        lowAudio: Boolean = false,
     ): Plan? {
         if (durationSec <= 0) return null
         val usableVideos = allVideos.filter { it.usable() }
         if (usableVideos.isEmpty()) return null
-        // One codec family only: H.264 is hardware-decoded everywhere, VP9 is the fallback.
-        val fam = listOf("avc", "vp9").firstOrNull { f -> usableVideos.any { family(it.codec) == f } } ?: return null
+        // One codec family only. An efficient family (AV1/VP9) is used only when it reaches the
+        // same top resolution as H.264 would, so preferring it never lowers the quality.
+        fun top(f: String) = usableVideos.filter { family(it.codec) == f && it.height <= maxHeight }.maxOfOrNull { it.height }
+            ?: if (usableVideos.any { family(it.codec) == f }) 0 else -1
+        val reference = top("avc").takeIf { it >= 0 } ?: top("vp9")
+        val fam = families.firstOrNull { f -> top(f) >= 0 && top(f) >= reference }
+            ?: families.firstOrNull { f -> top(f) >= 0 } ?: return null
         val videos = usableVideos
             .filter { family(it.codec) == fam }
             .let { list -> list.filter { it.height <= maxHeight }.ifEmpty { listOf(list.minBy { it.height }) } }
@@ -55,6 +58,7 @@ object AdaptiveManifest {
             .let { l -> l.filter { it.mime == l.firstOrNull()?.mime } }
             .distinctBy { it.itag }
             .sortedBy { it.bitrateKbps }
+            .let { if (lowAudio) it.take(1) else it }
         if (videos.isEmpty() || audios.isEmpty()) return null
         return Plan(build(videos, audios, durationSec), videos, audios)
     }

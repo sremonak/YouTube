@@ -136,7 +136,7 @@ import com.vidora.app.ui.components.VideoCard
 import com.vidora.app.util.Format
 import kotlinx.coroutines.delay
 
-internal enum class Sheet { NONE, QUALITY, SPEED, SLEEP, QUEUE, CAPTIONS, AUDIO, EQ, COMMENTS, PLAYLIST, STATS, SETTINGS, CHAPTERS }
+internal enum class Sheet { NONE, QUALITY, SPEED, SLEEP, QUEUE, CAPTIONS, AUDIO, EQ, COMMENTS, PLAYLIST, STATS, SETTINGS, CHAPTERS, CAST }
 
 @Composable
 fun PlayerScreen(
@@ -262,6 +262,7 @@ private fun LegacySheets(sheet: Sheet, state: PlayerUiState, actions: VideoActio
         Sheet.SPEED -> SpeedSheet(state.speed, onDismiss)
         Sheet.SLEEP -> SleepSheet(state, onDismiss)
         Sheet.STATS -> StatsSheet(onDismiss)
+        Sheet.CAST -> CastSheet(onDismiss)
         Sheet.QUEUE -> QueueSheet(state, actions, onDismiss)
         Sheet.CAPTIONS -> CaptionsSheet(state, onDismiss)
         Sheet.AUDIO -> AudioTrackSheet(state, onDismiss)

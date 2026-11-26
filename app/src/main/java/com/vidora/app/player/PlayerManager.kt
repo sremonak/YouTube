@@ -91,6 +91,13 @@ data class PlayerUiState(
     val slowNetworkAudio: Boolean = false,
     /** Estimated network speed (kbps) from ExoPlayer's bandwidth meter. */
     val bandwidthKbps: Long = 0,
+    /** Start-time metric: tap → first frame (ms), and how much of it was stream extraction. */
+    val startupMs: Long = 0,
+    val extractMs: Long = 0,
+    /** The streams were already resolved (touch- or next-video prefetch) when the video was opened. */
+    val startPrefetched: Boolean = false,
+    /** Codec of the video being decoded ("av01.0.08M.08", "vp09…", "avc1…"). */
+    val playingCodec: String? = null,
 )
 
 /** "Auto · 480p", "1080p60", "Audio only (slow network)" … for chips and the settings sheet. */
@@ -145,8 +152,12 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
         .readTimeout(30, TimeUnit.SECONDS)
         .build()
 
-    private val httpFactory = OkHttpDataSource.Factory(streamClient)
-    private val dataSourceFactory = DefaultDataSource.Factory(context, httpFactory)
+    private val networkFactory = OkHttpDataSource.Factory(streamClient)
+    private val cachedFactory by lazy { MediaCache.factory(context, networkFactory) }
+    /** Segment cache in front of the network (Settings → Video cache). Live streams bypass it. */
+    private val httpFactory: androidx.media3.datasource.DataSource.Factory
+        get() = if (settings.mediaCache && _state.value.current?.isLive != true) cachedFactory else networkFactory
+    private val dataSourceFactory = DefaultDataSource.Factory(context, networkFactory)
 
     /** Shared bandwidth estimate — learned across videos, used for the first quality pick. */
     private val bandwidthMeter = DefaultBandwidthMeter.getSingletonInstance(context)
@@ -245,8 +256,8 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
             override fun onVideoInputFormatChanged(
                 eventTime: AnalyticsListener.EventTime, format: Format, decoderReuseEvaluation: DecoderReuseEvaluation?,
             ) {
-                if (format.height > 0 && format.height != _state.value.playingHeight) {
-                    _state.value = _state.value.copy(playingHeight = format.height)
+                if (format.height > 0 && (format.height != _state.value.playingHeight || format.codecs != _state.value.playingCodec)) {
+                    _state.value = _state.value.copy(playingHeight = format.height, playingCodec = format.codecs)
                 }
             }
         })
@@ -266,7 +277,14 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
                     Player.STATE_BUFFERING -> if (bufferingSince == 0L) bufferingSince = System.currentTimeMillis()
                     Player.STATE_READY -> {
                         bufferingSince = 0
-                        if (!startedOnce) { startedOnce = true; prefetchNext() }
+                        if (!startedOnce) {
+                            startedOnce = true
+                            if (tapAt > 0) {
+                                _state.value = _state.value.copy(startupMs = android.os.SystemClock.elapsedRealtime() - tapAt)
+                                tapAt = 0
+                            }
+                            prefetchNext()
+                        }
                     }
                     else -> bufferingSince = 0
                 }
@@ -318,7 +336,10 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
         persistPosition()
         skippedSegments.clear()
         resetNetworkAdaptation()
+        tapAt = android.os.SystemClock.elapsedRealtime()
+        val prefetched = Graph.repository.isStreamCached(item.url)
         _state.value = _state.value.copy(
+            startupMs = 0, extractMs = 0, startPrefetched = prefetched, playingCodec = null,
             current = item, details = null, loading = true, error = null,
             queue = newQueue, queueIndex = index, localFile = false, segments = emptyList(),
             quality = null, audio = null, subtitle = null, audioTrackId = null, restored = false,
@@ -332,6 +353,8 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
         loadJob = scope.launch(Dispatchers.Main) {
             try {
                 val details = Graph.repository.stream(item.url)
+                val extractMs = android.os.SystemClock.elapsedRealtime() - tapAt
+                _state.value = _state.value.copy(extractMs = extractMs)
                 val merged = details.item.copy(
                     thumbnail = details.item.thumbnail ?: item.thumbnail,
                     uploaderAvatar = details.item.uploaderAvatar ?: item.uploaderAvatar,
@@ -610,7 +633,7 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
         exoPlayer.playbackParameters = PlaybackParameters(_state.value.speed)
         exoPlayer.repeatMode = if (_state.value.loop) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
         exoPlayer.prepare()
-        exoPlayer.playWhenReady = autoPlay
+        exoPlayer.playWhenReady = autoPlay && !CastManager.isCasting
     }
 
     /** Side-loaded WebVTT captions, optionally auto-translated by YouTube (tlang). */
@@ -649,6 +672,12 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
         val candidates = all.filter { it.height <= preferredHeight }.ifEmpty { listOf(all.minBy { it.height }) }
         val bestHeight = candidates.maxOf { it.height }
         val atHeight = candidates.filter { it.height == bestHeight }
+        if (settings.efficientCodecs) {
+            for (fam in CodecSupport.preference(true, bestHeight)) {
+                if (fam == "avc") break
+                atHeight.firstOrNull { it.videoOnly && CodecSupport.family(it.codec) == fam }?.let { return it }
+            }
+        }
         return atHeight.firstOrNull { it.codec?.startsWith("avc") == true && it.videoOnly }
             ?: atHeight.firstOrNull { it.videoOnly && it.codec?.startsWith("vp9") == true }
             ?: atHeight.firstOrNull { !it.videoOnly }
@@ -659,7 +688,7 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
         val preferred = if (preferMp4) list.filter { it.suffix == "m4a" } else list.filter { it.suffix == "webm" }
         val pool = preferred.ifEmpty { list }
         // On a slow link the ~50 kbps stream starts several times faster than the 128–160 kbps one.
-        return if (slow) pool.minBy { it.bitrateKbps } else pool.maxBy { it.bitrateKbps }
+        return if (slow || DataSaver.active()) pool.minBy { it.bitrateKbps } else pool.maxBy { it.bitrateKbps }
     }
 
     // ------------------------------------------------------------------ network-aware quality
@@ -672,6 +701,8 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
     private var bufferingSince = 0L
     private var lastDownshiftAt = 0L
     private var startedOnce = false
+    /** elapsedRealtime of the tap that opened the current video (0 = not measuring). */
+    private var tapAt = 0L
     private var prefetchJob: Job? = null
 
     private fun resetNetworkAdaptation() {
@@ -694,8 +725,10 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
 
     /** Upper quality limit: user setting, tightened on mobile data. */
     private fun qualityCap(): Int {
-        val cap = settings.defaultQuality
-        return if (settings.mobileQuality > 0 && isMetered()) minOf(cap, settings.mobileQuality) else cap
+        var cap = settings.defaultQuality
+        if (settings.mobileQuality > 0 && isMetered()) cap = minOf(cap, settings.mobileQuality)
+        if (DataSaver.active()) cap = minOf(cap, 360)
+        return cap
     }
 
     /**
@@ -735,8 +768,12 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
     /** Builds an adaptive DASH source from the extracted streams, or null to use progressive streams. */
     private fun adaptiveSource(details: StreamDetails, item: VideoItem, meta: MediaMetadata, trackId: String?): MediaSource? {
         if (!settings.smartQuality || manualQuality || item.isLive || adaptiveFailedFor == details.item.url) return null
-        val plan = AdaptiveManifest.plan(details.videoStreams, details.audioFor(trackId), details.item.duration, qualityCap())
-            ?: return null
+        val cap = qualityCap()
+        val plan = AdaptiveManifest.plan(
+            details.videoStreams, details.audioFor(trackId), details.item.duration, cap,
+            families = CodecSupport.preference(settings.efficientCodecs, cap),
+            lowAudio = DataSaver.active(),
+        ) ?: return null
         return runCatching {
             val manifest = DashManifestParser().parse(
                 Uri.parse("https://www.youtube.com/vidora/${item.url.hashCode()}.mpd"),
@@ -801,7 +838,7 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
 
     /** Resolves the next video's streams in the background so pressing Next starts instantly. */
     private fun prefetchNext() {
-        if (!settings.prefetchNext) return
+        if (!settings.prefetchNext || DataSaver.active()) return
         val s = _state.value
         if (s.localFile) return
         val next = s.queue.getOrNull(s.queueIndex + 1)

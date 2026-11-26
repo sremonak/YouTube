@@ -866,6 +866,12 @@ fun StatsSheet(onDismiss: () -> Unit) {
             add("Dropped frames" to (counters?.let { "${it.droppedBufferCount} / ${it.renderedOutputBufferCount}" } ?: "—"))
             add("Speed" to "${player.playbackParameters.speed}×")
             add("Volume" to "${(player.volume * 100).toInt()} %")
+            val st = com.vidora.app.Graph.player.state.value
+            add("Start time" to (if (st.startupMs > 0) "%.2f s".format(st.startupMs / 1000f) + " (extract %.2f s · buffer %.2f s)".format(st.extractMs / 1000f, (st.startupMs - st.extractMs).coerceAtLeast(0) / 1000f) else "measuring…"))
+            add("Prefetched" to (if (st.startPrefetched) "yes — streams were ready before the tap" else "no"))
+            add("Network" to (if (st.bandwidthKbps > 0) "${st.bandwidthKbps} kbps est." else "—") + (if (com.vidora.app.player.DataSaver.active()) " · Data saver" else ""))
+            add("HW decoders" to com.vidora.app.player.CodecSupport.summary)
+            add("Disk cache" to "%.1f MB used".format(com.vidora.app.player.MediaCache.usedBytes() / 1_048_576f))
         }
     }
     GlassBottomSheet(onDismissRequest = onDismiss) {

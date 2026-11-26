@@ -35,6 +35,12 @@ design — no tracking, everything stored on your device. Signing in with a YouT
 | **Customisation** | Theme (System/Light/Dark/AMOLED black), Material You dynamic colour, 8 accent colours, corner roundness slider, card or compact-list layout, avatars on/off, custom in-app display name, **6 launcher icons × 4 launcher names** switchable from Settings. |
 | **Responsive** | Phones, foldables and tablets: bottom bar on phones, navigation rail + side-by-side player on large screens, adaptive grids, edge-to-edge. |
 | **Open links** | Share any YouTube link to Vidora, or open `youtube.com` / `youtu.be` links with it. |
+| **Glass UI + iPhone icons** | Frosted-glass top bars, bottom bar, mini player, sheets, dialogs and cards (real blur on Android 12+), **iPhone-style icons** everywhere (Framework7 Icons, toggle in Settings → Appearance). |
+| **Fast start** | Touch-prefetch (streams resolve while your finger is still on the card), next-video prefetch, adaptive DASH, a 512 MB **disk cache** of watched segments, **AV1/VP9** when the phone decodes them in hardware, start-time in *Stats for nerds*. |
+| **Data saver** | On mobile data: 360p cap, small thumbnails, low-bitrate audio, no preloading. |
+| **Cast** | Chromecast / Google TV casting with remote controls (needs Google Play services). |
+| **Live About page** | The in-app About page is loaded from [`about/ABOUT.md`](about/ABOUT.md) — edit it on GitHub and every installed app shows the change. |
+| **Auto-updates** | New GitHub releases download in the background and install automatically (Android 12+ silently after the first in-app update). |
 
 ## 🔐 Optional YouTube sign-in
 
@@ -160,6 +166,24 @@ to (your own uploads, Creative Commons, or with the creator's permission) and re
 law in your country.
 
 Licensed under **GPL-3.0** (see `LICENSE`), as required by NewPipe Extractor.
+
+### Licences
+
+- [NewPipe Extractor](https://github.com/TeamNewPipe/NewPipeExtractor) — GPL-3.0
+- [AndroidX Media3 / ExoPlayer](https://github.com/androidx/media), Jetpack Compose, OkHttp, Coil — Apache 2.0
+- [Framework7 Icons](https://github.com/framework7io/framework7-icons) — MIT, © Vladimir Kharlampidi (iPhone-style icons, converted by `tools/icons/gen_ios_icons.py`)
+- SponsorBlock, DeArrow and Return YouTube Dislike data — used through their public APIs
+
+## ✏️ Editing the live About page (from a phone)
+
+1. Open <https://github.com/sremonak/YouTube/blob/main/about/ABOUT.md> in the GitHub app or browser
+   (until the PR is merged, use the `arena/4ab58c16-youtube` branch instead of `main`).
+2. Tap the ✏️ pencil (or ⋯ → *Edit file*), change the text, then tap **Commit changes**.
+3. Open Vidora → Settings → **About** — the new text appears within seconds (pull the refresh icon).
+
+Supported formatting: `# Heading`, `## Sub-heading`, `- bullet`, `1. numbered`, `> note`, `---` line,
+`**bold**`, `*italic*`, `[link text](https://…)` (a link alone on a line becomes a button) and
+`![](https://…image.jpg)` images.
 
 ---
 
