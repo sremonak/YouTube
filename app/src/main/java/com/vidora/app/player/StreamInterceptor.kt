@@ -31,10 +31,16 @@ class StreamInterceptor : Interceptor {
         } else url
 
         val builder = original.newBuilder().url(newUrl)
-        val userAgent = if (YoutubeParsingHelper.isVisionOsStreamingUrl(urlString)) {
-            YoutubeParsingHelper.getVisionOsUserAgent(null)
-        } else NetworkDownloader.USER_AGENT
+        // URLs from our TV-client fallback (c=TVHTML5) must be fetched with the same TV User-Agent,
+        // plain GET + Range like the real client / yt-dlp.
+        val tv = url.queryParameter("c")?.startsWith("TVHTML5") == true
+        val userAgent = when {
+            tv -> com.vidora.app.data.TvPlayer.USER_AGENT
+            YoutubeParsingHelper.isVisionOsStreamingUrl(urlString) -> YoutubeParsingHelper.getVisionOsUserAgent(null)
+            else -> NetworkDownloader.USER_AGENT
+        }
         builder.header("User-Agent", userAgent)
+        if (tv) return chain.proceed(builder.build())
 
         if (YoutubeParsingHelper.isWebStreamingUrl(urlString)) {
             builder.header("Origin", "https://www.youtube.com")

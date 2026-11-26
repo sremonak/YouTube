@@ -57,6 +57,7 @@ class AccountApi {
             .header("X-Youtube-Client-Version", version)
         account.authHeaders().forEach { (k, v) -> builder.header(k, v) }
         client.newCall(builder.build()).execute().use { r ->
+            account.mergeSetCookies(r.headers("Set-Cookie"))
             val text = r.body?.string().orEmpty()
             if (r.code == 401 || r.code == 403) throw IOException("Session expired — please sign in again (HTTP ${r.code})")
             if (!r.isSuccessful) throw IOException("HTTP ${r.code}")
@@ -90,6 +91,34 @@ class AccountApi {
             handle = text(header["channelHandle"]) ?: text(header["email"]) ?: session.handle,
             avatar = thumb(header["accountPhoto"]) ?: session.avatar,
         )
+    }
+
+    // ------------------------------------------------------------------ playback helpers
+
+    @Volatile private var dataSync: Pair<String, String>? = null // cookies → dataSyncId
+
+    /**
+     * The account's dataSyncId ("USER_SESSION_ID||" or "DELEGATED||USER"). Signed-in GVS
+     * PoTokens must be bound to it, otherwise streams stop with HTTP 403 after ~1 minute.
+     */
+    suspend fun dataSyncId(): String? {
+        val cookies = Graph.account.session.value?.cookies ?: return null
+        dataSync?.let { (c, id) -> if (c == cookies) return id }
+        val res = runCatching { post("account/account_menu", buildJsonObject { put("context", context()) }) }.getOrNull() ?: return null
+        val id = findString(res["responseContext"], "datasyncId") ?: return null
+        dataSync = cookies to id
+        return id
+    }
+
+    /** Related videos for a watch page (signed-in `next`), used when the anonymous extractor is blocked. */
+    suspend fun watchNext(videoId: String): List<VideoItem> {
+        val res = post("next", buildJsonObject {
+            put("context", context()); put("videoId", videoId)
+            put("contentCheckOk", true); put("racyCheckOk", true)
+        })
+        val out = mutableListOf<VideoItem>()
+        walk(res, out, mutableListOf())
+        return out.filter { !it.url.contains(videoId) }.distinctBy { it.url }
     }
 
     // ------------------------------------------------------------------ feeds

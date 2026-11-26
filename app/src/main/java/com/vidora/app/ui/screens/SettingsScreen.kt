@@ -409,7 +409,7 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
             // ------------------------------------------------------------ advanced
             item { Header(stringResource(R.string.h_advanced)) }
             item {
-                SwitchRow(stringResource(R.string.ui_use_potoken_botguard), "Generates YouTube integrity tokens locally to avoid playback errors. Status: ${com.vidora.app.potoken.PoTokenProviderImpl.lastStatus}", s.poToken) { v ->
+                SwitchRow(stringResource(R.string.ui_use_potoken_botguard), "Generates YouTube integrity tokens locally. Used when YouTube blocks the normal player (VPN / \"not a bot\" fallback). Status: ${com.vidora.app.potoken.PoTokenProviderImpl.lastStatus}", s.poToken) { v ->
                     update { it.copy(poToken = v) }
                 }
             }

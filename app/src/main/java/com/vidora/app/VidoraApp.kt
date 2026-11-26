@@ -90,6 +90,7 @@ class VidoraApp : Application(), ImageLoaderFactory {
             ContentCountry(country.ifBlank { locale.country.ifBlank { "US" } })
         )
         // Browser-grade poTokens (BotGuard) → fewer "not a bot" checks and 403s
+        // No-op in NPE 0.27.x (visionOS client needs no token); our TvPlayer fallback uses PoTokenProviderImpl directly.
         YoutubeStreamExtractor.setPoTokenProvider(PoTokenProviderImpl)
         Graph.appScope.launch {
             Graph.settingsState.collect { PoTokenProviderImpl.enabled = it.poToken }

@@ -46,6 +46,36 @@ class AccountManager(private val context: Context, private val scope: CoroutineS
         scope.launch(Dispatchers.IO) { store.write(json.encodeToString(AccountSession.serializer(), session)) }
     }
 
+    /**
+     * Google rotates session cookies (SIDCC, __Secure-*PSIDTS…). Browsers keep up by applying
+     * Set-Cookie headers; we do the same for cookies we already hold, so the sign-in doesn't
+     * silently expire after a few days. Deletions are ignored on purpose.
+     */
+    fun mergeSetCookies(setCookies: List<String>) {
+        val current = _session.value ?: return
+        if (setCookies.isEmpty()) return
+        val jar = LinkedHashMap<String, String>()
+        current.cookies.split(';').forEach { c ->
+            val i = c.indexOf('=')
+            if (i > 0) jar[c.substring(0, i).trim()] = c.substring(i + 1).trim()
+        }
+        var changed = false
+        for (header in setCookies) {
+            val pair = header.substringBefore(';')
+            val i = pair.indexOf('=')
+            if (i <= 0) continue
+            val name = pair.substring(0, i).trim()
+            val value = pair.substring(i + 1).trim()
+            val attrs = header.lowercase()
+            val deleting = value.isEmpty() || value == "EXPIRED" || value == "deleted" ||
+                attrs.contains("max-age=0") || attrs.contains("expires=thu, 01 jan 1970") || attrs.contains("expires=thu, 01-jan-1970")
+            if (deleting || name !in jar || jar[name] == value) continue
+            jar[name] = value
+            changed = true
+        }
+        if (changed) save(current.copy(cookies = jar.entries.joinToString("; ") { "${it.key}=${it.value}" }))
+    }
+
     fun signOut() {
         _session.value = null
         store.clear()

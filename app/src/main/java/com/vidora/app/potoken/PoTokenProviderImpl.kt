@@ -48,6 +48,62 @@ object PoTokenProviderImpl : PoTokenProvider {
         }
     }
 
+    /**
+     * Anonymous session for our own player requests: the visitorData plus the GVS (streaming)
+     * PoToken bound to it. Null when PoTokens are disabled or the WebView can't run BotGuard.
+     */
+    fun anonymousSession(): Pair<String, String>? {
+        if (!enabled || !webViewSupported || webViewBadImpl) return null
+        return runCatching {
+            val (_, vd, spot) = ensureGenerator(forceRecreate = false)
+            lastStatus = "OK"
+            vd to spot
+        }.onFailure { lastStatus = "Failed: ${it.message ?: it.javaClass.simpleName}" }.getOrNull()
+    }
+
+    /**
+     * Mints a PoToken bound to an arbitrary identifier (video id, or the account's dataSyncId
+     * for signed-in GVS tokens — the binding yt-dlp/bgutil use).
+     */
+    fun mint(identifier: String): String? {
+        if (!enabled || !webViewSupported || webViewBadImpl) return null
+        return try {
+            val gen = ensureGenerator(forceRecreate = false).first
+            try {
+                gen.generatePoToken(identifier).get(15, TimeUnit.SECONDS)
+            } catch (t: Throwable) {
+                // The WebView may have been killed in the background — rebuild once.
+                ensureGenerator(forceRecreate = true).first.generatePoToken(identifier).get(15, TimeUnit.SECONDS)
+            }.also { lastStatus = "OK" }
+        } catch (t: Throwable) {
+            val cause = (t as? ExecutionException)?.cause ?: t
+            if (cause is BadWebViewException) webViewBadImpl = true
+            lastStatus = "Failed: ${cause.message ?: cause.javaClass.simpleName}"
+            null
+        }
+    }
+
+    private fun ensureGenerator(forceRecreate: Boolean): Triple<PoTokenWebView, String, String> = synchronized(lock) {
+        val shouldRecreate = generator == null || forceRecreate || generator!!.isExpired()
+        if (shouldRecreate) {
+            val info = InnertubeClientRequestInfo.ofWebClient()
+            info.clientInfo.clientVersion = YoutubeParsingHelper.getClientVersion()
+            visitorData = YoutubeParsingHelper.getVisitorDataFromInnertube(
+                info,
+                NewPipe.getPreferredLocalization(),
+                NewPipe.getPreferredContentCountry(),
+                YoutubeParsingHelper.getYouTubeHeaders(),
+                YoutubeParsingHelper.YOUTUBEI_V1_URL,
+                null,
+                false
+            )
+            generator?.let { old -> Handler(Looper.getMainLooper()).post { old.close() } }
+            generator = PoTokenWebView.newPoTokenGenerator(Graph.app).get(30, TimeUnit.SECONDS)
+            streamingPot = generator!!.generatePoToken(visitorData!!).get(15, TimeUnit.SECONDS)
+        }
+        Triple(generator!!, visitorData!!, streamingPot!!)
+    }
+
     private fun getWebClientPoToken(videoId: String, forceRecreate: Boolean): PoTokenResult {
         val gen: PoTokenWebView
         val vd: String

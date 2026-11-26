@@ -1,5 +1,7 @@
 package com.vidora.app.data
 
+import org.schabi.newpipe.extractor.exceptions.SignInConfirmNotBotException
+import org.schabi.newpipe.extractor.exceptions.AgeRestrictedContentException
 import android.os.Build
 import android.util.LruCache
 import com.vidora.app.Graph
@@ -111,11 +113,104 @@ class ContentRepository {
                 if (now - time < 30 * 60_000) return@io details
             }
         }
-        val info = authFallback { StreamInfo.getInfo(service, url) }
-        val details = info.toDetails()
+        val details = loadStream(url)
         streamCache.put(url, now to details)
         details
     }
+
+    /** Until when anonymous extraction is known to be bot-blocked on this network. */
+    @Volatile private var anonBlockedUntil = 0L
+
+    /**
+     * 1. NewPipe Extractor (anonymous visionOS client) — the normal path.
+     * 2. If YouTube refuses it: our TV client **with the signed-in account** (cookies), which is what
+     *    actually gets past "confirm you're not a bot" on VPN / shared IPs.
+     * 3. Last resort: the TV client anonymously (different client, sometimes not blocked).
+     * While the network is known to be blocked, signed-in users go straight to step 2.
+     */
+    private suspend fun loadStream(url: String): StreamDetails {
+        val signed = Graph.account.isSignedIn && useAccountForRestricted
+        if (signed && System.currentTimeMillis() < anonBlockedUntil) {
+            runCatching { return tvDetails(url, withAccount = true) }
+        }
+        val anonError = try {
+            return StreamInfo.getInfo(service, url).toDetails()
+        } catch (t: Throwable) {
+            if (t is kotlinx.coroutines.CancellationException) throw t
+            t
+        }
+        if (isBotBlock(anonError)) anonBlockedUntil = System.currentTimeMillis() + 15 * 60_000
+        var last: Throwable = anonError
+        for (withAccount in listOfNotNull(true.takeIf { signed }, false)) {
+            try {
+                return tvDetails(url, withAccount)
+            } catch (t: Throwable) {
+                if (t is kotlinx.coroutines.CancellationException) throw t
+                android.util.Log.w("ContentRepository", "TV client (account=$withAccount) failed", t)
+                if (withAccount || last === anonError) last = t
+            }
+        }
+        throw StreamBlockedException(explain(anonError, last, signed), anonError)
+    }
+
+    private fun isBotBlock(t: Throwable) = t is SignInConfirmNotBotException ||
+        t is org.schabi.newpipe.extractor.exceptions.ReCaptchaException ||
+        t.message?.contains("not a bot", true) == true
+
+    private fun explain(anon: Throwable, last: Throwable, signed: Boolean): String {
+        val bot = isBotBlock(anon) || (last as? PlayabilityException)?.isBotCheck == true
+        val lastReason = (last as? PlayabilityException)?.reason ?: last.message
+        return when {
+            bot && signed ->
+                "YouTube is blocking this network (very common with VPNs and public Wi-Fi). Vidora retried with your " +
+                    "account, but YouTube answered: \"${lastReason ?: "blocked"}\". Switch VPN server or turn the VPN off, then tap Retry."
+            bot ->
+                "YouTube is blocking anonymous playback on this network (very common with VPNs). Sign in from " +
+                    "Settings → Account, or switch VPN server / turn the VPN off, then tap Retry."
+            anon is AgeRestrictedContentException && !signed -> "This video is age-restricted. Sign in from Settings → Account to watch it."
+            anon is AgeRestrictedContentException -> "This video is age-restricted and YouTube refused your account too: ${lastReason ?: ""}"
+            else -> anon.message ?: lastReason ?: "Couldn't load this video"
+        }
+    }
+
+    private suspend fun tvDetails(url: String, withAccount: Boolean): StreamDetails {
+        val handler = service.streamLHFactory.fromUrl(url)
+        val id = handler.id
+        val r = TvPlayer.fetch(id, withAccount)
+        val related = if (r.signedIn) runCatching { Graph.accountApi.watchNext(id) }.getOrDefault(emptyList()) else emptyList()
+        val item = VideoItem(
+            url = handler.url,
+            title = r.title,
+            thumbnail = r.thumbnail ?: "https://i.ytimg.com/vi/$id/hqdefault.jpg",
+            uploader = r.author,
+            uploaderUrl = r.channelId?.let { "https://www.youtube.com/channel/$it" },
+            duration = r.lengthSeconds,
+            views = r.views,
+            isLive = r.isLive,
+        )
+        return StreamDetails(
+            item = item,
+            description = r.description,
+            likes = -1,
+            subscriberCount = -1,
+            videoStreams = r.videos,
+            audioStreams = mainAudios(r.audios),
+            hlsUrl = r.hlsUrl,
+            dashUrl = r.dashUrl,
+            related = related.map { Entry.Video(it) },
+            chapters = Chapters.fromDescription(r.description),
+            tags = emptyList(),
+            category = null,
+            allAudioStreams = r.audios,
+            subtitles = r.subtitles,
+        )
+    }
+
+    /** Original-language audio only (falls back to everything when YouTube doesn't label tracks). */
+    private fun mainAudios(allAudios: List<AudioOption>): List<AudioOption> = allAudios
+        .filter { a -> a.trackType == null || a.trackType == "ORIGINAL" || allAudios.none { it.trackType == "ORIGINAL" } }
+        .let { list -> if (list.map { it.trackId }.distinct().size > 1) list.filter { it.trackId == list.first().trackId } else list }
+        .distinctBy { it.itag }
 
     private fun StreamInfo.toDetails(): StreamDetails {
         val live = streamType == StreamType.LIVE_STREAM || streamType == StreamType.AUDIO_LIVE_STREAM
@@ -142,10 +237,7 @@ class ContentRepository {
             .map { it.toOption() }
             .distinctBy { it.itag to it.trackId }
             .sortedByDescending { it.bitrateKbps }
-        val audios = allAudios
-            .filter { a -> a.trackType == null || a.trackType == "ORIGINAL" || allAudios.none { it.trackType == "ORIGINAL" } }
-            .let { list -> if (list.map { it.trackId }.distinct().size > 1) list.filter { it.trackId == list.first().trackId } else list }
-            .distinctBy { it.itag }
+        val audios = mainAudios(allAudios)
         val subs = runCatching {
             subtitles.filter { it.isUrl }
                 .map { st ->
@@ -424,4 +516,24 @@ class ContentRepository {
 fun List<Image>?.best(): String? {
     if (this.isNullOrEmpty()) return null
     return maxByOrNull { if (it.height > 0) it.height else 0 }?.url ?: first().url
+}
+
+/** A friendly, user-facing explanation of why a video couldn't be loaded. */
+class StreamBlockedException(message: String, cause: Throwable) : java.io.IOException(message, cause)
+
+/** Chapters parsed from "0:00 Intro" style timestamps in a description (used by the TV fallback). */
+object Chapters {
+    private val line = Regex("""^\s*[\[(]?((?:\d{1,2}:)?\d{1,2}:\d{2})[\])]?\s*[-–—:|]?\s*(.+?)\s*$""")
+
+    fun fromDescription(description: String): List<Chapter> {
+        val found = description.lines().mapNotNull { l ->
+            val m = line.find(l) ?: return@mapNotNull null
+            val secs = m.groupValues[1].split(':').fold(0) { acc, p -> acc * 60 + (p.toIntOrNull() ?: return@mapNotNull null) }
+            Chapter(m.groupValues[2], secs, null)
+        }
+        // YouTube's own rule: first chapter at 0:00, at least 3, ascending
+        if (found.size < 3 || found.first().startSeconds != 0) return emptyList()
+        if (found.zipWithNext().any { (a, b) -> b.startSeconds <= a.startSeconds }) return emptyList()
+        return found
+    }
 }

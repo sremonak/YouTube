@@ -194,7 +194,7 @@ fun PlayerScreen(
                 item {
                     VideoSurface(
                         Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(16.dp)).background(Color.Black),
-                        state, true, onFullscreen
+                        state, true, onFullscreen, onSignIn = { nav.navigate(Routes.LOGIN) }
                     )
                 }
                 detailsSection(state, nav, actions, activity, onDownload, comments) { sheet = it }
@@ -206,7 +206,7 @@ fun PlayerScreen(
     } else {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             Box {
-                VideoSurface(Modifier.fillMaxWidth().aspectRatio(16f / 9f).background(Color.Black), state, true, onFullscreen)
+                VideoSurface(Modifier.fillMaxWidth().aspectRatio(16f / 9f).background(Color.Black), state, true, onFullscreen, onSignIn = { nav.navigate(Routes.LOGIN) })
                 IconButton(onClick = { nav.popBackStack() }, modifier = Modifier.align(Alignment.TopStart)) {
                     Icon(Icons.Rounded.KeyboardArrowDown, "Minimize", tint = Color.White)
                 }
@@ -249,7 +249,7 @@ private fun FullscreenEffect(activity: Activity, fullscreen: Boolean) {
 
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
-private fun VideoSurface(modifier: Modifier, state: PlayerUiState, showControls: Boolean, onFullscreen: () -> Unit, fullscreen: Boolean = false) {
+private fun VideoSurface(modifier: Modifier, state: PlayerUiState, showControls: Boolean, onFullscreen: () -> Unit, fullscreen: Boolean = false, onSignIn: (() -> Unit)? = null) {
     val settings by Graph.settingsState.collectAsState()
     val gesturesOn by rememberUpdatedState(settings.gestures && showControls)
     val swipesOn by rememberUpdatedState(fullscreen)
@@ -323,9 +323,15 @@ private fun VideoSurface(modifier: Modifier, state: PlayerUiState, showControls:
         state.error?.let { err ->
             Column(Modifier.background(Color.Black.copy(alpha = 0.7f)).padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(stringResource(R.string.ui_playback_failed), color = Color.White, fontWeight = FontWeight.Bold)
-                Text(err, color = Color.White.copy(alpha = 0.8f), maxLines = 3, style = MaterialTheme.typography.bodySmall)
+                Text(err, color = Color.White.copy(alpha = 0.85f), maxLines = 6, style = MaterialTheme.typography.bodySmall,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                 Spacer(Modifier.height(8.dp))
-                Button(onClick = { Graph.player.retry() }) { Text(stringResource(R.string.ui_retry)) }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { Graph.player.retry() }) { Text(stringResource(R.string.ui_retry)) }
+                    if (onSignIn != null && !Graph.account.isSignedIn && (err.contains("Sign in", true) || err.contains("bot", true))) {
+                        androidx.compose.material3.OutlinedButton(onClick = onSignIn) { Text(stringResource(R.string.ui_sign_in)) }
+                    }
+                }
             }
         }
     }
