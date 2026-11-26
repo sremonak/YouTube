@@ -45,6 +45,24 @@ class AdaptiveManifestTest {
     }
 
     @Test
+    fun prefersEfficientCodecWhenItReachesTheSameQuality() {
+        val streams = listOf(
+            v(137, 1080, "avc1.640028"), v(136, 720, "avc1.4d401f"),
+            v(399, 1080, "av01.0.08M.08"), v(398, 720, "av01.0.05M.08"),
+            v(248, 1080, "vp9", mime = "video/webm"),
+        )
+        val av1 = AdaptiveManifest.plan(streams, listOf(a(140, 128), a(139, 48)), 100, 1080, families = listOf("av1", "vp9", "avc"))!!
+        assertTrue(av1.videos.all { it.codec!!.startsWith("av01") })
+        // AV1 only up to 720p but H.264 has 1080p → keep H.264 rather than lowering the quality
+        val partial = streams.filter { it.itag != 399 }
+        val fallback = AdaptiveManifest.plan(partial, listOf(a(140, 128)), 100, 1080, families = listOf("av1", "avc"))!!
+        assertTrue(fallback.videos.all { it.codec!!.startsWith("avc") })
+        // Data saver keeps only the smallest audio
+        val low = AdaptiveManifest.plan(streams, listOf(a(140, 128), a(139, 48)), 100, 360, lowAudio = true)!!
+        assertEquals(listOf(139), low.audios.map { it.itag })
+    }
+
+    @Test
     fun noRangesMeansProgressiveFallback() {
         assertNull(AdaptiveManifest.plan(listOf(v(137, 1080, "avc1", ranges = false)), listOf(a(140, 128)), 100, 1080))
         assertNull(AdaptiveManifest.plan(listOf(v(137, 1080, "avc1")), listOf(a(140, 128)), 0, 1080))

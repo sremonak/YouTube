@@ -42,6 +42,7 @@ import com.vidora.app.ui.icons.Replay10
 import com.vidora.app.ui.theme.GlassBottomSheet
 
 /** Cast to a Chromecast / Google TV: device picker, then remote controls while casting. */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 internal fun CastSheet(onDismiss: () -> Unit) {
     val devices by CastManager.devices.collectAsState()

@@ -381,6 +381,12 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
             item { SwitchRow("Preload next video", "Gets the next video ready in the background so it starts instantly", s.prefetchNext) { v -> update { it.copy(prefetchNext = v) } } }
             item { SwitchRow("Data saver", "Caps video at 360p, smaller thumbnails, lower-bitrate audio and no preloading — on mobile data", s.dataSaver) { v -> update { it.copy(dataSaver = v) } } }
             item { SwitchRow("Video cache", "Keeps recently watched parts on disk (up to 512 MB) so replays and seeking back don't use data", s.mediaCache) { v -> update { it.copy(mediaCache = v) } } }
+            item {
+                ClickRow("Clear video cache", "%.0f MB used".format(com.vidora.app.player.MediaCache.usedBytes() / 1_048_576f)) {
+                    scope.launch(kotlinx.coroutines.Dispatchers.IO) { com.vidora.app.player.MediaCache.clear(context.applicationContext) }
+                    Toast.makeText(context, "Video cache cleared", Toast.LENGTH_SHORT).show()
+                }
+            }
             item { SwitchRow("Efficient codecs (AV1 / VP9)", "Uses AV1 or VP9 when your phone decodes them in hardware — sharper picture with less data and battery", s.efficientCodecs) { v -> update { it.copy(efficientCodecs = v) } } }
             item { ClickRow(stringResource(R.string.ui_default_playback_speed), "${s.defaultSpeed}x") { dialog = "speed" } }
             item { SwitchRow(stringResource(R.string.ui_background_playback), stringResource(R.string.ui_keep_playing_when_the_app_is_closed_or_t), s.backgroundPlay) { v -> update { it.copy(backgroundPlay = v) } } }
