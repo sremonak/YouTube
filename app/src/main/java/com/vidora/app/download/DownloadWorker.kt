@@ -14,6 +14,10 @@ import com.vidora.app.VidoraApp
 import com.vidora.app.player.StreamInterceptor
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import okhttp3.Request
@@ -21,12 +25,14 @@ import java.io.File
 import java.io.IOException
 import java.io.RandomAccessFile
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.coroutineContext
 
 /**
  * Downloads one record. Stream URLs are resolved *inside* the worker so retries always get
- * fresh (non-expired) links. Data is fetched in resumable 8 MB chunks, which avoids
- * server-side throttling of long single connections.
+ * fresh (non-expired) links. Audio and video are fetched in parallel, each over several
+ * resumable 8 MB range connections; then SponsorBlock segments are cut (optional), the
+ * tracks are merged losslessly and title/channel/cover art are embedded.
  */
 class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
 
@@ -47,39 +53,96 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
             Graph.downloads.update(recordId, persist = true) { it.copy(status = DownloadStatus.RUNNING, error = null) }
 
             val details = Graph.repository.stream(record.video.url, forceRefresh = true)
-            val output: File
+            val settings = Graph.settingsState.value
+            val videoId = Graph.repository.videoId(record.video.url)
+            // SponsorBlock segments to cut out of the file (fetched while the download runs).
+            val cutsJob = async {
+                if (!settings.downloadCutSponsors || videoId == null) emptyList()
+                else runCatching {
+                    Graph.sponsorBlock.segments(videoId, settings.sponsorCategories)
+                        .map { Muxer.Cut(it.startMs * 1000, it.endMs * 1000) }
+                }.getOrDefault(emptyList())
+            }
+            val progress = Progress(recordId, record.video.title)
+            var raw: File
+            var video: File? = null
+            var audio: File? = null
+            var webm = false
             when (record.kind) {
                 DownloadKind.AUDIO -> {
-                    val audio = details.audioStreams.firstOrNull { it.itag == record.audioItag }
+                    val a = details.audioStreams.firstOrNull { it.itag == record.audioItag }
                         ?: details.audioStreams.firstOrNull() ?: error("Audio stream unavailable")
-                    output = File(workDir, "audio.${audio.suffix}")
-                    fetch(audio.url, output, recordId, record.video.title, 0L, audio.contentLength)
+                    raw = File(workDir, "audio.${a.suffix}")
+                    progress.total = a.contentLength.coerceAtLeast(0)
+                    fetch(a.url, raw, a.contentLength, settings.downloadConnections, progress)
+                    audio = raw
+                    webm = a.suffix == "webm"
                 }
                 DownloadKind.VIDEO -> {
-                    val video = details.videoStreams.firstOrNull { it.itag == record.videoItag }
+                    val v = details.videoStreams.firstOrNull { it.itag == record.videoItag }
                         ?: details.videoStreams.firstOrNull() ?: error("Video stream unavailable")
-                    val audio = if (video.videoOnly) {
+                    val a = if (v.videoOnly) {
                         details.audioStreams.firstOrNull { it.itag == record.audioItag }
-                            ?: details.audioStreams.firstOrNull { it.suffix == (if (video.suffix == "webm") "webm" else "m4a") }
+                            ?: details.audioStreams.firstOrNull { it.suffix == (if (v.suffix == "webm") "webm" else "m4a") }
                     } else null
-                    val videoFile = File(workDir, "video.${video.suffix}")
-                    if (audio == null) {
-                        fetch(video.url, videoFile, recordId, record.video.title, 0L, video.contentLength)
-                        output = videoFile
+                    webm = v.suffix == "webm"
+                    val videoFile = File(workDir, "video.${v.suffix}")
+                    raw = videoFile
+                    video = videoFile
+                    progress.total = v.contentLength.coerceAtLeast(0) + (a?.contentLength?.coerceAtLeast(0) ?: 0)
+                    if (a == null) {
+                        fetch(v.url, videoFile, v.contentLength, settings.downloadConnections, progress)
+                        // Muxed stream (e.g. itag 18): its own audio track feeds the remux.
+                        if (!v.videoOnly) audio = videoFile
                     } else {
-                        val audioFile = File(workDir, "audio.${audio.suffix}")
-                        val audioSize = audio.contentLength.takeIf { it > 0 } ?: 0L
-                        fetch(audio.url, audioFile, recordId, record.video.title, 0L, audioSize, combinedTotal = video.contentLength + audioSize)
-                        fetch(video.url, videoFile, recordId, record.video.title, audioFile.length(), video.contentLength, combinedTotal = video.contentLength + audioFile.length())
-                        Graph.downloads.update(recordId, persist = true) { it.copy(status = DownloadStatus.MUXING, speedBps = 0) }
-                        runCatching { setForeground(foregroundInfo("Merging · " + record.video.title, 100, true)) }
-                        output = File(workDir, "merged.${video.suffix}")
-                        Muxer.merge(videoFile, audioFile, output, webm = video.suffix == "webm")
-                        videoFile.delete()
-                        audioFile.delete()
+                        val audioFile = File(workDir, "audio.${a.suffix}")
+                        audio = audioFile
+                        // Audio and video are fetched at the same time (like yt-dlp -N / aria2c).
+                        coroutineScope {
+                            val aJob = async { fetch(a.url, audioFile, a.contentLength, settings.downloadConnections, progress) }
+                            val vJob = async { fetch(v.url, videoFile, v.contentLength, settings.downloadConnections, progress) }
+                            aJob.await(); vJob.await()
+                        }
                     }
                 }
             }
+
+            val cuts = cutsJob.await()
+            val needsMux = video != null && audio != null && video != audio
+            val wantsTags = settings.downloadEmbedMetadata && !webm
+            var output = raw
+            if (needsMux || cuts.isNotEmpty() || (wantsTags && raw.extension in setOf("mp4", "m4a"))) {
+                Graph.downloads.update(recordId, persist = true) { it.copy(status = DownloadStatus.MUXING, speedBps = 0) }
+                runCatching { setForeground(foregroundInfo((if (cuts.isNotEmpty()) "Removing sponsors · " else "Merging · ") + record.video.title, 100, true)) }
+                val merged = File(workDir, "merged.${raw.extension}")
+                val ok = runCatching { Muxer.merge(video, audio, merged, webm, cuts) }
+                if (ok.isSuccess) {
+                    output = merged
+                    video?.delete(); audio?.delete()
+                } else if (needsMux) {
+                    // Retry without cuts before giving up — a merged file beats a failed download.
+                    merged.delete()
+                    Muxer.merge(video, audio, merged, webm)
+                    output = merged
+                    video?.delete(); audio?.delete()
+                } else merged.delete()
+            }
+            if (wantsTags && output.extension in setOf("mp4", "m4a")) {
+                runCatching {
+                    val cover = videoId?.let { id -> download("https://i.ytimg.com/vi/$id/hqdefault.jpg") }
+                    Mp4Tagger.tag(output, Mp4Tagger.Tags(
+                        title = record.video.title,
+                        artist = record.video.uploader,
+                        comment = record.video.url,
+                        date = details.item.uploadedEpoch.takeIf { it > 0 }?.let {
+                            java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date(if (it < 10_000_000_000L) it * 1000 else it))
+                        },
+                        description = details.description.take(4000).ifBlank { null },
+                        cover = cover,
+                    ))
+                }
+            }
+            if (settings.downloadSubtitles) runCatching { saveSubtitles(details, record) }
 
             val uri = Storage.publish(applicationContext, output, record)
             Graph.downloads.update(recordId, persist = true) {
@@ -102,79 +165,147 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
         }
     }
 
-    private suspend fun fetch(
-        url: String,
-        target: File,
-        recordId: String,
-        title: String,
-        offsetBytes: Long,
-        knownLength: Long,
-        combinedTotal: Long = knownLength,
-    ) {
-        var total = knownLength
-        var position = if (target.exists()) target.length() else 0L
-        var lastUiUpdate = 0L
-        var windowStart = System.currentTimeMillis()
-        var windowBytes = 0L
-        var speed = 0L
-        var lastPercent = -1
-        val buffer = ByteArray(64 * 1024)
+    /** Shared progress across parallel files/connections. */
+    private inner class Progress(val recordId: String, val title: String) {
+        @Volatile var total = 0L
+        val done = AtomicLong(0)
+        private var lastUi = 0L
+        private var windowStart = System.currentTimeMillis()
+        private var windowBytes = 0L
+        private var speed = 0L
+        private var lastPercent = -1
 
+        fun add(n: Int) {
+            val d = done.addAndGet(n.toLong())
+            val update: Boolean
+            synchronized(this) {
+                windowBytes += n
+                val now = System.currentTimeMillis()
+                if (now - windowStart >= 1000) { speed = windowBytes * 1000 / (now - windowStart); windowStart = now; windowBytes = 0 }
+                update = now - lastUi > 400
+                if (update) lastUi = now
+            }
+            if (!update) return
+            val t = total.coerceAtLeast(d)
+            val p = if (t > 0) (d.toFloat() / t).coerceIn(0f, 1f) else 0f
+            Graph.downloads.update(recordId) { it.copy(progress = p, downloadedBytes = d, totalBytes = t, speedBps = speed) }
+            val percent = (p * 100).toInt()
+            if (percent != lastPercent) {
+                lastPercent = percent
+                runCatching { setForegroundAsync(foregroundInfo(title, percent, false)) }
+            }
+        }
+    }
+
+    /**
+     * Downloads [url] into [target] with up to [connections] parallel 8 MB range requests.
+     * Finished chunks are remembered in `<file>.parts`, so a retried worker resumes where it stopped.
+     */
+    private suspend fun fetch(url: String, target: File, knownLength: Long, connections: Int, progress: Progress) {
+        val total = knownLength.takeIf { it > 0 } ?: probeLength(url)
+        if (total <= 0) {
+            fetchSequential(url, target, progress)
+            return
+        }
+        if (knownLength <= 0) progress.total += total
+        val chunks = ((total + CHUNK - 1) / CHUNK).toInt()
+        val partsFile = File(target.path + ".parts")
+        val finished = java.util.Collections.synchronizedSet(
+            partsFile.takeIf { it.exists() }?.readLines()?.mapNotNull { it.toIntOrNull() }?.toMutableSet() ?: mutableSetOf()
+        )
         RandomAccessFile(target, "rw").use { raf ->
-            raf.seek(position)
-            while (total <= 0 || position < total) {
-                coroutineContext.ensureActive()
-                val end = if (total > 0) minOf(position + CHUNK - 1, total - 1) else position + CHUNK - 1
-                val request = Request.Builder().url(url).header("Range", "bytes=$position-$end").build()
-                client.newCall(request).execute().use { response ->
-                    if (response.code == 416) { total = position; return@use }
-                    if (!response.isSuccessful) throw IOException("HTTP ${response.code}")
-                    if (response.code == 200 && position > 0) {
-                        // server ignored the range → start over to avoid corrupting the file
-                        raf.setLength(0); raf.seek(0); position = 0
-                    }
-                    if (total <= 0) {
-                        total = response.header("Content-Range")?.substringAfterLast('/')?.toLongOrNull()
-                            ?: response.body?.contentLength()?.takeIf { response.code == 200 } ?: -1
-                    }
-                    val body = response.body ?: throw IOException("Empty body")
-                    var readInChunk = 0L
-                    body.byteStream().use { input ->
+            if (raf.length() != total) raf.setLength(total)
+            val channel = raf.channel
+            finished.forEach { i -> progress.add((minOf(total, (i + 1) * CHUNK) - i * CHUNK).toInt()) }
+            val queue = java.util.concurrent.ConcurrentLinkedQueue((0 until chunks).filter { it !in finished })
+            coroutineScope {
+                repeat(connections.coerceIn(1, 8)) {
+                    launch {
                         while (true) {
-                            coroutineContext.ensureActive()
-                            val n = input.read(buffer)
-                            if (n < 0) break
-                            raf.write(buffer, 0, n)
-                            position += n
-                            readInChunk += n
-                            windowBytes += n
-                            val now = System.currentTimeMillis()
-                            if (now - windowStart >= 1000) {
-                                speed = windowBytes * 1000 / (now - windowStart)
-                                windowStart = now
-                                windowBytes = 0
-                            }
-                            if (now - lastUiUpdate > 400) {
-                                lastUiUpdate = now
-                                val grandTotal = if (combinedTotal > 0) combinedTotal else offsetBytes + total
-                                val done = offsetBytes + position
-                                val progress = if (grandTotal > 0) (done.toFloat() / grandTotal).coerceIn(0f, 1f) else 0f
-                                Graph.downloads.update(recordId) {
-                                    it.copy(progress = progress, downloadedBytes = done, totalBytes = grandTotal.coerceAtLeast(done), speedBps = speed)
-                                }
-                                val percent = (progress * 100).toInt()
-                                if (percent != lastPercent) {
-                                    lastPercent = percent
-                                    runCatching { setForeground(foregroundInfo(title, percent, false)) }
-                                }
-                            }
+                            val i = queue.poll() ?: break
+                            fetchChunk(url, channel, i * CHUNK, minOf(total, (i + 1) * CHUNK) - 1, progress)
+                            finished += i
+                            synchronized(partsFile) { partsFile.appendText("$i\n") }
                         }
                     }
-                    if (readInChunk == 0L) total = position // server sent nothing more → done
-                    if (response.code == 200) total = position // full body returned at once
                 }
             }
         }
+        partsFile.delete()
+    }
+
+    private suspend fun fetchChunk(url: String, channel: java.nio.channels.FileChannel, from: Long, to: Long, progress: Progress) {
+        var attempt = 0
+        var pos = from
+        while (true) {
+            coroutineContext.ensureActive()
+            try {
+                val request = Request.Builder().url(url).header("Range", "bytes=$pos-$to").build()
+                client.newCall(request).execute().use { response ->
+                    if (response.code != 206) throw IOException("HTTP ${response.code}")
+                    val buffer = ByteArray(64 * 1024)
+                    response.body.byteStream().use { input ->
+                        while (pos <= to) {
+                            coroutineContext.ensureActive()
+                            val n = input.read(buffer, 0, minOf(buffer.size.toLong(), to - pos + 1).toInt())
+                            if (n < 0) break
+                            channel.write(java.nio.ByteBuffer.wrap(buffer, 0, n), pos)
+                            pos += n
+                            progress.add(n)
+                        }
+                    }
+                }
+                if (pos > to) return
+                throw IOException("Connection closed early")
+            } catch (e: IOException) {
+                if (++attempt >= 4) throw e
+                delay(1000L * attempt)
+            }
+        }
+    }
+
+    private fun probeLength(url: String): Long = runCatching {
+        client.newCall(Request.Builder().url(url).header("Range", "bytes=0-0").build()).execute().use { r ->
+            r.header("Content-Range")?.substringAfterLast('/')?.toLongOrNull() ?: -1L
+        }
+    }.getOrDefault(-1L)
+
+    /** Fallback for servers that don't announce a length: one stream, start to end. */
+    private suspend fun fetchSequential(url: String, target: File, progress: Progress) {
+        target.delete()
+        client.newCall(Request.Builder().url(url).build()).execute().use { response ->
+            if (!response.isSuccessful) throw IOException("HTTP ${response.code}")
+            response.body.contentLength().takeIf { it > 0 }?.let { progress.total += it }
+            val buffer = ByteArray(64 * 1024)
+            target.outputStream().use { out ->
+                response.body.byteStream().use { input ->
+                    while (true) {
+                        coroutineContext.ensureActive()
+                        val n = input.read(buffer)
+                        if (n < 0) break
+                        out.write(buffer, 0, n)
+                        progress.add(n)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun download(url: String): ByteArray? = runCatching {
+        Graph.http.newCall(Request.Builder().url(url).build()).execute().use { r -> if (r.isSuccessful) r.body.bytes() else null }
+    }.getOrNull()
+
+    /** Saves the preferred subtitle track as an .srt/.vtt next to the downloads (Download/Vidora). */
+    private fun saveSubtitles(details: com.vidora.app.data.StreamDetails, record: DownloadRecord) {
+        val lang = Graph.settingsState.value.captionLang.ifBlank { java.util.Locale.getDefault().language }
+        val sub = details.subtitles.firstOrNull { it.languageCode.startsWith(lang) && !it.autoGenerated }
+            ?: details.subtitles.firstOrNull { it.languageCode.startsWith(lang) }
+            ?: details.subtitles.firstOrNull { !it.autoGenerated }
+            ?: return
+        val vttUrl = if ("fmt=" in sub.url) sub.url.replace(Regex("fmt=[^&]+"), "fmt=vtt") else sub.url + "&fmt=vtt"
+        val bytes = download(vttUrl) ?: download(sub.url) ?: return
+        val name = record.fileName.substringBeforeLast('.') + "." + sub.languageCode + ".vtt"
+        Storage.publishSidecar(applicationContext, bytes, name, "text/vtt")
     }
 
     private fun foregroundInfo(title: String, progress: Int, indeterminate: Boolean): ForegroundInfo {

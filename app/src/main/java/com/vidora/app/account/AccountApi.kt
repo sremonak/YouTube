@@ -295,6 +295,15 @@ class AccountApi {
         )
     }
 
+    /** YouTube's loudness (dB above reference) for Stable volume; works signed out too. */
+    suspend fun loudness(videoId: String): Double? {
+        val res = post("player", buildJsonObject {
+            put("context", context()); put("videoId", videoId)
+            put("contentCheckOk", true); put("racyCheckOk", true)
+        }, requireAuth = false)
+        return com.vidora.app.data.TvPlayer.loudnessDb(res)
+    }
+
     // ------------------------------------------------------------------ YouTube Music
 
     /** music.youtube.com home of the signed-in account (Quick picks, Mixed for you, Listen again…). */

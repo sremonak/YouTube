@@ -93,6 +93,25 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
     val events: SharedFlow<String> = _events
 
     private var loadJob: Job? = null
+    private var loudnessJob: Job? = null
+
+    /**
+     * "Stable volume" like YouTube: videos louder than YouTube's reference level are turned down
+     * by their announced loudnessDb (quiet videos are left alone, as YouTube does).
+     */
+    private fun applyLoudness(details: StreamDetails) {
+        loudnessJob?.cancel()
+        exoPlayer.volume = 1f
+        if (!settings.stableVolume || details.item.isLive) return
+        loudnessJob = scope.launch(Dispatchers.Main) {
+            val db = details.loudnessDb ?: Graph.repository.videoId(details.item.url)?.let { id ->
+                runCatching { kotlinx.coroutines.withTimeout(8_000) { Graph.accountApi.loudness(id) } }.getOrNull()
+            }
+            if (db != null && db > 0) {
+                exoPlayer.volume = Math.pow(10.0, -db / 20.0).toFloat().coerceIn(0.25f, 1f)
+            }
+        }
+    }
     private var tickerJob: Job? = null
     private var sleepJob: Job? = null
     private val skippedSegments = mutableSetOf<String>()
@@ -267,6 +286,7 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
                     Graph.library.positionOf(merged.url).takeIf { it > 5_000 && (merged.duration == 0L || it < merged.duration * 1000 - 10_000) } ?: 0
                 } else 0
                 prepare(details, resumeAt, autoPlay = true)
+                applyLoudness(details)
                 loadSponsorSegments(merged)
             } catch (t: Throwable) {
                 if (t is kotlinx.coroutines.CancellationException) throw t

@@ -183,6 +183,8 @@ data class StreamDetails(
     val source: String = "NewPipe · visionOS",
     /** Play [hlsUrl] even for VODs (Safari web fallback: adaptive HLS is its only full-quality stream). */
     val preferHls: Boolean = false,
+    /** YouTube's loudness of this video relative to its reference level (dB), for Stable volume. */
+    val loudnessDb: Double? = null,
 ) {
     /** Distinct audio languages; empty/one entry means there's nothing to choose. */
     val audioTracks: List<AudioTrack>

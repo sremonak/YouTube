@@ -64,6 +64,35 @@ object Storage {
         }
     }
 
+    /** Saves a small companion file (subtitles) into Download/Vidora — any MIME type is allowed there. */
+    fun publishSidecar(context: Context, bytes: ByteArray, name: String, mime: String): Uri {
+        val tree = com.vidora.app.Graph.settingsState.value.downloadFolder
+        if (tree.isNotBlank()) runCatching {
+            val t = Uri.parse(tree)
+            val resolver = context.contentResolver
+            val parent = DocumentsContract.buildDocumentUriUsingTree(t, DocumentsContract.getTreeDocumentId(t))
+            val doc = DocumentsContract.createDocument(resolver, parent, mime, name) ?: error("create failed")
+            resolver.openOutputStream(doc)?.use { it.write(bytes) }
+            return doc
+        }
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val values = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+                put(MediaStore.MediaColumns.MIME_TYPE, mime)
+                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/" + FOLDER)
+            }
+            val resolver = context.contentResolver
+            val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: error("Could not create file")
+            resolver.openOutputStream(uri)?.use { it.write(bytes) }
+            uri
+        } else {
+            @Suppress("DEPRECATION")
+            val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), FOLDER).apply { mkdirs() }
+            val f = File(dir, name).apply { writeBytes(bytes) }
+            f.toUri()
+        }
+    }
+
     private fun publishToTree(context: Context, source: File, record: DownloadRecord, mime: String, tree: Uri): Uri {
         val resolver = context.contentResolver
         val parent = DocumentsContract.buildDocumentUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree))

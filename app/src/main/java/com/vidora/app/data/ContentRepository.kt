@@ -158,6 +158,7 @@ class ContentRepository {
                 if (signed) add(true to YtClient.TV)
                 add(false to YtClient.TV)
                 add(false to YtClient.WEB_SAFARI)
+                add(false to YtClient.MWEB_POT)
                 add(false to YtClient.MWEB)
             }
             for ((withAccount, client) in attempts) {
@@ -239,6 +240,7 @@ class ContentRepository {
             subtitles = r.subtitles,
             source = r.client.label + if (r.signedIn) " · your account" else " · anonymous",
             preferHls = r.client == YtClient.WEB_SAFARI && r.hlsUrl != null,
+            loudnessDb = r.loudnessDb,
         )
     }
 

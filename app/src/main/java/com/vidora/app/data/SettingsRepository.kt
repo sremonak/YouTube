@@ -95,6 +95,11 @@ data class AppSettings(
     val eqBands: String = "",
     val bassBoost: Int = 0,
     val volumeBoost: Int = 0,
+    val stableVolume: Boolean = true,
+    val downloadCutSponsors: Boolean = false,
+    val downloadEmbedMetadata: Boolean = true,
+    val downloadSubtitles: Boolean = false,
+    val downloadConnections: Int = 3,
     val returnDislike: Boolean = true,
     val deArrow: Boolean = false,
     val blockedChannels: Set<String> = emptySet(),
@@ -155,6 +160,11 @@ class SettingsRepository(private val context: Context) {
         val eqBands = stringPreferencesKey("eq_bands")
         val bassBoost = intPreferencesKey("bass_boost")
         val volumeBoost = intPreferencesKey("volume_boost")
+        val stableVolume = booleanPreferencesKey("stable_volume")
+        val downloadCutSponsors = booleanPreferencesKey("dl_cut_sponsors")
+        val downloadEmbedMetadata = booleanPreferencesKey("dl_metadata")
+        val downloadSubtitles = booleanPreferencesKey("dl_subs")
+        val downloadConnections = intPreferencesKey("dl_connections")
         val returnDislike = booleanPreferencesKey("ryd")
         val deArrow = booleanPreferencesKey("dearrow")
         val blockedChannels = stringSetPreferencesKey("blocked_channels")
@@ -216,6 +226,11 @@ class SettingsRepository(private val context: Context) {
             eqBands = this[K.eqBands] ?: d.eqBands,
             bassBoost = this[K.bassBoost] ?: d.bassBoost,
             volumeBoost = this[K.volumeBoost] ?: d.volumeBoost,
+            stableVolume = this[K.stableVolume] ?: d.stableVolume,
+            downloadCutSponsors = this[K.downloadCutSponsors] ?: d.downloadCutSponsors,
+            downloadEmbedMetadata = this[K.downloadEmbedMetadata] ?: d.downloadEmbedMetadata,
+            downloadSubtitles = this[K.downloadSubtitles] ?: d.downloadSubtitles,
+            downloadConnections = this[K.downloadConnections] ?: d.downloadConnections,
             returnDislike = this[K.returnDislike] ?: d.returnDislike,
             deArrow = this[K.deArrow] ?: d.deArrow,
             blockedChannels = this[K.blockedChannels] ?: d.blockedChannels,
@@ -276,6 +291,11 @@ class SettingsRepository(private val context: Context) {
             p[K.eqBands] = s.eqBands
             p[K.bassBoost] = s.bassBoost
             p[K.volumeBoost] = s.volumeBoost
+            p[K.stableVolume] = s.stableVolume
+            p[K.downloadCutSponsors] = s.downloadCutSponsors
+            p[K.downloadEmbedMetadata] = s.downloadEmbedMetadata
+            p[K.downloadSubtitles] = s.downloadSubtitles
+            p[K.downloadConnections] = s.downloadConnections
             p[K.returnDislike] = s.returnDislike
             p[K.deArrow] = s.deArrow
             p[K.blockedChannels] = s.blockedChannels

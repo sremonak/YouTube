@@ -215,6 +215,14 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
                     ) { v -> update { it.copy(syncWatchHistory = v) } }
                 }
                 item {
+                    ClickRow("Manage YouTube history", "Pause, clear or auto-delete your YouTube watch & search history (Google My Activity)") {
+                        runCatching {
+                            context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW,
+                                android.net.Uri.parse("https://myactivity.google.com/product/youtube/controls")))
+                        }
+                    }
+                }
+                item {
                     var checking by remember { mutableStateOf(false) }
                     var report by remember { mutableStateOf<String?>(null) }
                     ClickRow(if (checking) "Checking your account…" else "Account check", "Tests if YouTube accepts your sign-in and whether home, history and subscriptions load") {
@@ -364,6 +372,7 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
             item { SwitchRow(stringResource(R.string.ui_skip_silence), stringResource(R.string.ui_speeds_through_silent_parts), s.skipSilence) { v -> update { it.copy(skipSilence = v) } } }
             item { SwitchRow(stringResource(R.string.ui_gestures), stringResource(R.string.ui_double_tap_to_seek_hold_for_2_swipe_for), s.gestures) { v -> update { it.copy(gestures = v) } } }
             item { SwitchRow(stringResource(R.string.ui_remember_queue), stringResource(R.string.ui_restore_what_you_were_watching_after_res), s.persistQueue) { v -> update { it.copy(persistQueue = v) } } }
+            item { SwitchRow("Stable volume", "Evens out loud and quiet videos using YouTube's loudness data", s.stableVolume) { v -> update { it.copy(stableVolume = v) } } }
             item { ClickRow(stringResource(R.string.ui_equalizer_audio_boost), if (s.eqEnabled || s.volumeBoost > 0) "On" else "Off") { showEq = true } }
 
             // ------------------------------------------------------------ captions & audio language
@@ -413,6 +422,15 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
             item { ClickRow(stringResource(R.string.ui_default_download_quality), "${s.downloadQuality}p") { dialog = "dlquality" } }
             item { ClickRow(stringResource(R.string.ui_preferred_audio_format), s.downloadAudioPref.label) { dialog = "audiofmt" } }
             item { SwitchRow(stringResource(R.string.ui_download_on_wi_fi_only), null, s.downloadWifiOnly) { v -> update { it.copy(downloadWifiOnly = v) } } }
+            item {
+                ClickRow("Parallel connections", "${s.downloadConnections} per file · audio and video download at the same time") {
+                    val steps = listOf(1, 2, 3, 4, 6, 8)
+                    update { it.copy(downloadConnections = steps[(steps.indexOf(it.downloadConnections) + 1) % steps.size]) }
+                }
+            }
+            item { SwitchRow("Embed title, channel & thumbnail", "Writes metadata and cover art into MP4 / M4A files", s.downloadEmbedMetadata) { v -> update { it.copy(downloadEmbedMetadata = v) } } }
+            item { SwitchRow("Save subtitles", "Saves captions as a .vtt file in Download/Vidora", s.downloadSubtitles) { v -> update { it.copy(downloadSubtitles = v) } } }
+            item { SwitchRow("Remove sponsors from downloads", "Cuts SponsorBlock segments (your skip categories) out of the file, no re-encoding", s.downloadCutSponsors) { v -> update { it.copy(downloadCutSponsors = v) } } }
             item { ClickRow(stringResource(R.string.ui_download_folder), com.vidora.app.download.Storage.folderLabel(s.downloadFolder) + " · tap to choose (SD card supported)") { folderPicker.launch(null) } }
             if (s.downloadFolder.isNotBlank()) {
                 item {
@@ -437,6 +455,7 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
             item { SwitchRow(stringResource(R.string.ui_incognito_mode), stringResource(R.string.ui_pause_watch_search_history_also_in_the_l), s.incognito) { v -> update { it.copy(incognito = v) } } }
             item { SwitchRow(stringResource(R.string.ui_save_watch_history), stringResource(R.string.ui_stored_only_on_this_device), s.saveHistory) { v -> update { it.copy(saveHistory = v) } } }
             item { SwitchRow(stringResource(R.string.ui_save_search_history), null, s.saveSearchHistory) { v -> update { it.copy(saveSearchHistory = v) } } }
+            item { ClickRow("Clear watch history", "On this device") { Graph.library.clearHistory(); com.vidora.app.ui.UiCache.invalidate("you:history"); Toast.makeText(context, "Watch history cleared", Toast.LENGTH_SHORT).show() } }
             item { ClickRow(stringResource(R.string.ui_clear_search_history), null) { Graph.library.clearSearchHistory(); Toast.makeText(context, "Search history cleared", Toast.LENGTH_SHORT).show() } }
             item { ClickRow(stringResource(R.string.ui_clear_watch_history_2), null) { Graph.library.clearHistory(); Toast.makeText(context, "Watch history cleared", Toast.LENGTH_SHORT).show() } }
             item { ClickRow(stringResource(R.string.ui_export_library), stringResource(R.string.ui_back_up_subscriptions_likes_history)) { exportLauncher.launch("vidora-backup.json") } }

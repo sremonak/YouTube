@@ -46,6 +46,12 @@ enum class YtClient(
     /** Safari web client: adaptive HLS up to 1080p (needs the n challenge solved in the manifest path). */
     WEB_SAFARI("Web · Safari HLS", "WEB", "1", "2.20260708.00.00",
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.5 Safari/605.1.15,gzip(gfe)"),
+    /**
+     * Mobile web with BotGuard PoTokens minted in a WebView (like yt-dlp + a PO token provider):
+     * the full adaptive ladder (up to 4K) without the TV pre-roll wait.
+     */
+    MWEB_POT("Mobile web · PoToken", "MWEB", "2", "2.20260708.05.00",
+        "Mozilla/5.0 (iPad; CPU OS 16_7_10 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1,gzip(gfe)"),
     /** Mobile web: only the 360p muxed stream (itag 18), but it rarely fails. */
     MWEB("Mobile web · 360p", "MWEB", "2", "2.20260708.05.00",
         "Mozilla/5.0 (iPad; CPU OS 16_7_10 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1,gzip(gfe)"),
@@ -88,7 +94,14 @@ object TvPlayer {
         val client: YtClient,
         /** Epoch ms from which the stream URLs are accepted (TV pre-roll wait). */
         val availableAt: Long,
+        /** How much louder than YouTube's reference this video is (dB) — for "Stable volume". */
+        val loudnessDb: Double? = null,
     )
+
+    /** `playerConfig.audioConfig.loudnessDb` of a player response. */
+    fun loudnessDb(pr: JsonObject): Double? =
+        ((pr["playerConfig"] as? JsonObject)?.get("audioConfig") as? JsonObject)
+            ?.let { (it["loudnessDb"] as? JsonPrimitive)?.contentOrNull?.toDoubleOrNull() }
 
     /** Blocking — call from an IO thread. */
     fun fetch(videoId: String, signedIn: Boolean, client: YtClient = YtClient.TV): Result {
@@ -97,6 +110,14 @@ object TvPlayer {
         val sts = runCatching { JsChallengeSolver.player().sts }.getOrNull()
             ?: runCatching { YoutubeJavaScriptPlayerManager.getSignatureTimestamp(videoId) }.getOrNull()
         val locale = Locale.getDefault()
+        // MWEB_POT: anonymous visitor session + GVS token, and a player token bound to the video id.
+        val pot = if (client == YtClient.MWEB_POT) {
+            val session = com.vidora.app.potoken.PoTokenProviderImpl.anonymousSession()
+                ?: throw IOException("PoToken unavailable: ${com.vidora.app.potoken.PoTokenProviderImpl.lastStatus}")
+            val playerPot = com.vidora.app.potoken.PoTokenProviderImpl.mint(videoId)
+                ?: throw IOException("PoToken unavailable: ${com.vidora.app.potoken.PoTokenProviderImpl.lastStatus}")
+            Triple(session.first, session.second, playerPot)
+        } else null
 
         val body = buildJsonObject {
             putJsonObject("context") {
@@ -107,8 +128,10 @@ object TvPlayer {
                     client.extra.forEach { (k, v) -> put(k, v) }
                     put("hl", locale.language.ifBlank { "en" })
                     put("gl", locale.country.ifBlank { "US" })
+                    pot?.let { put("visitorData", it.first) }
                 }
             }
+            pot?.let { p -> putJsonObject("serviceIntegrityDimensions") { put("poToken", p.third) } }
             put("videoId", videoId)
             putJsonObject("playbackContext") {
                 putJsonObject("contentPlaybackContext") {
@@ -127,6 +150,7 @@ object TvPlayer {
             .header("Origin", ORIGIN)
             .header("X-YouTube-Client-Name", client.clientId)
             .header("X-YouTube-Client-Version", client.version)
+        pot?.let { req.header("X-Goog-Visitor-Id", it.first) }
         if (useAccount) {
             account.authHeaders(ORIGIN).forEach { (k, v) -> req.header(k, v) }
             req.header("X-Youtube-Bootstrap-Logged-In", "true")
@@ -189,7 +213,8 @@ object TvPlayer {
 
         fun handle(f: JsonObject, adaptive: Boolean, p: PendingUrl) {
             val itag = f.int("itag") ?: return
-            val url = p.build(sigs, ns) ?: return
+            val built = p.build(sigs, ns) ?: return
+            val url = if (pot != null) "$built&pot=" + URLEncoder.encode(pot.second, "UTF-8") else built
             val mimeFull = f.str("mimeType") ?: return
             val mime = mimeFull.substringBefore(';').trim()
             val codec = Regex("codecs=\"([^\"]+)\"").find(mimeFull)?.groupValues?.get(1)
@@ -271,6 +296,7 @@ object TvPlayer {
             signedIn = useAccount,
             client = client,
             availableAt = availableAt,
+            loudnessDb = loudnessDb(response),
         )
     }
 
