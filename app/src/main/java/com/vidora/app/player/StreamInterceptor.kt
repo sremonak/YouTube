@@ -26,21 +26,29 @@ class StreamInterceptor : Interceptor {
         val progressive = url.encodedPath == "/videoplayback"
 
         val urlString = url.toString()
-        val newUrl = if (progressive && url.queryParameter("rn") == null) {
+        val ownClient = url.queryParameter("c").let { it != null && (it.startsWith("TVHTML5") || it == "MWEB") }
+        val newUrl = if (progressive && !ownClient && url.queryParameter("rn") == null) {
             url.newBuilder().addQueryParameter("rn", requestNumber.getAndIncrement().toString()).build()
         } else url
 
         val builder = original.newBuilder().url(newUrl)
-        // URLs from our TV-client fallback (c=TVHTML5) must be fetched with the same TV User-Agent,
-        // plain GET + Range like the real client / yt-dlp.
-        val tv = url.queryParameter("c")?.startsWith("TVHTML5") == true
+        // URLs from our own InnerTube fallbacks (TV / mobile web / Safari web, incl. HLS segments with
+        // path parameters) are fetched like yt-dlp does: plain GET + Range with the client's User-Agent.
+        val c = url.queryParameter("c") ?: Regex("/c/([A-Z_0-9]+)/").find(url.encodedPath)?.groupValues?.get(1)
+        val own = when {
+            c == null -> null
+            c.startsWith("TVHTML5") -> com.vidora.app.data.YtClient.TV
+            c == "MWEB" -> com.vidora.app.data.YtClient.MWEB
+            c == "WEB" && !progressive -> com.vidora.app.data.YtClient.WEB_SAFARI
+            else -> null
+        }
         val userAgent = when {
-            tv -> com.vidora.app.data.TvPlayer.USER_AGENT
+            own != null -> own.userAgent.removeSuffix(",gzip(gfe)")
             YoutubeParsingHelper.isVisionOsStreamingUrl(urlString) -> YoutubeParsingHelper.getVisionOsUserAgent(null)
             else -> NetworkDownloader.USER_AGENT
         }
         builder.header("User-Agent", userAgent)
-        if (tv) return chain.proceed(builder.build())
+        if (own != null || !progressive) return chain.proceed(builder.build())
 
         if (YoutubeParsingHelper.isWebStreamingUrl(urlString)) {
             builder.header("Origin", "https://www.youtube.com")

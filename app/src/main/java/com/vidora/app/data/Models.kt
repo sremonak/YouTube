@@ -174,6 +174,8 @@ data class StreamDetails(
     val liveChat: String? = null,
     /** Which extraction path produced the streams (shown in Stats for nerds for debugging). */
     val source: String = "NewPipe · visionOS",
+    /** Play [hlsUrl] even for VODs (Safari web fallback: adaptive HLS is its only full-quality stream). */
+    val preferHls: Boolean = false,
 ) {
     /** Distinct audio languages; empty/one entry means there's nothing to choose. */
     val audioTracks: List<AudioTrack>

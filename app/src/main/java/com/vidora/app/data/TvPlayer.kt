@@ -1,8 +1,7 @@
 package com.vidora.app.data
 
 import com.vidora.app.Graph
-import com.vidora.app.potoken.PoTokenProviderImpl
-import kotlinx.coroutines.runBlocking
+import com.vidora.app.jsc.JsChallengeSolver
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -18,6 +17,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.schabi.newpipe.extractor.services.youtube.ItagItem
 import org.schabi.newpipe.extractor.services.youtube.YoutubeJavaScriptPlayerManager
+import java.net.URLEncoder
 import java.io.IOException
 import java.net.URLDecoder
 import java.util.Locale
@@ -28,23 +28,43 @@ class PlayabilityException(val status: String, val reason: String) : IOException
     val needsLogin: Boolean get() = status.equals("LOGIN_REQUIRED", true)
 }
 
+/** InnerTube clients we talk to directly (specs follow yt-dlp). */
+enum class YtClient(
+    val label: String,
+    val clientName: String,
+    val clientId: String,
+    val version: String,
+    val userAgent: String,
+    val extra: Map<String, String> = emptyMap(),
+    val supportsCookies: Boolean = false,
+) {
+    /** yt-dlp's default: full DASH ladder, accepts account cookies. URLs need the pre-roll wait. */
+    TV("TV client", "TVHTML5", "7", "5.20260707",
+        "Mozilla/5.0 (SMART-TV; Linux; Tizen 2.4.0) AppleWebKit/538.1 (KHTML, like Gecko) Version/2.4.0 TV Safari/538.1",
+        mapOf("deviceMake" to "Samsung", "deviceModel" to "UKS9800", "osName" to "Tizen", "osVersion" to "2.4.0"),
+        supportsCookies = true),
+    /** Safari web client: adaptive HLS up to 1080p (needs the n challenge solved in the manifest path). */
+    WEB_SAFARI("Web · Safari HLS", "WEB", "1", "2.20260708.00.00",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.5 Safari/605.1.15,gzip(gfe)"),
+    /** Mobile web: only the 360p muxed stream (itag 18), but it rarely fails. */
+    MWEB("Mobile web · 360p", "MWEB", "2", "2.20260708.05.00",
+        "Mozilla/5.0 (iPad; CPU OS 16_7_10 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1,gzip(gfe)"),
+}
+
 /**
- * Our own InnerTube player request with the TV (Tizen / "tv_samsung") client — the client yt-dlp
- * uses by default and the one that accepts **account cookies**.
+ * Our own InnerTube player requests, used when NewPipe Extractor (visionOS client) is blocked —
+ * typically "Sign in to confirm you're not a bot" on VPN / shared IPs.
  *
- * NewPipe Extractor 0.27.x only uses the visionOS client, which talks to youtubei.googleapis.com
- * and can't carry a signed-in session. On VPN / shared IPs YouTube answers that client with
- * "Sign in to confirm you're not a bot" — even when the user is signed in. This class fixes that:
- *  - signed in: cookies + SAPISIDHASH on www.youtube.com, GVS PoToken bound to the dataSyncId
- *  - anonymous: visitorData + GVS PoToken bound to it (second chance before giving up)
- * Signatures and the `n` throttling parameter are solved with NewPipe Extractor's JS player tools.
+ *  - [YtClient.TV] (tv_samsung) carries the signed-in session (cookies + SAPISIDHASH), exactly
+ *    like yt-dlp. Its URLs only start working after the pre-roll ad time YouTube announces in the
+ *    response (≈5 s), so [Result.availableAt] tells the caller when to start.
+ *  - [YtClient.WEB_SAFARI] and [YtClient.MWEB] are anonymous fallbacks.
+ *
+ * Signatures and `n` are solved by [JsChallengeSolver] (yt-dlp's EJS solver in a WebView) —
+ * NewPipe's regex deobfuscator can't parse current players any more.
  */
 object TvPlayer {
-    const val USER_AGENT =
-        "Mozilla/5.0 (SMART-TV; Linux; Tizen 2.4.0) AppleWebKit/538.1 (KHTML, like Gecko) Version/2.4.0 TV Safari/538.1"
-    private const val CLIENT_NAME = "TVHTML5"
-    private const val CLIENT_ID = "7"
-    private const val CLIENT_VERSION = "5.20260707"
+    val USER_AGENT = YtClient.TV.userAgent
     private const val ORIGIN = "https://www.youtube.com"
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -65,30 +85,28 @@ object TvPlayer {
         val dashUrl: String?,
         val subtitles: List<SubtitleOption>,
         val signedIn: Boolean,
+        val client: YtClient,
+        /** Epoch ms from which the stream URLs are accepted (TV pre-roll wait). */
+        val availableAt: Long,
     )
 
     /** Blocking — call from an IO thread. */
-    fun fetch(videoId: String, signedIn: Boolean): Result {
+    fun fetch(videoId: String, signedIn: Boolean, client: YtClient = YtClient.TV): Result {
         val account = Graph.account
-        val useAccount = signedIn && account.isSignedIn
-        val anon = if (useAccount) null else PoTokenProviderImpl.anonymousSession()
-        val visitorData = anon?.first
-        val sts = runCatching { YoutubeJavaScriptPlayerManager.getSignatureTimestamp(videoId) }.getOrNull()
+        val useAccount = signedIn && client.supportsCookies && account.isSignedIn
+        val sts = runCatching { JsChallengeSolver.player().sts }.getOrNull()
+            ?: runCatching { YoutubeJavaScriptPlayerManager.getSignatureTimestamp(videoId) }.getOrNull()
         val locale = Locale.getDefault()
 
         val body = buildJsonObject {
             putJsonObject("context") {
                 putJsonObject("client") {
-                    put("clientName", CLIENT_NAME)
-                    put("clientVersion", CLIENT_VERSION)
-                    put("deviceMake", "Samsung")
-                    put("deviceModel", "UKS9800")
-                    put("userAgent", USER_AGENT)
-                    put("osName", "Tizen")
-                    put("osVersion", "2.4.0")
+                    put("clientName", client.clientName)
+                    put("clientVersion", client.version)
+                    put("userAgent", client.userAgent)
+                    client.extra.forEach { (k, v) -> put(k, v) }
                     put("hl", locale.language.ifBlank { "en" })
                     put("gl", locale.country.ifBlank { "US" })
-                    visitorData?.let { put("visitorData", it) }
                 }
             }
             put("videoId", videoId)
@@ -105,21 +123,21 @@ object TvPlayer {
         val req = Request.Builder()
             .url("$ORIGIN/youtubei/v1/player?prettyPrint=false")
             .post(body.toString().toRequestBody("application/json".toMediaType()))
-            .header("User-Agent", USER_AGENT)
+            .header("User-Agent", client.userAgent)
             .header("Origin", ORIGIN)
-            .header("X-YouTube-Client-Name", CLIENT_ID)
-            .header("X-YouTube-Client-Version", CLIENT_VERSION)
-        visitorData?.let { req.header("X-Goog-Visitor-Id", it) }
+            .header("X-YouTube-Client-Name", client.clientId)
+            .header("X-YouTube-Client-Version", client.version)
         if (useAccount) {
             account.authHeaders(ORIGIN).forEach { (k, v) -> req.header(k, v) }
             req.header("X-Youtube-Bootstrap-Logged-In", "true")
         }
+        val requestedAt = System.currentTimeMillis()
 
         val response = Graph.http.newCall(req.build()).execute().use { r ->
             if (useAccount) account.mergeSetCookies(r.headers("Set-Cookie"))
             val text = r.body?.string().orEmpty()
             if (r.code == 401 || r.code == 403) throw IOException("YouTube rejected the session (HTTP ${r.code}). Sign out and sign in again.")
-            if (!r.isSuccessful) throw IOException("TV player request failed (HTTP ${r.code})")
+            if (!r.isSuccessful) throw IOException("${client.label} player request failed (HTTP ${r.code})")
             json.parseToJsonElement(text).jsonObject
         }
 
@@ -141,19 +159,37 @@ object TvPlayer {
             throw IOException("YouTube returned a different video (IP rate-limited?)")
         }
 
-        // GVS PoToken: bound to the dataSyncId when signed in, to the visitorData otherwise.
-        val pot = if (useAccount) {
-            runCatching { runBlocking { Graph.accountApi.dataSyncId() } }.getOrNull()?.let { PoTokenProviderImpl.mint(it) }
-        } else anon?.second
-
         val streaming = response.obj("streamingData")
         val videos = mutableListOf<VideoOption>()
         val audios = mutableListOf<AudioOption>()
-        fun handle(f: JsonObject, adaptive: Boolean) {
-            if (f["drmFamilies"] != null) return
+
+        // Collect every format, then solve all signature / n challenges in one batch.
+        val raw = buildList {
+            streaming.arr("formats").forEach { (it as? JsonObject)?.let { f -> add(f to false) } }
+            streaming.arr("adaptiveFormats").forEach { (it as? JsonObject)?.let { f -> add(f to true) } }
+        }.filter { (f, _) ->
+            f["drmFamilies"] == null && f.str("type") != "FORMAT_STREAM_TYPE_OTF" &&
+                (f.int("itag")?.let(ItagItem::isSupported) == true) &&
+                (f.str("url") != null || f.str("signatureCipher") != null || f.str("cipher") != null)
+        }
+        val pending = raw.map { (f, adaptive) -> Triple(f, adaptive, PendingUrl.of(f)) }.filter { it.third != null }
+        val hlsRaw = streaming.str("hlsManifestUrl")
+        val hlsN = hlsRaw?.let { Regex("/n/([^/]+)/").find(it)?.groupValues?.get(1) }
+        val noneSolved: Pair<Map<String, String>, Map<String, String>> = emptyMap<String, String>() to emptyMap<String, String>()
+        val (sigs, ns) = if (pending.isEmpty() && hlsN == null) noneSolved else try {
+            JsChallengeSolver.solve(
+                pending.mapNotNull { it.third!!.sig },
+                pending.mapNotNull { it.third!!.n } + listOfNotNull(hlsN),
+            )
+        } catch (t: Throwable) {
+            android.util.Log.w("TvPlayer", "challenge solving failed", t)
+            // Only formats that need nothing solved remain usable.
+            noneSolved
+        }
+
+        fun handle(f: JsonObject, adaptive: Boolean, p: PendingUrl) {
             val itag = f.int("itag") ?: return
-            if (!ItagItem.isSupported(itag)) return
-            val url = resolveUrl(videoId, f, pot) ?: return
+            val url = p.build(sigs, ns) ?: return
             val mimeFull = f.str("mimeType") ?: return
             val mime = mimeFull.substringBefore(';').trim()
             val codec = Regex("codecs=\"([^\"]+)\"").find(mimeFull)?.groupValues?.get(1)
@@ -187,8 +223,7 @@ object TvPlayer {
                 )
             }
         }
-        streaming.arr("formats").forEach { (it as? JsonObject)?.let { f -> handle(f, adaptive = false) } }
-        streaming.arr("adaptiveFormats").forEach { (it as? JsonObject)?.let { f -> handle(f, adaptive = true) } }
+        pending.forEach { (f, adaptive, p) -> handle(f, adaptive, p!!) }
 
         val subs = response.obj("captions").obj("playerCaptionsTracklistRenderer").arr("captionTracks").mapNotNull { e ->
             val t = e as? JsonObject ?: return@mapNotNull null
@@ -203,10 +238,21 @@ object TvPlayer {
             )
         }.distinctBy { it.languageCode + it.autoGenerated }.sortedWith(compareBy<SubtitleOption> { it.autoGenerated }.thenBy { it.label })
 
-        val hls = streaming.str("hlsManifestUrl")
-        if (videos.isEmpty() && audios.isEmpty() && hls == null) {
-            throw IOException("No playable formats from the TV client (SABR-only or DRM)")
+        // The HLS manifest carries its own n challenge in the path; unsolved it gives 403 on segments.
+        val hls = when {
+            hlsRaw == null -> null
+            hlsN == null -> hlsRaw
+            else -> ns[hlsN]?.let { hlsRaw.replace("/n/$hlsN/", "/n/$it/") }
         }
+        if (videos.isEmpty() && audios.isEmpty() && hls == null) {
+            val why = when {
+                raw.isEmpty() && streaming.str("serverAbrStreamingUrl") != null -> "SABR-only"
+                raw.isEmpty() -> "DRM or no formats"
+                else -> "couldn't solve the stream challenge: ${JsChallengeSolver.lastStatus}"
+            }
+            throw IOException("No playable formats from the ${client.label} ($why)")
+        }
+        val availableAt = requestedAt + (adWaitSeconds(response) * 1000).toLong().let { if (it > 0) it + 500 else 0 }
         return Result(
             videoId = videoId,
             title = details.str("title") ?: "",
@@ -223,22 +269,77 @@ object TvPlayer {
             dashUrl = streaming.str("dashManifestUrl"),
             subtitles = subs,
             signedIn = useAccount,
+            client = client,
+            availableAt = availableAt,
         )
     }
 
-    /** Plain URL or deciphered signatureCipher, with `n` de-throttled and the PoToken appended. */
-    private fun resolveUrl(videoId: String, f: JsonObject, pot: String?): String? {
-        var url = f.str("url") ?: run {
-            val cipher = f.str("signatureCipher") ?: f.str("cipher") ?: return null
-            val q = parseQuery(cipher)
-            val base = q["url"] ?: return null
-            val s = q["s"] ?: return base
-            val sig = runCatching { YoutubeJavaScriptPlayerManager.deobfuscateSignature(videoId, s) }.getOrNull() ?: return null
-            "$base&${q["sp"] ?: "signature"}=${java.net.URLEncoder.encode(sig, "UTF-8")}"
+    /**
+     * Seconds of pre-roll ads YouTube announces for this playback (yt-dlp's
+     * `_get_available_at_timestamp`). TV stream URLs answer 403 until that time has passed.
+     */
+    internal fun adWaitSeconds(pr: JsonObject): Double {
+        var total = 0.0
+        fun renderer(r: JsonObject?) {
+            val ivr = r?.get("instreamVideoAdRenderer") as? JsonObject ?: return
+            val skip = ivr.str("skipOffsetMilliseconds")?.toDoubleOrNull()?.div(1000)
+            val len = ivr.str("playerVars")?.let { pv -> Regex("(?:^|&)length_seconds=([0-9.]+)").find(pv)?.groupValues?.get(1)?.toDoubleOrNull() }
+            (skip ?: len)?.let { total += it }
         }
-        url = runCatching { YoutubeJavaScriptPlayerManager.getUrlWithThrottlingParameterDeobfuscated(videoId, url) }.getOrDefault(url)
-        if (pot != null && !url.contains("&pot=")) url += "&pot=" + java.net.URLEncoder.encode(pot, "UTF-8")
-        return url
+        pr.arr("adPlacements").forEach { p ->
+            val apr = (p as? JsonObject)?.obj("adPlacementRenderer") ?: return@forEach
+            if (apr.obj("config").obj("adPlacementConfig").str("kind") == "AD_PLACEMENT_KIND_START") renderer(apr.obj("renderer"))
+        }
+        pr.arr("adSlots").forEach { p ->
+            val asr = (p as? JsonObject)?.obj("adSlotRenderer") ?: return@forEach
+            if (asr.obj("adSlotMetadata").str("triggerEvent") != "SLOT_TRIGGER_EVENT_BEFORE_CONTENT") return@forEach
+            val rc = asr.obj("fulfillmentContent").obj("fulfilledLayout").obj("playerBytesAdLayoutRenderer").obj("renderingContent")
+            renderer(rc)
+            rc.obj("playerBytesSequentialLayoutRenderer").arr("sequentialLayouts").forEach { l ->
+                renderer((l as? JsonObject)?.obj("playerBytesAdLayoutRenderer")?.obj("renderingContent"))
+            }
+        }
+        return total.coerceIn(0.0, 60.0)
+    }
+
+    /** A format URL that may still need its signature and/or `n` challenge solved. */
+    internal class PendingUrl(val base: String, val sig: String?, val sp: String, val n: String?) {
+        fun build(sigs: Map<String, String>, ns: Map<String, String>): String? {
+            var url = base
+            if (sig != null) {
+                val solved = sigs[sig] ?: return null
+                url += "&$sp=" + URLEncoder.encode(solved, "UTF-8")
+            }
+            if (n != null) {
+                val solved = ns[n] ?: return null // unsolved n = throttled to death / 403
+                url = replaceQueryParam(url, "n", solved)
+            }
+            return url
+        }
+
+        companion object {
+            fun of(f: JsonObject): PendingUrl? {
+                val direct = (f["url"] as? JsonPrimitive)?.contentOrNull
+                val (base, sig, sp) = if (direct != null) Triple(direct, null, "signature") else {
+                    val cipher = (f["signatureCipher"] as? JsonPrimitive)?.contentOrNull ?: (f["cipher"] as? JsonPrimitive)?.contentOrNull ?: return null
+                    val q = parseQuery(cipher)
+                    Triple(q["url"] ?: return null, q["s"], q["sp"] ?: "signature")
+                }
+                val n = queryParam(base, "n")
+                return PendingUrl(base, sig, sp, n)
+            }
+        }
+    }
+
+    internal fun queryParam(url: String, key: String): String? =
+        url.substringAfter('?', "").split('&').firstOrNull { it.startsWith("$key=") }
+            ?.substringAfter('=')?.let { URLDecoder.decode(it, "UTF-8") }
+
+    internal fun replaceQueryParam(url: String, key: String, value: String): String {
+        val q = url.indexOf('?')
+        if (q < 0) return url
+        val parts = url.substring(q + 1).split('&').map { if (it.startsWith("$key=")) "$key=" + URLEncoder.encode(value, "UTF-8") else it }
+        return url.substring(0, q + 1) + parts.joinToString("&")
     }
 
     internal fun parseQuery(q: String): Map<String, String> = q.split('&').mapNotNull {

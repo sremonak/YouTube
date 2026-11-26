@@ -43,9 +43,14 @@ class AccountApi {
     private val json = Json { ignoreUnknownKeys = true }
     private val client get() = Graph.http
 
-    private suspend fun post(endpoint: String, body: JsonObject): JsonObject = withContext(Dispatchers.IO) {
+    /** Web-client InnerTube call that works signed out too (uses the account when there is one). */
+    suspend fun webPost(endpoint: String, body: JsonObject): JsonObject = post(endpoint, body, requireAuth = false)
+
+    suspend fun webContext(): JsonObject = context()
+
+    private suspend fun post(endpoint: String, body: JsonObject, requireAuth: Boolean = true): JsonObject = withContext(Dispatchers.IO) {
         val account = Graph.account
-        if (!account.isSignedIn) throw IllegalStateException("Not signed in")
+        if (requireAuth && !account.isSignedIn) throw IllegalStateException("Not signed in")
         val version = runCatching { YoutubeParsingHelper.getClientVersion() }.getOrDefault("2.20251101.00.00")
         val builder = Request.Builder()
             .url("https://www.youtube.com/youtubei/v1/$endpoint?prettyPrint=false")
@@ -55,9 +60,10 @@ class AccountApi {
             .header("Referer", "https://www.youtube.com/")
             .header("X-Youtube-Client-Name", "1")
             .header("X-Youtube-Client-Version", version)
-        account.authHeaders().forEach { (k, v) -> builder.header(k, v) }
+        val authed = account.isSignedIn
+        if (authed) account.authHeaders().forEach { (k, v) -> builder.header(k, v) }
         client.newCall(builder.build()).execute().use { r ->
-            account.mergeSetCookies(r.headers("Set-Cookie"))
+            if (authed) account.mergeSetCookies(r.headers("Set-Cookie"))
             val text = r.body?.string().orEmpty()
             if (r.code == 401 || r.code == 403) throw IOException("Session expired — please sign in again (HTTP ${r.code})")
             if (!r.isSuccessful) throw IOException("HTTP ${r.code}")
@@ -110,12 +116,12 @@ class AccountApi {
         return id
     }
 
-    /** Related videos for a watch page (signed-in `next`), used when the anonymous extractor is blocked. */
+    /** Related videos for a watch page (`next`, signed in when possible), used when the extractor is blocked. */
     suspend fun watchNext(videoId: String): List<VideoItem> {
         val res = post("next", buildJsonObject {
             put("context", context()); put("videoId", videoId)
             put("contentCheckOk", true); put("racyCheckOk", true)
-        })
+        }, requireAuth = false)
         val out = mutableListOf<VideoItem>()
         walk(res, out, mutableListOf())
         return out.filter { !it.url.contains(videoId) }.distinctBy { it.url }

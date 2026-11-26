@@ -52,3 +52,6 @@
     @android.webkit.JavascriptInterface <methods>;
 }
 -keepattributes JavascriptInterface
+
+# WebView JavaScript bridges (PoToken + EJS challenge solver)
+-keepclassmembers class * { @android.webkit.JavascriptInterface <methods>; }

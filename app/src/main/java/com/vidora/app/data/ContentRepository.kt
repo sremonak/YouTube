@@ -6,7 +6,13 @@ import android.os.Build
 import android.util.LruCache
 import com.vidora.app.Graph
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import org.schabi.newpipe.extractor.Image
 import org.schabi.newpipe.extractor.comments.CommentsInfo
 import org.schabi.newpipe.extractor.comments.CommentsInfoItem
@@ -121,36 +127,53 @@ class ContentRepository {
     /** Until when anonymous extraction is known to be bot-blocked on this network. */
     @Volatile private var anonBlockedUntil = 0L
 
+    private val _loadStatus = MutableStateFlow<String?>(null)
+    /** Human-readable progress while a video is being prepared ("Starting in 4 s…"), null when idle. */
+    val loadStatus: StateFlow<String?> = _loadStatus.asStateFlow()
+
     /**
      * 1. NewPipe Extractor (anonymous visionOS client) — the normal path.
      * 2. If YouTube refuses it: our TV client **with the signed-in account** (cookies), which is what
-     *    actually gets past "confirm you're not a bot" on VPN / shared IPs.
-     * 3. Last resort: the TV client anonymously (different client, sometimes not blocked).
+     *    actually gets past "confirm you're not a bot" on VPN / shared IPs (same as yt-dlp).
+     * 3. The TV client anonymously, then the Safari web client (HLS) and mobile web (360p).
      * While the network is known to be blocked, signed-in users go straight to step 2.
      */
     private suspend fun loadStream(url: String): StreamDetails {
         val signed = Graph.account.isSignedIn && useAccountForRestricted
-        if (signed && System.currentTimeMillis() < anonBlockedUntil) {
-            runCatching { return tvDetails(url, withAccount = true) }
-        }
-        val anonError = try {
-            return StreamInfo.getInfo(service, url).toDetails()
-        } catch (t: Throwable) {
-            if (t is kotlinx.coroutines.CancellationException) throw t
-            t
-        }
-        if (isBotBlock(anonError)) anonBlockedUntil = System.currentTimeMillis() + 15 * 60_000
-        var last: Throwable = anonError
-        for (withAccount in listOfNotNull(true.takeIf { signed }, false)) {
-            try {
-                return tvDetails(url, withAccount)
+        try {
+            if (signed && System.currentTimeMillis() < anonBlockedUntil) {
+                runCatching { return ytDetails(url, withAccount = true, YtClient.TV) }
+                    .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
+            }
+            _loadStatus.value = "Loading video…"
+            val anonError = try {
+                return StreamInfo.getInfo(service, url).toDetails()
             } catch (t: Throwable) {
                 if (t is kotlinx.coroutines.CancellationException) throw t
-                android.util.Log.w("ContentRepository", "TV client (account=$withAccount) failed", t)
-                if (withAccount || last === anonError) last = t
+                t
             }
+            if (isBotBlock(anonError)) anonBlockedUntil = System.currentTimeMillis() + 15 * 60_000
+            var last: Throwable = anonError
+            val attempts = buildList {
+                if (signed) add(true to YtClient.TV)
+                add(false to YtClient.TV)
+                add(false to YtClient.WEB_SAFARI)
+                add(false to YtClient.MWEB)
+            }
+            for ((withAccount, client) in attempts) {
+                try {
+                    _loadStatus.value = "Trying ${client.label}${if (withAccount) " with your account" else ""}…"
+                    return ytDetails(url, withAccount, client)
+                } catch (t: Throwable) {
+                    if (t is kotlinx.coroutines.CancellationException) throw t
+                    android.util.Log.w("ContentRepository", "${client.name} (account=$withAccount) failed", t)
+                    if (withAccount || last === anonError) last = t
+                }
+            }
+            throw StreamBlockedException(explain(anonError, last, signed), anonError)
+        } finally {
+            _loadStatus.value = null
         }
-        throw StreamBlockedException(explain(anonError, last, signed), anonError)
     }
 
     private fun isBotBlock(t: Throwable) = t is SignInConfirmNotBotException ||
@@ -177,11 +200,18 @@ class ContentRepository {
         }
     }
 
-    private suspend fun tvDetails(url: String, withAccount: Boolean): StreamDetails {
+    private suspend fun ytDetails(url: String, withAccount: Boolean, client: YtClient): StreamDetails {
         val handler = service.streamLHFactory.fromUrl(url)
         val id = handler.id
-        val r = TvPlayer.fetch(id, withAccount)
-        val related = if (r.signedIn) runCatching { Graph.accountApi.watchNext(id) }.getOrDefault(emptyList()) else emptyList()
+        val r = runInterruptible { TvPlayer.fetch(id, withAccount, client) }
+        val related = runCatching { withTimeout(12_000) { Graph.accountApi.watchNext(id) } }.getOrDefault(emptyList())
+        // TV stream URLs answer 403 until YouTube's announced pre-roll time has passed (yt-dlp waits too).
+        while (true) {
+            val left = r.availableAt - System.currentTimeMillis()
+            if (left <= 0) break
+            _loadStatus.value = "Starting in ${(left + 999) / 1000} s…"
+            delay(left.coerceAtMost(1000))
+        }
         val item = VideoItem(
             url = handler.url,
             title = r.title,
@@ -207,7 +237,8 @@ class ContentRepository {
             category = null,
             allAudioStreams = r.audios,
             subtitles = r.subtitles,
-            source = if (r.signedIn) "TV client · your account" else "TV client · anonymous",
+            source = r.client.label + if (r.signedIn) " · your account" else " · anonymous",
+            preferHls = r.client == YtClient.WEB_SAFARI && r.hlsUrl != null,
         )
     }
 
@@ -321,14 +352,31 @@ class ContentRepository {
 
     // ---------------------------------------------------------------- comments
 
+    /**
+     * NewPipe Extractor first (bounded so the UI never spins forever), then our own web `next`
+     * parser — which also uses the account when signed in.
+     */
     suspend fun comments(url: String): CommentsPage = io {
-        val info = authFallback { CommentsInfo.getInfo(service, url) }
-        if (info.isCommentsDisabled) return@io CommentsPage(emptyList(), null, 0, disabled = true)
-        CommentsPage(
-            info.relatedItems.map { it.toComment(url) },
-            nextComments(url, info.nextPage),
-            info.commentsCount,
-        )
+        val npe = runCatching {
+            withTimeout(15_000) { runInterruptible { authFallback { CommentsInfo.getInfo(service, url) } } }
+        }.onFailure { if (it is kotlinx.coroutines.CancellationException && it !is kotlinx.coroutines.TimeoutCancellationException) throw it }
+        val info = npe.getOrNull()
+        if (info != null && (info.isCommentsDisabled || info.relatedItems.isNotEmpty())) {
+            if (info.isCommentsDisabled) return@io CommentsPage(emptyList(), null, 0, disabled = true)
+            return@io CommentsPage(
+                info.relatedItems.map { it.toComment(url) },
+                nextComments(url, info.nextPage),
+                info.commentsCount,
+            )
+        }
+        val id = runCatching { service.streamLHFactory.fromUrl(url).id }.getOrNull() ?: throw npe.exceptionOrNull() ?: IllegalArgumentException(url)
+        try {
+            withTimeout(20_000) { YtComments.first(id) }
+        } catch (t: Throwable) {
+            if (t is kotlinx.coroutines.CancellationException && t !is kotlinx.coroutines.TimeoutCancellationException) throw t
+            if (info != null) return@io CommentsPage(emptyList(), null, info.commentsCount)
+            throw npe.exceptionOrNull()?.also { it.addSuppressed(t) } ?: t
+        }
     }
 
     /**

@@ -312,7 +312,17 @@ private fun VideoSurface(modifier: Modifier, state: PlayerUiState, showControls:
         }
         GestureOverlay(feedback, Modifier.align(Alignment.Center))
         scrubMs?.let { ms -> SeekPreview(state.details?.frames, ms, Modifier.align(Alignment.Center)) }
-        if (state.loading) CircularProgressIndicator(color = Color.White)
+        if (state.loading) {
+            val status by Graph.repository.loadStatus.collectAsState()
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                CircularProgressIndicator(color = Color.White)
+                status?.let {
+                    Spacer(Modifier.height(10.dp))
+                    Text(it, color = Color.White.copy(alpha = 0.9f), style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.background(Color.Black.copy(alpha = 0.45f), RoundedCornerShape(50)).padding(horizontal = 12.dp, vertical = 4.dp))
+                }
+            }
+        }
         if (state.restored && !state.loading && state.error == null) {
             AsyncImage(state.current?.thumbnail, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             IconButton(

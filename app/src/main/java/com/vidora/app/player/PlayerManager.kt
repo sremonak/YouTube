@@ -456,7 +456,8 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
         val meta = metadata(item)
 
         when {
-            item.isLive && (details.hlsUrl != null || details.dashUrl != null) -> {
+            (item.isLive && (details.hlsUrl != null || details.dashUrl != null)) ||
+                (details.preferHls && details.hlsUrl != null && forced == null) -> {
                 source = if (details.hlsUrl != null) {
                     HlsMediaSource.Factory(httpFactory).createMediaSource(
                         MediaItem.Builder().setUri(details.hlsUrl).setMimeType(MimeTypes.APPLICATION_M3U8)
