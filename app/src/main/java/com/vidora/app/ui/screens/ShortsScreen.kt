@@ -84,8 +84,31 @@ object ShortsSession {
 fun ShortsScreen(nav: NavHostController, actions: VideoActions) {
     val items = remember { mutableStateListOf<VideoItem>().apply { addAll(ShortsSession.seed.distinctBy { it.url }) } }
     if (items.isEmpty()) {
-        LaunchedEffect(Unit) { nav.popBackStack() }
+        // Opened from the bottom bar: build a Shorts feed (like YouTube's Shorts tab).
+        var failed by remember { mutableStateOf<String?>(null) }
+        var attempt by remember { mutableStateOf(0) }
+        LaunchedEffect(attempt) {
+            runCatching { loadShortsFeed() }
+                .onSuccess { if (it.isEmpty()) failed = "No Shorts found" else items.addAll(it) }
+                .onFailure { failed = it.message ?: "Couldn't load Shorts" }
+        }
+        Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
+            val f = failed
+            if (f == null) CircularProgressIndicator(color = Color.White)
+            else Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(f, color = Color.White)
+                Spacer(Modifier.height(8.dp))
+                androidx.compose.material3.TextButton(onClick = { failed = null; attempt++ }) { Text(stringResource(R.string.ui_retry), color = Color.White) }
+            }
+        }
         return
+    }
+    // Leaving Shorts pauses it, like YouTube (instead of continuing in the mini player).
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        onDispose {
+            val cur = Graph.player.state.value.current
+            if (cur != null && items.any { it.url == cur.url }) Graph.player.exoPlayer.pause()
+        }
     }
     val pager = rememberPagerState { items.size }
     val state by Graph.player.state.collectAsState()
@@ -206,4 +229,21 @@ private fun ShortAction(icon: ImageVector, label: String, onClick: () -> Unit) {
         Icon(icon, label, tint = Color.White, modifier = Modifier.size(30.dp))
         Text(label, color = Color.White, style = MaterialTheme.typography.labelSmall)
     }
+}
+
+/** Shorts feed for the bottom-bar tab: account recommendations when signed in, otherwise a search. */
+private suspend fun loadShortsFeed(): List<VideoItem> {
+    fun List<com.vidora.app.data.Entry>.shorts() = filterIsInstance<com.vidora.app.data.Entry.Video>().map { it.video }
+        .filter { it.isShort || it.duration in 1..75 }
+    val lib = Graph.library.data.value
+    val seeds = (lib.searchHistory.take(3) + listOf("shorts", "#shorts", "funny shorts", "music shorts")).shuffled()
+    val out = LinkedHashMap<String, VideoItem>()
+    if (Graph.account.isSignedIn) {
+        runCatching { Graph.accountApi.feed(com.vidora.app.account.AccountFeed.RECOMMENDED).items.shorts() }.getOrNull()?.forEach { out[it.url] = it }
+    }
+    for (q in seeds) {
+        if (out.size >= 12) break
+        runCatching { Graph.repository.search("$q #shorts").items.shorts() }.getOrNull()?.forEach { out.putIfAbsent(it.url, it) }
+    }
+    return out.values.shuffled().take(30)
 }

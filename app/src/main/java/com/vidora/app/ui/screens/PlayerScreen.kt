@@ -42,7 +42,7 @@ import androidx.compose.material.icons.rounded.Audiotrack
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Download
-import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.HighQuality
@@ -102,6 +102,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -361,22 +362,28 @@ private fun LazyListScope.detailsSection(
     item(key = "title") {
         var expanded by rememberSaveable(item.url) { mutableStateOf(false) }
         Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp).animateContentSize()) {
-            Row(Modifier.clickable { expanded = !expanded }) {
-                Text(
-                    item.title, style = MaterialTheme.typography.titleLarge,
-                    maxLines = if (expanded) 6 else 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
-                )
-                Icon(Icons.Rounded.ExpandMore, null)
-            }
-            Spacer(Modifier.height(4.dp))
             Text(
-                listOfNotNull(
-                    Format.views(item.views).takeIf { it.isNotEmpty() },
-                    item.uploadedText?.takeIf { it.isNotBlank() } ?: Format.relative(item.uploadedEpoch).takeIf { it.isNotEmpty() },
-                    details?.category,
-                ).joinToString(" · "),
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
+                item.title,
+                style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp, lineHeight = 24.sp, fontWeight = FontWeight.Bold),
+                maxLines = if (expanded) 6 else 2, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded }
             )
+            Spacer(Modifier.height(4.dp))
+            Row(Modifier.clickable { expanded = !expanded }, verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    listOfNotNull(
+                        Format.views(item.views).takeIf { it.isNotEmpty() },
+                        item.uploadedText?.takeIf { it.isNotBlank() } ?: Format.relative(item.uploadedEpoch).takeIf { it.isNotEmpty() },
+                        details?.category,
+                    ).joinToString("  "),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false)
+                )
+                Text(
+                    if (expanded) "  Show less" else "  ...more",
+                    style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold
+                )
+            }
             if (expanded && details != null) {
                 Spacer(Modifier.height(12.dp))
                 Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = MaterialTheme.shapes.medium) {
@@ -399,29 +406,44 @@ private fun LazyListScope.detailsSection(
             Modifier.fillMaxWidth().clickable { item.uploaderUrl?.let { actions.openChannel(it) } }.padding(horizontal = 16.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Avatar(item.uploaderAvatar, 42)
+            Avatar(item.uploaderAvatar, 36)
             Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(item.uploader.orEmpty(), style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    if (item.verified) Icon(Icons.Rounded.Verified, null, Modifier.padding(start = 4.dp).size(14.dp))
-                }
+            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                Text(item.uploader.orEmpty(), style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                if (item.verified) Icon(Icons.Rounded.Verified, null, Modifier.padding(start = 4.dp).size(13.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 details?.subscriberCount?.takeIf { it >= 0 }?.let {
-                    Text(Format.subscribers(it), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("  " + Format.subscribers(it), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                 }
             }
             val uploaderUrl = item.uploaderUrl
             if (uploaderUrl != null) {
+                Spacer(Modifier.width(8.dp))
                 if (subscribed) {
-                    FilledTonalButton(onClick = { Graph.library.toggleSubscription(com.vidora.app.data.ChannelItem(uploaderUrl, item.uploader.orEmpty(), item.uploaderAvatar)) }) {
+                    FilledTonalButton(
+                        onClick = { Graph.library.toggleSubscription(com.vidora.app.data.ChannelItem(uploaderUrl, item.uploader.orEmpty(), item.uploaderAvatar)) },
+                        colors = androidx.compose.material3.ButtonDefaults.filledTonalButtonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh, contentColor = MaterialTheme.colorScheme.onSurface,
+                        ),
+                        contentPadding = PaddingValues(horizontal = 14.dp),
+                        modifier = Modifier.height(36.dp),
+                    ) {
+                        Icon(Icons.Rounded.NotificationsActive, null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
                         Text(stringResource(R.string.subscribed))
                     }
                 } else {
-                    Button(onClick = {
-                        Graph.library.toggleSubscription(
-                            com.vidora.app.data.ChannelItem(uploaderUrl, item.uploader.orEmpty(), item.uploaderAvatar, details?.subscriberCount ?: -1)
-                        )
-                    }) { Text(stringResource(R.string.subscribe)) }
+                    Button(
+                        onClick = {
+                            Graph.library.toggleSubscription(
+                                com.vidora.app.data.ChannelItem(uploaderUrl, item.uploader.orEmpty(), item.uploaderAvatar, details?.subscriberCount ?: -1)
+                            )
+                        },
+                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.onSurface, contentColor = MaterialTheme.colorScheme.surface,
+                        ),
+                        contentPadding = PaddingValues(horizontal = 16.dp),
+                        modifier = Modifier.height(36.dp),
+                    ) { Text(stringResource(R.string.subscribe), fontWeight = FontWeight.SemiBold) }
                 }
             }
         }
@@ -457,6 +479,12 @@ private fun LazyListScope.detailsSection(
                     } else com.vidora.app.account.AccountSync.liked(item.url, false)
                 }
             }
+            item {
+                ActionChip(stringResource(R.string.chip_share), Icons.Rounded.Share) {
+                    val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, item.url).putExtra(Intent.EXTRA_SUBJECT, item.title)
+                    context.startActivity(Intent.createChooser(send, "Share video"))
+                }
+            }
             item { ActionChip(stringResource(R.string.chip_download), Icons.Rounded.Download) { onDownload(item) } }
             item { ActionChip(stringResource(R.string.chip_playlist), Icons.AutoMirrored.Rounded.PlaylistAdd) { openSheet(Sheet.PLAYLIST) } }
             item { ActionChip(state.subtitle?.label ?: stringResource(R.string.chip_captions), Icons.Rounded.ClosedCaption, selected = state.subtitle != null) { openSheet(Sheet.CAPTIONS) } }
@@ -476,12 +504,6 @@ private fun LazyListScope.detailsSection(
             item { ActionChip(if (state.sleepTimerEndsAt > 0 || state.sleepAtEnd) "Sleep on" else "Sleep", Icons.Rounded.Bedtime, selected = state.sleepTimerEndsAt > 0 || state.sleepAtEnd) { openSheet(Sheet.SLEEP) } }
             item { ActionChip("PiP", Icons.Rounded.PictureInPictureAlt) { activity.enterPip() } }
             item { ActionChip("Stats", Icons.Rounded.Info) { openSheet(Sheet.STATS) } }
-            item {
-                ActionChip(stringResource(R.string.chip_share), Icons.Rounded.Share) {
-                    val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, item.url).putExtra(Intent.EXTRA_SUBJECT, item.title)
-                    context.startActivity(Intent.createChooser(send, "Share video"))
-                }
-            }
         }
     }
     if (details != null && details.chapters.isNotEmpty()) {
@@ -548,11 +570,16 @@ private fun ActionChip(label: String, icon: androidx.compose.ui.graphics.vector.
         label = { Text(label) },
         leadingIcon = { Icon(icon, null, Modifier.size(18.dp)) },
         shape = RoundedCornerShape(50),
+        // YouTube's flat grey pills; "on" state = inverted colours.
         colors = if (selected) AssistChipDefaults.assistChipColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
-            labelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-            leadingIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-        ) else AssistChipDefaults.assistChipColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+            containerColor = MaterialTheme.colorScheme.onSurface,
+            labelColor = MaterialTheme.colorScheme.surface,
+            leadingIconContentColor = MaterialTheme.colorScheme.surface,
+        ) else AssistChipDefaults.assistChipColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            labelColor = MaterialTheme.colorScheme.onSurface,
+            leadingIconContentColor = MaterialTheme.colorScheme.onSurface,
+        ),
         border = null,
     )
 }

@@ -92,8 +92,8 @@ class VideoActions(
 )
 
 @Composable
-fun Thumbnail(item: VideoItem, modifier: Modifier = Modifier, progress: Float = 0f) {
-    val corner = LocalDesign.current.corner
+fun Thumbnail(item: VideoItem, modifier: Modifier = Modifier, progress: Float = 0f, cornerOverride: Int? = null) {
+    val corner = cornerOverride ?: LocalDesign.current.corner
     Box(
         modifier
             .aspectRatio(16f / 9f)
@@ -167,9 +167,11 @@ fun VideoCard(original: VideoItem, actions: VideoActions, modifier: Modifier = M
             Box { MoreButton(original, actions, menu) { menu = it } }
         }
     } else {
-        Column(clickModifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-            Thumbnail(item, Modifier.fillMaxWidth(), progress)
-            Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.Top) {
+        // Phones: edge-to-edge thumbnails like the YouTube app; tablets keep rounded grid cards.
+        val edge = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 600
+        Column(clickModifier.padding(horizontal = if (edge) 0.dp else 12.dp, vertical = if (edge) 6.dp else 8.dp)) {
+            Thumbnail(item, Modifier.fillMaxWidth(), progress, cornerOverride = if (edge) 0 else null)
+            Row(Modifier.padding(start = if (edge) 12.dp else 0.dp, end = if (edge) 4.dp else 0.dp, top = 10.dp, bottom = if (edge) 10.dp else 0.dp), verticalAlignment = Alignment.Top) {
                 if (LocalDesign.current.showAvatars && item.uploaderAvatar != null) {
                     Avatar(item.uploaderAvatar, 36)
                     Spacer(Modifier.width(10.dp))

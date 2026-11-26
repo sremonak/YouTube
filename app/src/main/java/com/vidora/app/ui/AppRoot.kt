@@ -20,6 +20,10 @@ import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Subscriptions
 import androidx.compose.material.icons.outlined.VideoLibrary
+import androidx.compose.material.icons.outlined.AccountCircle
+import androidx.compose.material.icons.outlined.SlowMotionVideo
+import androidx.compose.material.icons.rounded.AccountCircle
+import androidx.compose.material.icons.rounded.SlowMotionVideo
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Subscriptions
@@ -47,6 +51,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.Color
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -105,11 +110,12 @@ object Routes {
 
 private data class TopDest(val route: String, @androidx.annotation.StringRes val label: Int, val icon: ImageVector, val selectedIcon: ImageVector)
 
+/** YouTube's bottom bar: Home · Shorts · Subscriptions · You (downloads live under You). */
 private val topDestinations = listOf(
     TopDest(Routes.HOME, R.string.nav_home, Icons.Outlined.Home, Icons.Rounded.Home),
+    TopDest(Routes.SHORTS, R.string.nav_shorts, Icons.Outlined.SlowMotionVideo, Icons.Rounded.SlowMotionVideo),
     TopDest(Routes.SUBS, R.string.nav_subscriptions, Icons.Outlined.Subscriptions, Icons.Rounded.Subscriptions),
-    TopDest(Routes.DOWNLOADS, R.string.nav_downloads, Icons.Outlined.Download, Icons.Rounded.Download),
-    TopDest(Routes.LIBRARY, R.string.nav_library, Icons.Outlined.VideoLibrary, Icons.Rounded.VideoLibrary),
+    TopDest(Routes.LIBRARY, R.string.nav_you, Icons.Outlined.AccountCircle, Icons.Rounded.AccountCircle),
 )
 
 @Composable
@@ -172,13 +178,27 @@ fun AppRoot(activity: MainActivity, settings: AppSettings) {
                         MiniPlayer(onOpen = { nav.navigate(Routes.PLAYER) { launchSingleTop = true } })
                     }
                     if (isTop || route == null) {
-                        NavigationBar {
+                        val onShorts = route == Routes.SHORTS
+                        androidx.compose.material3.HorizontalDivider(
+                            thickness = 0.5.dp,
+                            color = if (onShorts) Color.White.copy(alpha = 0.15f) else MaterialTheme.colorScheme.outlineVariant
+                        )
+                        NavigationBar(
+                            containerColor = if (onShorts) Color.Black else MaterialTheme.colorScheme.background,
+                            tonalElevation = 0.dp,
+                        ) {
+                            val fg = if (onShorts) Color.White else MaterialTheme.colorScheme.onSurface
                             topDestinations.forEach { d ->
                                 NavigationBarItem(
                                     selected = route == d.route,
                                     onClick = { nav.navigateTop(d.route) },
-                                    icon = { NavIcon(d, route == d.route, if (d.route == Routes.DOWNLOADS) activeDownloads else 0) },
-                                    label = { Text(androidx.compose.ui.res.stringResource(d.label), maxLines = 1) }
+                                    icon = { NavIcon(d, route == d.route, if (d.route == Routes.LIBRARY) activeDownloads else 0) },
+                                    label = { Text(androidx.compose.ui.res.stringResource(d.label), maxLines = 1, style = MaterialTheme.typography.labelSmall) },
+                                    colors = androidx.compose.material3.NavigationBarItemDefaults.colors(
+                                        selectedIconColor = fg, selectedTextColor = fg,
+                                        unselectedIconColor = fg, unselectedTextColor = fg,
+                                        indicatorColor = Color.Transparent,
+                                    ),
                                 )
                             }
                         }
@@ -194,7 +214,7 @@ fun AppRoot(activity: MainActivity, settings: AppSettings) {
                         NavigationRailItem(
                             selected = route == d.route,
                             onClick = { nav.navigateTop(d.route) },
-                            icon = { NavIcon(d, route == d.route, if (d.route == Routes.DOWNLOADS) activeDownloads else 0) },
+                            icon = { NavIcon(d, route == d.route, if (d.route == Routes.LIBRARY) activeDownloads else 0) },
                             label = { Text(androidx.compose.ui.res.stringResource(d.label), maxLines = 1) }
                         )
                     }

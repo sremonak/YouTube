@@ -26,6 +26,8 @@ import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.AccountCircle
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.ThumbUp
@@ -54,6 +56,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.vidora.app.Graph
@@ -73,7 +76,7 @@ fun LibraryScreen(nav: NavHostController, actions: VideoActions) {
     val session by Graph.account.session.collectAsState()
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
-            title = { Text(stringResource(R.string.library)) },
+            title = { Text(stringResource(R.string.nav_you)) },
             actions = {
                 val incognito = Graph.settingsState.collectAsState().value.incognito
                 val scope = androidx.compose.runtime.rememberCoroutineScope()
@@ -84,11 +87,40 @@ fun LibraryScreen(nav: NavHostController, actions: VideoActions) {
                         tint = if (incognito) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                     )
                 }
+                IconButton(onClick = { nav.navigate(Routes.search()) }) { Icon(Icons.Rounded.Search, "Search") }
                 IconButton(onClick = { nav.navigate(Routes.SETTINGS) }) { Icon(Icons.Rounded.Settings, "Settings") }
             },
             colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
         )
         LazyColumn(contentPadding = PaddingValues(bottom = 120.dp)) {
+            // YouTube-style profile header
+            item {
+                val s = session
+                Row(
+                    Modifier.fillMaxWidth().clickable { nav.navigate(if (s != null) Routes.SETTINGS else Routes.LOGIN) }.padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (s?.avatar != null) com.vidora.app.ui.components.Avatar(s.avatar, 64)
+                    else Icon(Icons.Rounded.AccountCircle, null, Modifier.size(64.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.width(16.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(s?.name ?: "Not signed in", style = MaterialTheme.typography.headlineSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(
+                            s?.handle ?: "Sign in to sync subscriptions, likes and history",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2
+                        )
+                    }
+                }
+            }
+            item {
+                val downloads by Graph.downloads.items.collectAsState()
+                LazyRow(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    item { YouPill(Icons.Rounded.Download, "Downloads${if (downloads.isNotEmpty()) " · ${downloads.size}" else ""}") { nav.navigate(Routes.DOWNLOADS) } }
+                    item { YouPill(Icons.Rounded.History, "History") { nav.navigate(Routes.list("history")) } }
+                    item { YouPill(Icons.Rounded.Settings, "Settings") { nav.navigate(Routes.SETTINGS) } }
+                    if (session == null) item { YouPill(Icons.Rounded.AccountCircle, "Sign in") { nav.navigate(Routes.LOGIN) } }
+                }
+            }
             if (Graph.settingsState.value.incognito) {
                 item {
                     androidx.compose.material3.Surface(
@@ -126,6 +158,10 @@ fun LibraryScreen(nav: NavHostController, actions: VideoActions) {
                 }
             }
             item { Spacer(Modifier.height(12.dp)) }
+            item {
+                val downloads by Graph.downloads.items.collectAsState()
+                LibraryRow(Icons.Rounded.Download, "Downloads", "${downloads.size} files · watch offline") { nav.navigate(Routes.DOWNLOADS) }
+            }
             item { LibraryRow(Icons.Rounded.History, "History", "${library.history.size} videos") { nav.navigate(Routes.list("history")) } }
             item { LibraryRow(Icons.Rounded.Favorite, "Liked videos", "${library.favorites.size} videos") { nav.navigate(Routes.list("liked")) } }
             item { LibraryRow(Icons.Rounded.WatchLater, "Watch later", "${library.watchLater.size} videos") { nav.navigate(Routes.list("later")) } }
@@ -232,5 +268,20 @@ fun VideoListScreen(nav: NavHostController, actions: VideoActions, kind: String)
             confirmButton = { TextButton(onClick = { Graph.library.clearHistory(); confirmClear = false }) { Text(stringResource(R.string.ui_clear)) } },
             dismissButton = { TextButton(onClick = { confirmClear = false }) { Text(stringResource(R.string.ui_cancel)) } }
         )
+    }
+}
+
+@Composable
+private fun YouPill(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
+    androidx.compose.material3.Surface(
+        onClick = onClick,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(50),
+    ) {
+        Row(Modifier.padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, null, Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(label, style = MaterialTheme.typography.labelLarge)
+        }
     }
 }

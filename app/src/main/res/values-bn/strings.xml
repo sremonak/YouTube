@@ -5,6 +5,8 @@
     <string name="nav_downloads">ডাউনলোড</string>
     <string name="nav_library">লাইব্রেরি</string>
     <string name="nav_account">অ্যাকাউন্ট</string>
+    <string name="nav_shorts">শর্টস</string>
+    <string name="nav_you">আপনি</string>
     <string name="settings">সেটিংস</string>
     <string name="library">লাইব্রেরি</string>
     <string name="content_filters">কনটেন্ট ফিল্টার</string>

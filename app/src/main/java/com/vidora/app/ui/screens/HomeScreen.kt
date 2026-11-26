@@ -16,12 +16,15 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccountCircle
-import androidx.compose.material.icons.rounded.PlayCircle
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.outlined.FileDownload
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -40,8 +43,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.vidora.app.Graph
@@ -77,28 +78,13 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
 
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
-            title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Rounded.PlayCircle, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(30.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        settings.displayName.ifBlank { "Vidora" },
-                        style = BrandTitle.merge(
-                            TextStyle(
-                                brush = Brush.linearGradient(
-                                    listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.tertiary)
-                                )
-                            )
-                        )
-                    )
-                }
-            },
+            title = { BrandLogo(settings.displayName.ifBlank { "Vidora" }) },
             actions = {
+                IconButton(onClick = { nav.navigate(Routes.DOWNLOADS) }) { Icon(Icons.Outlined.FileDownload, "Downloads") }
                 IconButton(onClick = { nav.navigate(Routes.search()) }) { Icon(Icons.Rounded.Search, "Search") }
-                IconButton(onClick = { nav.navigate(Routes.SETTINGS) }) { Icon(Icons.Rounded.Settings, "Settings") }
-                IconButton(onClick = { nav.navigate(if (signedIn) Routes.SETTINGS else Routes.LOGIN) }) {
+                IconButton(onClick = { nav.navigate(if (signedIn) Routes.LIBRARY else Routes.LOGIN) }) {
                     val avatar = session?.avatar
-                    if (avatar != null) Avatar(avatar, 30)
+                    if (avatar != null) Avatar(avatar, 28)
                     else Icon(Icons.Rounded.AccountCircle, if (signedIn) "Account" else "Sign in")
                 }
             },
@@ -107,18 +93,12 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
         LazyRow(
             contentPadding = PaddingValues(horizontal = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.padding(bottom = 4.dp)
+            modifier = Modifier.padding(bottom = 6.dp)
         ) {
             items(sections) { s ->
-                FilterChip(
-                    selected = s == section,
-                    onClick = { section = s },
-                    label = { Text(s.label) },
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MaterialTheme.colorScheme.primary,
-                        selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
-                    ),
-                )
+                YtChip(selected = s == section, onClick = { section = s }) {
+                    Text(s.label, style = MaterialTheme.typography.labelLarge)
+                }
             }
         }
         PullToRefreshBox(isRefreshing = paged.refreshing, onRefresh = { paged.load(refresh = true) }, modifier = Modifier.fillMaxSize()) {
@@ -167,5 +147,34 @@ private fun ContinueWatchingRow(entries: List<com.vidora.app.data.HistoryEntry>,
                 }
             }
         }
+    }
+}
+
+/** YouTube-style wordmark: red rounded "play" badge + bold name. */
+@Composable
+fun BrandLogo(name: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            Modifier.size(width = 30.dp, height = 21.dp)
+                .background(MaterialTheme.colorScheme.primary, androidx.compose.foundation.shape.RoundedCornerShape(6.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Rounded.PlayArrow, null, tint = Color.White, modifier = Modifier.size(18.dp))
+        }
+        Spacer(Modifier.width(4.dp))
+        Text(name, style = BrandTitle.copy(fontSize = 20.sp, letterSpacing = (-0.8).sp), color = MaterialTheme.colorScheme.onBackground)
+    }
+}
+
+/** YouTube's flat category chip: inverted colours when selected, 8 dp corners, no outline. */
+@Composable
+fun YtChip(selected: Boolean, onClick: () -> Unit, content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) {
+    androidx.compose.material3.Surface(
+        onClick = onClick,
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+        color = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentColor = if (selected) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.onSurface,
+    ) {
+        Row(Modifier.height(32.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically, content = content)
     }
 }

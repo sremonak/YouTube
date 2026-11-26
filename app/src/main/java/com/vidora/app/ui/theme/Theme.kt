@@ -30,52 +30,65 @@ data class DesignPrefs(val corner: Int, val showAvatars: Boolean, val compact: B
 
 val LocalDesign = staticCompositionLocalOf { DesignPrefs(16, true, false) }
 
+/**
+ * YouTube-style neutrals (#0F0F0F / #272727 / #AAAAAA in dark, white / #F2F2F2 / #606060 in light)
+ * with the user's accent as primary (defaults to YouTube red).
+ */
 private fun schemeFromSeed(seed: Color, dark: Boolean, amoled: Boolean): ColorScheme {
     val secondary = lerp(seed, Color(0xFF8E7CC3), 0.45f)
-    val tertiary = lerp(seed, Color(0xFF00BFA5), 0.5f)
+    val tertiary = lerp(seed, Color(0xFF3EA6FF), 0.5f)
     return if (dark) {
-        val bg = if (amoled) Color.Black else Color(0xFF0E0E12)
-        val surface = if (amoled) Color.Black else Color(0xFF131318)
+        val bg = if (amoled) Color.Black else Color(0xFF0F0F0F)
         darkColorScheme(
-            primary = lerp(seed, Color.White, 0.12f),
+            primary = seed,
             onPrimary = Color.White,
             primaryContainer = lerp(seed, Color.Black, 0.55f),
             onPrimaryContainer = lerp(seed, Color.White, 0.8f),
             secondary = lerp(secondary, Color.White, 0.25f),
-            secondaryContainer = lerp(secondary, Color.Black, 0.6f),
-            onSecondaryContainer = Color(0xFFEDE7FF),
-            tertiary = lerp(tertiary, Color.White, 0.2f),
+            secondaryContainer = Color(0xFF3F3F3F),
+            onSecondaryContainer = Color(0xFFF1F1F1),
+            tertiary = Color(0xFF3EA6FF),
             background = bg,
-            onBackground = Color(0xFFECECF1),
-            surface = surface,
-            onSurface = Color(0xFFECECF1),
-            surfaceVariant = if (amoled) Color(0xFF121212) else Color(0xFF23232B),
-            onSurfaceVariant = Color(0xFFB9B9C6),
+            onBackground = Color(0xFFF1F1F1),
+            surface = bg,
+            onSurface = Color(0xFFF1F1F1),
+            surfaceVariant = if (amoled) Color(0xFF121212) else Color(0xFF272727),
+            onSurfaceVariant = Color(0xFFAAAAAA),
             surfaceContainerLowest = bg,
-            surfaceContainerLow = if (amoled) Color(0xFF070707) else Color(0xFF17171D),
-            surfaceContainer = if (amoled) Color(0xFF0C0C0C) else Color(0xFF1B1B22),
-            surfaceContainerHigh = if (amoled) Color(0xFF141414) else Color(0xFF222229),
-            surfaceContainerHighest = if (amoled) Color(0xFF1C1C1C) else Color(0xFF2A2A32),
-            outline = Color(0xFF4A4A55),
-            outlineVariant = Color(0xFF2E2E36),
+            surfaceContainerLow = if (amoled) Color(0xFF070707) else Color(0xFF181818),
+            surfaceContainer = if (amoled) Color(0xFF0C0C0C) else Color(0xFF212121),
+            surfaceContainerHigh = if (amoled) Color(0xFF161616) else Color(0xFF272727),
+            surfaceContainerHighest = if (amoled) Color(0xFF1F1F1F) else Color(0xFF303030),
+            outline = Color(0xFF4D4D4D),
+            outlineVariant = Color(0xFF303030),
+            inverseSurface = Color(0xFFF1F1F1),
+            inverseOnSurface = Color(0xFF0F0F0F),
         )
     } else {
         lightColorScheme(
-            primary = lerp(seed, Color.Black, 0.08f),
+            primary = seed,
             onPrimary = Color.White,
             primaryContainer = lerp(seed, Color.White, 0.82f),
             onPrimaryContainer = lerp(seed, Color.Black, 0.6f),
             secondary = lerp(secondary, Color.Black, 0.15f),
-            secondaryContainer = lerp(secondary, Color.White, 0.8f),
-            tertiary = lerp(tertiary, Color.Black, 0.15f),
-            background = Color(0xFFFAFAFC),
-            surface = Color(0xFFFAFAFC),
-            surfaceVariant = Color(0xFFECECF2),
+            secondaryContainer = Color(0xFFE5E5E5),
+            onSecondaryContainer = Color(0xFF0F0F0F),
+            tertiary = Color(0xFF065FD4),
+            background = Color.White,
+            onBackground = Color(0xFF0F0F0F),
+            surface = Color.White,
+            onSurface = Color(0xFF0F0F0F),
+            surfaceVariant = Color(0xFFF2F2F2),
+            onSurfaceVariant = Color(0xFF606060),
             surfaceContainerLowest = Color.White,
-            surfaceContainerLow = Color(0xFFF5F5F8),
-            surfaceContainer = Color(0xFFF0F0F4),
-            surfaceContainerHigh = Color(0xFFEAEAEF),
-            surfaceContainerHighest = Color(0xFFE4E4EA),
+            surfaceContainerLow = Color(0xFFF9F9F9),
+            surfaceContainer = Color(0xFFF2F2F2),
+            surfaceContainerHigh = Color(0xFFF2F2F2),
+            surfaceContainerHighest = Color(0xFFE5E5E5),
+            outline = Color(0xFFCCCCCC),
+            outlineVariant = Color(0xFFE5E5E5),
+            inverseSurface = Color(0xFF0F0F0F),
+            inverseOnSurface = Color.White,
         )
     }
 }

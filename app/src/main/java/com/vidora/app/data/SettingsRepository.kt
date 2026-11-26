@@ -23,7 +23,7 @@ enum class AudioPreference(val label: String) { M4A("M4A (AAC)"), WEBM("WebM (Op
 
 /** Accent palettes used when Material You dynamic colour is off. */
 val AccentPalette = listOf(
-    0xFFFF3B5C, // Vidora red
+    0xFFFF0033, // YouTube red
     0xFF7C4DFF, // violet
     0xFF2979FF, // blue
     0xFF00BFA5, // teal
@@ -47,11 +47,11 @@ val SponsorCategories = linkedMapOf(
 data class AppSettings(
     // appearance
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
-    val dynamicColor: Boolean = true,
+    val dynamicColor: Boolean = false,
     val accentIndex: Int = 0,
     val displayName: String = "Vidora",
     val feedLayout: FeedLayout = FeedLayout.GRID,
-    val cornerRadius: Int = 16,
+    val cornerRadius: Int = 12,
     val showChannelAvatars: Boolean = true,
     val launcherIcon: String = LauncherCatalog.DEFAULT_ICON,
     val launcherName: String = LauncherCatalog.DEFAULT_NAME,
@@ -281,6 +281,21 @@ class SettingsRepository(private val context: Context) {
             p[K.notifyHours] = s.notifyHours
             p[K.syncAccountActions] = s.syncAccountActions
             p[K.persistQueue] = s.persistQueue
+        }
+    }
+
+    /**
+     * One-time switch to the YouTube look (1.0.39): YouTube red accent, YouTube neutrals instead of
+     * Material You wallpaper colours, 12 dp corners. Users can change all of it back in Settings.
+     */
+    suspend fun migrateDesign() {
+        val key = intPreferencesKey("design_version")
+        context.dataStore.edit { p ->
+            if ((p[key] ?: 0) >= 2) return@edit
+            p[key] = 2
+            p[K.dynamic] = false
+            p[K.accent] = 0
+            p[K.corner] = 12
         }
     }
 
