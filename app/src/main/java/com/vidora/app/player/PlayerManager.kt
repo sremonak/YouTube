@@ -260,6 +260,9 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
                     audioTrackId = defaultAudioTrack(details),
                 )
                 if (settings.saveHistory && !settings.incognito) Graph.library.addHistory(merged)
+                if (settings.syncWatchHistory && !settings.incognito && Graph.account.isSignedIn && !merged.isLive) {
+                    com.vidora.app.account.AccountSync.markWatched(merged)
+                }
                 val resumeAt = if (settings.resumePlayback && !merged.isLive) {
                     Graph.library.positionOf(merged.url).takeIf { it > 5_000 && (merged.duration == 0L || it < merged.duration * 1000 - 10_000) } ?: 0
                 } else 0

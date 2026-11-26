@@ -53,7 +53,7 @@ fun AddToPlaylistSheet(video: VideoItem, onDismiss: () -> Unit) {
     val videoId = remember(video.url) { Graph.repository.videoId(video.url) }
     var remote by remember { mutableStateOf<List<RemotePlaylist>?>(null) }
     var remoteError by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(session, videoId) {
+    LaunchedEffect(session != null, videoId) {
         if (session != null && videoId != null) {
             runCatching { Graph.accountApi.playlistsFor(videoId) }
                 .onSuccess { remote = it }

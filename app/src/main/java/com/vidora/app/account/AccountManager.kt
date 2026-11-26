@@ -78,6 +78,8 @@ class AccountManager(private val context: Context, private val scope: CoroutineS
 
     fun signOut() {
         _session.value = null
+        applyDataSyncId(null)
+        sessionHashEnabled = true
         store.clear()
         CookieManager.getInstance().removeAllCookies(null)
         CookieManager.getInstance().flush()
@@ -110,14 +112,41 @@ class AccountManager(private val context: Context, private val scope: CoroutineS
         val s = _session.value ?: return emptyMap()
         val headers = linkedMapOf("Cookie" to s.cookies, "X-Origin" to origin, "X-Goog-AuthUser" to "0")
         val ts = System.currentTimeMillis() / 1000
+        // Like yt-dlp: for a known user session the hash covers "<userSessionId> ts sid origin" and gets a "_u" suffix.
+        val user = userSessionId?.takeIf { sessionHashEnabled }
+        fun hash(scheme: String, sid: String): String =
+            if (user != null) "$scheme ${ts}_${sha1("$user $ts $sid $origin")}_u" else "$scheme ${ts}_${sha1("$ts $sid $origin")}"
         val parts = buildList {
-            (cookieValue("SAPISID") ?: cookieValue("__Secure-3PAPISID"))?.let { add("SAPISIDHASH ${ts}_${sha1("$ts $it $origin")}") }
-            cookieValue("__Secure-1PAPISID")?.let { add("SAPISID1PHASH ${ts}_${sha1("$ts $it $origin")}") }
-            cookieValue("__Secure-3PAPISID")?.let { add("SAPISID3PHASH ${ts}_${sha1("$ts $it $origin")}") }
+            (cookieValue("SAPISID") ?: cookieValue("__Secure-3PAPISID"))?.let { add(hash("SAPISIDHASH", it)) }
+            cookieValue("__Secure-1PAPISID")?.let { add(hash("SAPISID1PHASH", it)) }
+            cookieValue("__Secure-3PAPISID")?.let { add(hash("SAPISID3PHASH", it)) }
         }
         if (parts.isNotEmpty()) headers["Authorization"] = parts.joinToString(" ")
+        // Brand-account / secondary channel: requests must name the delegated session.
+        delegatedSessionId?.let { headers["X-Goog-PageId"] = it }
+        headers["X-Youtube-Bootstrap-Logged-In"] = "true"
         return headers
     }
+
+    /** From the account's dataSyncId ("delegated||user" or "user||"); set by AccountApi. */
+    @Volatile var delegatedSessionId: String? = null
+    @Volatile var userSessionId: String? = null
+    /** Turned off automatically if YouTube treats the session-bound hash as logged out. */
+    @Volatile var sessionHashEnabled = true
+
+    fun applyDataSyncId(dataSyncId: String?) {
+        if (dataSyncId.isNullOrBlank()) { delegatedSessionId = null; userSessionId = null; return }
+        val first = dataSyncId.substringBefore("||")
+        val second = dataSyncId.substringAfter("||", "")
+        if (second.isNotEmpty()) { delegatedSessionId = first.ifBlank { null }; userSessionId = second }
+        else { delegatedSessionId = null; userSessionId = first.ifBlank { null } }
+    }
+
+    /** Cookie names that matter for sign-in (values are never exposed). */
+    fun cookieReport(): Map<String, Boolean> = listOf(
+        "SID", "HSID", "SSID", "APISID", "SAPISID", "__Secure-1PSID", "__Secure-3PSID",
+        "__Secure-1PAPISID", "__Secure-3PAPISID", "LOGIN_INFO", "__Secure-1PSIDTS", "__Secure-3PSIDTS", "PREF",
+    ).associateWith { cookieValue(it) != null }
 
     private fun sha1(text: String): String =
         MessageDigest.getInstance("SHA-1").digest(text.toByteArray()).joinToString("") { "%02x".format(it) }

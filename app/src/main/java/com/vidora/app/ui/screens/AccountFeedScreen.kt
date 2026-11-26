@@ -18,6 +18,16 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.ui.unit.dp
+import com.vidora.app.account.FeedChip
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
@@ -35,7 +45,16 @@ import com.vidora.app.ui.components.VideoActions
 fun AccountFeedScreen(nav: NavHostController, actions: VideoActions, feedName: String) {
     val feed = AccountFeed.entries.firstOrNull { it.name == feedName } ?: AccountFeed.RECOMMENDED
     val scope = rememberCoroutineScope()
-    val paged = remember(feed) { Paged(scope) { Graph.accountApi.feed(feed) } }
+    // YouTube's own filter chips for this feed (e.g. History: All / Videos / Shorts / Music).
+    var chips by remember(feed) { mutableStateOf<List<FeedChip>>(emptyList()) }
+    var chipLabel by remember(feed) { mutableStateOf<String?>(null) }
+    val chip = chips.firstOrNull { it.label == chipLabel && it.token != null }
+    val paged = remember(feed, chip?.label) {
+        Paged(scope) {
+            if (chip != null) Graph.accountApi.chip(chip.token!!)
+            else Graph.accountApi.feedWithChips(feed).also { if (it.chips.isNotEmpty()) chips = it.chips }.page
+        }
+    }
     LaunchedEffect(paged) { paged.load() }
 
     Column(Modifier.fillMaxSize()) {
@@ -50,6 +69,20 @@ fun AccountFeedScreen(nav: NavHostController, actions: VideoActions, feedName: S
             },
             colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
         )
+        if (chips.size > 1) {
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(bottom = 6.dp)
+            ) {
+                items(chips, key = { it.label }) { c ->
+                    val selected = if (chipLabel == null) c.token == null || c.selected else c.label == chipLabel
+                    YtChip(selected = selected, onClick = { chipLabel = if (c.token == null) null else c.label }) {
+                        Text(c.label, style = MaterialTheme.typography.labelLarge)
+                    }
+                }
+            }
+        }
         PullToRefreshBox(isRefreshing = paged.refreshing, onRefresh = { paged.load(refresh = true) }, modifier = Modifier.fillMaxSize()) {
             EntryGrid(paged = paged, actions = actions)
         }

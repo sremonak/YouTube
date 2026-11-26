@@ -165,6 +165,7 @@ private fun finishWithCookies(cookies: String, nav: NavHostController, context: 
     scope.launch {
         val info = runCatching { Graph.accountApi.accountInfo() }
         info.getOrNull()?.let { Graph.account.save(it) }
+        if (info.isSuccess) com.vidora.app.account.AccountSync.importSubscriptionsIfStale(force = true)
         val name = Graph.account.session.value?.name
         val msg = when {
             name != null -> "Signed in as $name"
@@ -184,15 +185,34 @@ private fun SignInWebView(nav: NavHostController) {
     var loading by remember { mutableStateOf(true) }
     var finishing by remember { mutableStateOf(false) }
 
-    fun tryFinish(url: String?) {
-        if (finishing || url == null) return
-        val host = runCatching { android.net.Uri.parse(url).host }.getOrNull().orEmpty()
-        if (!host.endsWith("youtube.com")) return
-        val cookies = CookieManager.getInstance().getCookie("https://www.youtube.com")
-        if (!AccountManager.hasSessionCookies(cookies)) return
+    var fallbackScheduled by remember { mutableStateOf(false) }
+
+    fun finishNow(cookies: String) {
+        if (finishing) return
         finishing = true
         CookieManager.getInstance().flush()
-        finishWithCookies(cookies!!, nav, context, scope)
+        finishWithCookies(cookies, nav, context, scope)
+    }
+
+    // Only finish once YouTube itself (www / m) has completed the sign-in hand-off: accounts.youtube.com
+    // sets SID/SAPISID first, but LOGIN_INFO — without which YouTube treats requests as signed out —
+    // is only set by www.youtube.com/signin.
+    fun tryFinish(url: String?, pageDone: Boolean) {
+        if (finishing || url == null) return
+        val uri = runCatching { android.net.Uri.parse(url) }.getOrNull() ?: return
+        val host = uri.host.orEmpty()
+        if (host != "www.youtube.com" && host != "m.youtube.com" && host != "youtube.com") return
+        val cookies = CookieManager.getInstance().getCookie("https://www.youtube.com") ?: return
+        if (!AccountManager.hasSessionCookies(cookies)) return
+        if (cookies.split(';').any { it.trim().startsWith("LOGIN_INFO=") }) { finishNow(cookies); return }
+        if (pageDone && !fallbackScheduled) {
+            fallbackScheduled = true
+            scope.launch {
+                kotlinx.coroutines.delay(4_000)
+                CookieManager.getInstance().getCookie("https://www.youtube.com")
+                    ?.takeIf { AccountManager.hasSessionCookies(it) }?.let(::finishNow)
+            }
+        }
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -213,12 +233,12 @@ private fun SignInWebView(nav: NavHostController) {
                     webViewClient = object : WebViewClient() {
                         override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                             loading = true
-                            tryFinish(url)
+                            tryFinish(url, pageDone = false)
                         }
 
                         override fun onPageFinished(view: WebView?, url: String?) {
                             loading = false
-                            tryFinish(url)
+                            tryFinish(url, pageDone = true)
                         }
 
                         override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {

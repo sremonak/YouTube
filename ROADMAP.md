@@ -85,6 +85,7 @@ Priority: **P0** = keeps the app working, **P1** = premium features users notice
 | SABR streaming | ⏳ Waiting for NewPipe Extractor PR #1568; the client fallbacks below cover today's playback |
 | Playback when NewPipe is blocked (VPN, "not a bot") | ✅ Done (1.0.39) — yt-dlp's EJS solver in a WebView solves `sig`/`n`; TV client (with account) honours the pre-roll wait; Safari HLS and mobile-web fallbacks; verified on an emulator by `e2e.yml` |
 | YouTube look | ✅ Done (1.0.39) — YouTube palette, Home / Shorts / Subscriptions / You bar, flat chips, watch-page layout |
+| Account like the official app | ✅ Done — Home uses YouTube's own personalised chips (All / Music / Mixes…) + YouTube Music home; Subscriptions tab = account feed; You tab = account history / liked / watch later; watched videos are added to YouTube history; sign-in waits for `LOGIN_INFO`; Settings → Account check |
 | Gestures (double-tap, hold 2×, swipe brightness/volume, pinch zoom) | ✅ Done |
 | Seek-bar preview thumbnails | ✅ Done |
 | Captions: picker, auto-translate, size, download | ✅ Done (`.vtt`; YouTube doesn't serve `.srt`) |

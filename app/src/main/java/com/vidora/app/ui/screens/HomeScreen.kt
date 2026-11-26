@@ -51,6 +51,7 @@ import com.vidora.app.ui.components.Avatar
 import com.vidora.app.data.AppSettings
 import com.vidora.app.data.Entry
 import com.vidora.app.data.HomeSection
+import com.vidora.app.account.FeedChip
 import com.vidora.app.data.PageResult
 import com.vidora.app.ui.Paged
 import com.vidora.app.ui.Routes
@@ -64,14 +65,35 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
     val scope = rememberCoroutineScope()
     val session by Graph.account.session.collectAsState()
     val signedIn = session != null
-    var section by rememberSaveable { mutableStateOf(if (Graph.account.isSignedIn) HomeSection.ACCOUNT else HomeSection.FOR_YOU) }
-    if (!signedIn && section == HomeSection.ACCOUNT) section = HomeSection.FOR_YOU
-    val sections = remember(signedIn) { HomeSection.entries.filter { signedIn || it != HomeSection.ACCOUNT } }
-    val pages = remember(signedIn) { HashMap<HomeSection, Paged>() }
-    val paged = pages.getOrPut(section) { Paged(scope) { loadSection(section) } }
+    // Signed in: YouTube's own personalised chips (All, Music, Mixes, Gaming, Recently uploaded…) come first.
+    var accountChips by remember(signedIn) { mutableStateOf<List<FeedChip>>(emptyList()) }
+    val tabs = remember(signedIn, accountChips) {
+        buildList {
+            if (signedIn) {
+                add(HomeTab("acc", "All") {
+                    val first = Graph.accountApi.feedWithChips(AccountFeed.RECOMMENDED)
+                    if (first.chips.isNotEmpty()) accountChips = first.chips
+                    first.page
+                })
+                accountChips.filter { it.token != null && !it.label.equals("All", true) }.forEach { chip ->
+                    add(HomeTab("chip:" + chip.label, chip.label) { Graph.accountApi.chip(chip.token!!) })
+                }
+                add(HomeTab("ytmusic", "YouTube Music") { Graph.accountApi.musicHome() })
+            }
+            val taken = map { it.label.lowercase() }.toSet()
+            HomeSection.entries
+                .filter { it != HomeSection.ACCOUNT && !(signedIn && it == HomeSection.FOR_YOU) }
+                .filter { it.label.lowercase() !in taken }
+                .forEach { sec -> add(HomeTab(sec.name, sec.label) { loadSection(sec) }) }
+        }
+    }
+    var tabKey by rememberSaveable(signedIn) { mutableStateOf(if (signedIn) "acc" else HomeSection.FOR_YOU.name) }
+    val tab = tabs.firstOrNull { it.key == tabKey } ?: tabs.first()
+    val pages = remember(signedIn) { HashMap<String, Paged>() }
+    val paged = pages.getOrPut(tab.key) { Paged(scope) { tab.load() } }
     val gridState = rememberLazyGridState()
 
-    LaunchedEffect(section, signedIn) {
+    LaunchedEffect(tab.key, signedIn) {
         if (paged.items.isEmpty() && !paged.loading) paged.load()
         gridState.scrollToItem(0)
     }
@@ -95,9 +117,9 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.padding(bottom = 6.dp)
         ) {
-            items(sections) { s ->
-                YtChip(selected = s == section, onClick = { section = s }) {
-                    Text(s.label, style = MaterialTheme.typography.labelLarge)
+            items(tabs, key = { it.key }) { t ->
+                YtChip(selected = t.key == tab.key, onClick = { tabKey = t.key }) {
+                    Text(t.label, style = MaterialTheme.typography.labelLarge)
                 }
             }
         }
@@ -107,11 +129,14 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
             EntryGrid(
                 paged = paged, actions = actions, state = gridState,
                 filter = { e -> !(settings.hideShorts && e is Entry.Video && e.video.isShort) },
-                header = if (resume.isEmpty() || section == HomeSection.LIVE) null else ({ ContinueWatchingRow(resume, actions) })
+                header = if (resume.isEmpty() || tab.key != tabs.first().key) null else ({ ContinueWatchingRow(resume, actions) })
             )
         }
     }
 }
+
+/** One chip of the Home feed. */
+private class HomeTab(val key: String, val label: String, val load: suspend () -> PageResult)
 
 /** "For you" is built locally from the user's own history & searches — no account, no tracking. */
 private suspend fun loadSection(section: HomeSection): PageResult {

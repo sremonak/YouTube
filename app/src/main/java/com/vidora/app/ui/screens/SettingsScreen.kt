@@ -35,6 +35,8 @@ import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -203,6 +205,41 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
                 item {
                     SwitchRow(stringResource(R.string.ui_sync_likes_subscriptions_to_youtube), stringResource(R.string.ui_liking_disliking_or_subscribing_in_vidor), s.syncAccountActions) { v ->
                         update { it.copy(syncAccountActions = v) }
+                    }
+                }
+                item {
+                    SwitchRow(
+                        "Add watched videos to YouTube history",
+                        "Like the official app: what you watch in Vidora shows up in your YouTube history and improves your recommendations",
+                        s.syncWatchHistory
+                    ) { v -> update { it.copy(syncWatchHistory = v) } }
+                }
+                item {
+                    var checking by remember { mutableStateOf(false) }
+                    var report by remember { mutableStateOf<String?>(null) }
+                    ClickRow(if (checking) "Checking your account…" else "Account check", "Tests if YouTube accepts your sign-in and whether home, history and subscriptions load") {
+                        if (checking) return@ClickRow
+                        checking = true
+                        scope.launch {
+                            val r = runCatching { Graph.accountApi.diagnose() }.getOrElse { "Check failed: ${it.message}" }
+                            report = r + "\nWatch history sync: " + com.vidora.app.account.AccountSync.lastWatchSync
+                            checking = false
+                        }
+                    }
+                    report?.let { text ->
+                        AlertDialog(
+                            onDismissRequest = { report = null },
+                            title = { Text("Account check") },
+                            text = { Text(text, style = MaterialTheme.typography.bodySmall, modifier = Modifier.verticalScroll(rememberScrollState())) },
+                            confirmButton = {
+                                TextButton(onClick = {
+                                    val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                    cm.setPrimaryClip(android.content.ClipData.newPlainText("Vidora account check", text))
+                                    Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
+                                }) { Text("Copy") }
+                            },
+                            dismissButton = { TextButton(onClick = { report = null }) { Text("Close") } },
+                        )
                     }
                 }
                 item {

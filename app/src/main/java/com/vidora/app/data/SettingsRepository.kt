@@ -103,6 +103,8 @@ data class AppSettings(
     val shortsPlayer: Boolean = true,
     val notifyHours: Int = 0,
     val syncAccountActions: Boolean = true,
+    /** Report what you watch to the YouTube account's watch history (like the official app). */
+    val syncWatchHistory: Boolean = true,
     val persistQueue: Boolean = true,
 )
 
@@ -161,6 +163,7 @@ class SettingsRepository(private val context: Context) {
         val shortsPlayer = booleanPreferencesKey("shorts_player")
         val notifyHours = intPreferencesKey("notify_hours")
         val syncAccountActions = booleanPreferencesKey("sync_account")
+        val syncWatchHistory = booleanPreferencesKey("sync_watch_history")
         val persistQueue = booleanPreferencesKey("persist_queue")
     }
 
@@ -221,6 +224,7 @@ class SettingsRepository(private val context: Context) {
             shortsPlayer = this[K.shortsPlayer] ?: d.shortsPlayer,
             notifyHours = this[K.notifyHours] ?: d.notifyHours,
             syncAccountActions = this[K.syncAccountActions] ?: d.syncAccountActions,
+            syncWatchHistory = this[K.syncWatchHistory] ?: d.syncWatchHistory,
             persistQueue = this[K.persistQueue] ?: d.persistQueue,
         )
     }
@@ -280,6 +284,7 @@ class SettingsRepository(private val context: Context) {
             p[K.shortsPlayer] = s.shortsPlayer
             p[K.notifyHours] = s.notifyHours
             p[K.syncAccountActions] = s.syncAccountActions
+            p[K.syncWatchHistory] = s.syncWatchHistory
             p[K.persistQueue] = s.persistQueue
         }
     }

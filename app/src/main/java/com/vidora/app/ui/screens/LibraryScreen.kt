@@ -48,6 +48,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -116,7 +117,7 @@ fun LibraryScreen(nav: NavHostController, actions: VideoActions) {
                 val downloads by Graph.downloads.items.collectAsState()
                 LazyRow(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     item { YouPill(Icons.Rounded.Download, "Downloads${if (downloads.isNotEmpty()) " · ${downloads.size}" else ""}") { nav.navigate(Routes.DOWNLOADS) } }
-                    item { YouPill(Icons.Rounded.History, "History") { nav.navigate(Routes.list("history")) } }
+                    item { YouPill(Icons.Rounded.History, "History") { nav.navigate(if (session != null) Routes.accountFeed(AccountFeed.HISTORY.name) else Routes.list("history")) } }
                     item { YouPill(Icons.Rounded.Settings, "Settings") { nav.navigate(Routes.SETTINGS) } }
                     if (session == null) item { YouPill(Icons.Rounded.AccountCircle, "Sign in") { nav.navigate(Routes.LOGIN) } }
                 }
@@ -135,12 +136,31 @@ fun LibraryScreen(nav: NavHostController, actions: VideoActions) {
                 }
             }
             item {
-                SectionHeader(stringResource(R.string.ui_recently_watched)) {
-                    TextButton(onClick = { nav.navigate(Routes.list("history")) }) { Text(stringResource(R.string.ui_see_all)) }
+                SectionHeader(if (session != null) "History" else stringResource(R.string.ui_recently_watched)) {
+                    TextButton(onClick = {
+                        nav.navigate(if (session != null) Routes.accountFeed(AccountFeed.HISTORY.name) else Routes.list("history"))
+                    }) { Text(stringResource(R.string.ui_see_all)) }
                 }
             }
             item {
-                val recent = library.history.take(12)
+                // Signed in: the account's real YouTube watch history (falls back to this device's history).
+                var accountHistory by remember(session != null) { mutableStateOf<List<VideoItem>?>(null) }
+                var historyError by remember(session != null) { mutableStateOf<String?>(null) }
+                LaunchedEffect(session != null) {
+                    if (session != null) {
+                        runCatching { Graph.accountApi.feed(AccountFeed.HISTORY) }
+                            .onSuccess { p -> accountHistory = p.items.filterIsInstance<com.vidora.app.data.Entry.Video>().map { it.video }.take(20) }
+                            .onFailure { historyError = it.message }
+                    }
+                }
+                historyError?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+                }
+                val recent = accountHistory?.takeIf { it.isNotEmpty() }?.map { v ->
+                    com.vidora.app.data.HistoryEntry(v, 0L, library.history.firstOrNull { it.video.url == v.url }?.positionMs ?: 0L)
+                }
+                    ?: library.history.take(12)
                 if (recent.isEmpty()) {
                     Text(stringResource(R.string.ui_videos_you_watch_will_show_up_here), style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
@@ -162,9 +182,15 @@ fun LibraryScreen(nav: NavHostController, actions: VideoActions) {
                 val downloads by Graph.downloads.items.collectAsState()
                 LibraryRow(Icons.Rounded.Download, "Downloads", "${downloads.size} files · watch offline") { nav.navigate(Routes.DOWNLOADS) }
             }
-            item { LibraryRow(Icons.Rounded.History, "History", "${library.history.size} videos") { nav.navigate(Routes.list("history")) } }
-            item { LibraryRow(Icons.Rounded.Favorite, "Liked videos", "${library.favorites.size} videos") { nav.navigate(Routes.list("liked")) } }
-            item { LibraryRow(Icons.Rounded.WatchLater, "Watch later", "${library.watchLater.size} videos") { nav.navigate(Routes.list("later")) } }
+            if (session != null) {
+                item { LibraryRow(Icons.Rounded.History, "History", "Your YouTube watch history") { nav.navigate(Routes.accountFeed(AccountFeed.HISTORY.name)) } }
+                item { LibraryRow(Icons.Rounded.ThumbUp, "Liked videos", "From your YouTube account") { nav.navigate(Routes.accountFeed(AccountFeed.LIKED.name)) } }
+                item { LibraryRow(Icons.Rounded.WatchLater, "Watch later", "From your YouTube account") { nav.navigate(Routes.accountFeed(AccountFeed.WATCH_LATER.name)) } }
+                item { SectionHeader("On this device") }
+            }
+            item { LibraryRow(Icons.Rounded.History, if (session != null) "Vidora history" else "History", "${library.history.size} videos") { nav.navigate(Routes.list("history")) } }
+            item { LibraryRow(Icons.Rounded.Favorite, if (session != null) "Favourites" else "Liked videos", "${library.favorites.size} videos") { nav.navigate(Routes.list("liked")) } }
+            item { LibraryRow(Icons.Rounded.WatchLater, if (session != null) "Saved for later" else "Watch later", "${library.watchLater.size} videos") { nav.navigate(Routes.list("later")) } }
             item { LibraryRow(Icons.Rounded.Subscriptions, "Subscriptions", "${library.subscriptions.size} channels") { nav.navigate(Routes.SUBS) } }
 
             // ---------------------------------------------------------- local playlists

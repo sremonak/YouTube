@@ -58,6 +58,8 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.vidora.app.Graph
 import com.vidora.app.data.Entry
+import com.vidora.app.account.AccountFeed
+import com.vidora.app.account.AccountSync
 import com.vidora.app.data.PageResult
 import com.vidora.app.ui.Paged
 import com.vidora.app.ui.Routes
@@ -77,9 +79,17 @@ fun SubscriptionsScreen(nav: NavHostController, actions: VideoActions) {
     val library by Graph.library.data.collectAsState()
     val scope = rememberCoroutineScope()
     val subs = library.subscriptions
-    val paged = remember(subs.map { it.url }) { Paged(scope) { loadFeed() } }
-    LaunchedEffect(paged) { if (subs.isNotEmpty()) paged.load() }
+    val session by Graph.account.session.collectAsState()
+    val signedIn = session != null
     var groupId by rememberSaveable { mutableStateOf<String?>(null) }
+    // Signed in + no group: YouTube's own subscriptions feed (FEsubscriptions), like the official app.
+    val useAccountFeed = signedIn && groupId == null
+    val paged = remember(useAccountFeed, if (useAccountFeed) emptyList() else subs.map { it.url }) {
+        Paged(scope) { if (useAccountFeed) Graph.accountApi.feed(AccountFeed.SUBSCRIPTIONS) else loadFeed() }
+    }
+    LaunchedEffect(paged) { if (useAccountFeed || subs.isNotEmpty()) paged.load() }
+    // Keep the channel row in sync with the account's subscriptions.
+    LaunchedEffect(signedIn) { if (signedIn) AccountSync.importSubscriptionsIfStale() }
     var editing by remember { mutableStateOf<SubscriptionGroup?>(null) }
     var creating by remember { mutableStateOf(false) }
     val group = library.groups.firstOrNull { it.id == groupId }
@@ -92,7 +102,7 @@ fun SubscriptionsScreen(nav: NavHostController, actions: VideoActions) {
             actions = { IconButton(onClick = { nav.navigate(Routes.search()) }) { Icon(Icons.Rounded.Search, "Search") } },
             colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
         )
-        if (subs.isEmpty()) {
+        if (subs.isEmpty() && !signedIn) {
             EmptyState(
                 stringResource(R.string.ui_no_subscriptions_yet),
                 stringResource(R.string.ui_subscribe_to_channels_they_are_stored_pr),
@@ -125,7 +135,7 @@ fun SubscriptionsScreen(nav: NavHostController, actions: VideoActions) {
             }
         }
         PullToRefreshBox(isRefreshing = paged.refreshing, onRefresh = { paged.load(refresh = true) }, modifier = Modifier.fillMaxSize()) {
-            EntryGrid(paged = paged, actions = actions, filter = { e -> groupSet == null || (e is Entry.Video && e.video.uploaderUrl in groupSet) })
+            EntryGrid(paged = paged, actions = actions, filter = { e -> useAccountFeed || groupSet == null || (e is Entry.Video && e.video.uploaderUrl in groupSet) })
         }
     }
     if (creating || editing != null) {

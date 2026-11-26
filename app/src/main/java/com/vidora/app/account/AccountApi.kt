@@ -5,6 +5,7 @@ import com.vidora.app.data.ChannelItem
 import com.vidora.app.data.Entry
 import com.vidora.app.data.NetworkDownloader
 import com.vidora.app.data.PageResult
+import com.vidora.app.data.PlaylistItem
 import com.vidora.app.data.VideoItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -18,12 +19,24 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper
 import java.io.IOException
 import java.util.Locale
+
+/** Thrown when YouTube no longer accepts the stored session. */
+class SignedOutException(message: String) : IOException(message)
+
+private const val MUSIC_VERSION = "1.20260707.12.00"
+
+/** A personalised filter chip of a YouTube feed ("All", "Music", "Mixes", "Gaming"…). */
+data class FeedChip(val label: String, val token: String?, val selected: Boolean)
+
+/** One page of an account feed plus the feed's own chips (first page only). */
+class AccountPage(val page: PageResult, val chips: List<FeedChip>)
 
 /** Account-only feeds of the signed-in user. */
 enum class AccountFeed(val label: String, val browseId: String) {
@@ -48,41 +61,92 @@ class AccountApi {
 
     suspend fun webContext(): JsonObject = context()
 
-    private suspend fun post(endpoint: String, body: JsonObject, requireAuth: Boolean = true): JsonObject = withContext(Dispatchers.IO) {
+    private suspend fun post(endpoint: String, body: JsonObject, requireAuth: Boolean = true): JsonObject =
+        post(endpoint, body, requireAuth, WEB_HOST)
+
+    /** Host of an InnerTube call: www.youtube.com (WEB) or music.youtube.com (WEB_REMIX). */
+    private class Host(val origin: String, val clientId: String, val version: () -> String)
+
+    private suspend fun post(endpoint: String, body: JsonObject, requireAuth: Boolean, host: Host, retried: Boolean = false): JsonObject = withContext(Dispatchers.IO) {
         val account = Graph.account
         if (requireAuth && !account.isSignedIn) throw IllegalStateException("Not signed in")
-        val version = runCatching { YoutubeParsingHelper.getClientVersion() }.getOrDefault("2.20251101.00.00")
         val builder = Request.Builder()
-            .url("https://www.youtube.com/youtubei/v1/$endpoint?prettyPrint=false")
+            .url("${host.origin}/youtubei/v1/$endpoint?prettyPrint=false")
             .post(body.toString().toRequestBody("application/json".toMediaType()))
             .header("User-Agent", NetworkDownloader.USER_AGENT)
-            .header("Origin", "https://www.youtube.com")
-            .header("Referer", "https://www.youtube.com/")
-            .header("X-Youtube-Client-Name", "1")
-            .header("X-Youtube-Client-Version", version)
+            .header("Origin", host.origin)
+            .header("Referer", "${host.origin}/")
+            .header("X-Youtube-Client-Name", host.clientId)
+            .header("X-Youtube-Client-Version", host.version())
         val authed = account.isSignedIn
-        if (authed) account.authHeaders().forEach { (k, v) -> builder.header(k, v) }
-        client.newCall(builder.build()).execute().use { r ->
+        val usedSessionHash = authed && account.userSessionId != null && account.sessionHashEnabled
+        if (authed) account.authHeaders(host.origin).forEach { (k, v) -> builder.header(k, v) }
+        val res = client.newCall(builder.build()).execute().use { r ->
             if (authed) account.mergeSetCookies(r.headers("Set-Cookie"))
             val text = r.body?.string().orEmpty()
-            if (r.code == 401 || r.code == 403) throw IOException("Session expired — please sign in again (HTTP ${r.code})")
+            if (r.code == 401 || r.code == 403) throw SignedOutException("YouTube rejected your sign-in (HTTP ${r.code}). Sign out and sign in again in Settings → Account.")
             if (!r.isSuccessful) throw IOException("HTTP ${r.code}")
             json.parseToJsonElement(text).jsonObject
         }
+        if (authed) {
+            val ctx = res["responseContext"] as? JsonObject
+            val main = ctx?.get("mainAppWebResponseContext") as? JsonObject
+            val loggedOut = str(main?.get("loggedOut")) == "true" || trackingParam(ctx, "logged_in") == "0"
+            if (loggedOut) {
+                lastLoggedIn = false
+                if (usedSessionHash && !retried) {
+                    // The session-bound hash wasn't accepted: fall back to the classic SAPISIDHASH once.
+                    account.sessionHashEnabled = false
+                    return@withContext post(endpoint, body, requireAuth, host, retried = true)
+                }
+                if (requireAuth) throw SignedOutException(
+                    "YouTube is treating Vidora as signed out, so your history and recommendations can't load. " +
+                        "Open Settings → Account → Sign out, then sign in again."
+                )
+            } else if (main != null) {
+                lastLoggedIn = true
+                // Remember the account's session ids (brand-account channels need X-Goog-PageId).
+                str(main["datasyncId"])?.let { id ->
+                    if (account.userSessionId == null && account.delegatedSessionId == null) account.applyDataSyncId(id)
+                }
+            }
+        }
+        res
     }
 
-    private suspend fun context(): JsonObject {
-        val version = withContext(Dispatchers.IO) {
-            runCatching { YoutubeParsingHelper.getClientVersion() }.getOrDefault("2.20251101.00.00")
+    /** Last observed sign-in state reported by YouTube (null = not known yet). */
+    @Volatile var lastLoggedIn: Boolean? = null
+        private set
+
+    private fun trackingParam(ctx: JsonObject?, key: String): String? {
+        val services = ctx?.get("serviceTrackingParams") as? JsonArray ?: return null
+        for (svc in services) {
+            val params = (svc as? JsonObject)?.get("params") as? JsonArray ?: continue
+            for (p in params) {
+                val o = p as? JsonObject ?: continue
+                if (str(o["key"]) == key) return str(o["value"])
+            }
         }
+        return null
+    }
+
+    private val webVersion: String by lazy {
+        runCatching { YoutubeParsingHelper.getClientVersion() }.getOrNull()?.takeIf { it.isNotBlank() } ?: "2.20260708.00.00"
+    }
+    private val WEB_HOST = Host("https://www.youtube.com", "1") { webVersion }
+    private val MUSIC_HOST = Host("https://music.youtube.com", "67") { MUSIC_VERSION }
+
+    private suspend fun context(music: Boolean = false): JsonObject {
+        val version = if (music) MUSIC_VERSION else withContext(Dispatchers.IO) { webVersion }
         val locale = Locale.getDefault()
         return buildJsonObject {
             putJsonObject("client") {
-                put("clientName", "WEB")
+                put("clientName", if (music) "WEB_REMIX" else "WEB")
                 put("clientVersion", version)
                 put("hl", locale.language.ifBlank { "en" })
                 put("gl", locale.country.ifBlank { "US" })
             }
+            putJsonObject("user") { put("lockedSafetyMode", false) }
         }
     }
 
@@ -122,33 +186,232 @@ class AccountApi {
             put("context", context()); put("videoId", videoId)
             put("contentCheckOk", true); put("racyCheckOk", true)
         }, requireAuth = false)
-        val out = mutableListOf<VideoItem>()
+        val out = mutableListOf<Entry>()
         walk(res, out, mutableListOf())
-        return out.filter { !it.url.contains(videoId) }.distinctBy { it.url }
+        return out.filterIsInstance<Entry.Video>().map { it.video }.filter { !it.url.contains(videoId) }.distinctBy { it.url }
     }
 
     // ------------------------------------------------------------------ feeds
 
-    suspend fun feed(feed: AccountFeed): PageResult {
+    suspend fun feed(feed: AccountFeed): PageResult = feedWithChips(feed).page
+
+    /** A feed's first page together with YouTube's own chips for it (Home: All / Music / Mixes / Gaming…). */
+    suspend fun feedWithChips(feed: AccountFeed): AccountPage {
         val res = post("browse", buildJsonObject { put("context", context()); put("browseId", feed.browseId) })
-        return toPage(res)
+        return AccountPage(toPage(res), collectChips(res))
     }
+
+    /** Loads the feed behind one of YouTube's chips (they are continuation tokens). */
+    suspend fun chip(token: String): PageResult = continuation(token)
 
     private suspend fun continuation(token: String): PageResult {
         val res = post("browse", buildJsonObject { put("context", context()); put("continuation", token) })
         return toPage(res)
     }
 
-    private fun toPage(res: JsonObject): PageResult {
-        val videos = mutableListOf<VideoItem>()
+    internal fun toPage(res: JsonObject, music: Boolean = false): PageResult {
+        val entries = mutableListOf<Entry>()
         val tokens = mutableListOf<String>()
-        walk(res, videos, tokens)
-        return PageResult(videos.distinctBy { it.url }.map { Entry.Video(it) }, nextPage(tokens.lastOrNull(), videos.isNotEmpty()))
+        if (music) walkMusic(res, entries, tokens) else walk(res, entries, tokens)
+        val items = entries.distinctBy { it.key }
+        if (items.isEmpty()) emptyMessage(res)?.let { throw IOException(it) }
+        val token = tokens.lastOrNull()
+        val next: (suspend () -> PageResult)? = if (token == null || items.isEmpty()) null else ({
+            if (music) musicContinuation(token) else continuation(token)
+        })
+        return PageResult(items, next)
     }
 
-    private fun nextPage(token: String?, hasItems: Boolean): (suspend () -> PageResult)? {
-        if (token == null || !hasItems) return null
-        return { continuation(token) }
+    /** YouTube's own explanation for an empty feed ("Your watch history is off", "Try searching to get started"…). */
+    private fun emptyMessage(res: JsonObject): String? {
+        for (key in listOf("feedNudgeRenderer", "backgroundPromoRenderer", "messageRenderer", "promptRenderer", "emptyStateViewModel")) {
+            val r = findFirst(res, key) ?: continue
+            val title = text(r["title"]) ?: text(r["text"]) ?: findFirst(r, "title")?.let { text(it) }
+            val body = text(r["subtitle"]) ?: text(r["bodyText"]) ?: text(r["body"])
+            val msg = listOfNotNull(title, body).joinToString(" — ").ifBlank { null }
+            if (msg != null) return "YouTube says: $msg"
+        }
+        return null
+    }
+
+    internal fun collectChips(res: JsonObject): List<FeedChip> {
+        val out = mutableListOf<FeedChip>()
+        fun rec(e: JsonElement?) {
+            when (e) {
+                is JsonObject -> for ((k, v) in e) {
+                    if (v !is JsonObject) { rec(v); continue }
+                    when (k) {
+                        "chipCloudChipRenderer" -> {
+                            val label = text(v["text"]) ?: continue
+                            out += FeedChip(label, findFirst(v["navigationEndpoint"], "continuationCommand")?.let { str(it["token"]) }, str(v["isSelected"]) == "true")
+                        }
+                        "chipViewModel" -> {
+                            val label = text(v["text"]) ?: continue
+                            out += FeedChip(label, findFirst(v["tapCommand"], "continuationCommand")?.let { str(it["token"]) }, str(v["selected"]) == "true")
+                        }
+                        else -> rec(v)
+                    }
+                }
+                is JsonArray -> e.forEach(::rec)
+                else -> Unit
+            }
+        }
+        // Only the feed's own chip bar (header), not chips embedded in shelves.
+        rec(findFirst(res, "feedFilterChipBarRenderer") ?: findFirst(res, "chipBarViewModel"))
+        return out.distinctBy { it.label }
+    }
+
+    // ------------------------------------------------------------------ YouTube Music
+
+    /** music.youtube.com home of the signed-in account (Quick picks, Mixed for you, Listen again…). */
+    suspend fun musicHome(): PageResult {
+        val res = post("browse", buildJsonObject { put("context", context(music = true)); put("browseId", "FEmusic_home") }, true, MUSIC_HOST)
+        return toPage(res, music = true)
+    }
+
+    private suspend fun musicContinuation(token: String): PageResult {
+        val res = post("browse", buildJsonObject { put("context", context(music = true)); put("continuation", token) }, true, MUSIC_HOST)
+        return toPage(res, music = true)
+    }
+
+    private fun walkMusic(e: JsonElement, out: MutableList<Entry>, tokens: MutableList<String>) {
+        when (e) {
+            is JsonObject -> for ((k, v) in e) {
+                when {
+                    v !is JsonObject -> walkMusic(v, out, tokens)
+                    k == "musicTwoRowItemRenderer" -> parseMusicTwoRow(v)?.let(out::add)
+                    k == "musicResponsiveListItemRenderer" -> parseMusicListItem(v)?.let(out::add)
+                    k == "nextContinuationData" -> str(v["continuation"])?.let(tokens::add)
+                    k == "continuationItemRenderer" -> findString(v, "token")?.let(tokens::add)
+                    else -> walkMusic(v, out, tokens)
+                }
+            }
+            is JsonArray -> e.forEach { walkMusic(it, out, tokens) }
+            else -> Unit
+        }
+    }
+
+    private fun parseMusicTwoRow(v: JsonObject): Entry? {
+        val title = text(v["title"]) ?: return null
+        val subtitle = text(v["subtitle"])
+        val thumbnail = thumb(findFirst(v["thumbnailRenderer"], "thumbnail"))
+        val nav = v["navigationEndpoint"] as? JsonObject
+        val watch = nav?.get("watchEndpoint") as? JsonObject
+        val videoId = str(watch?.get("videoId"))
+        if (videoId != null) {
+            return Entry.Video(VideoItem(
+                url = "https://www.youtube.com/watch?v=$videoId", title = title,
+                thumbnail = thumbnail ?: "https://i.ytimg.com/vi/$videoId/hqdefault.jpg",
+                uploader = subtitle?.substringAfter(" • ")?.ifBlank { subtitle } ?: subtitle,
+            ))
+        }
+        val browseId = str((nav?.get("browseEndpoint") as? JsonObject)?.get("browseId"))
+        val playlistId = when {
+            browseId == null -> str(watch?.get("playlistId"))
+            browseId.startsWith("VL") -> browseId.removePrefix("VL")
+            else -> null
+        } ?: findFirst(v["thumbnailOverlay"], "watchPlaylistEndpoint")?.let { str(it["playlistId"]) }
+            ?: return null
+        return Entry.Playlist(PlaylistItem(url = "https://www.youtube.com/playlist?list=$playlistId", name = title, thumbnail = thumbnail, uploader = subtitle))
+    }
+
+    private fun parseMusicListItem(v: JsonObject): Entry? {
+        val videoId = str((v["playlistItemData"] as? JsonObject)?.get("videoId"))
+            ?: findFirst(v["overlay"], "watchEndpoint")?.let { str(it["videoId"]) } ?: return null
+        val columns = (v["flexColumns"] as? JsonArray).orEmpty().map { text(findFirst(it, "musicResponsiveListItemFlexColumnRenderer")?.get("text")) }
+        val title = columns.getOrNull(0) ?: return null
+        return Entry.Video(VideoItem(
+            url = "https://www.youtube.com/watch?v=$videoId", title = title,
+            thumbnail = thumb(findFirst(v["thumbnail"], "thumbnail")) ?: "https://i.ytimg.com/vi/$videoId/hqdefault.jpg",
+            uploader = columns.getOrNull(1)?.substringBefore(" • "),
+        ))
+    }
+
+    // ------------------------------------------------------------------ watch history
+
+    /**
+     * Tells YouTube the video was watched, so it lands in the account's watch history and shapes
+     * recommendations — the same playback/watchtime stats pings the official player sends
+     * (algorithm from yt-dlp's `--mark-watched`).
+     */
+    suspend fun markWatched(videoId: String): Boolean = withContext(Dispatchers.IO) {
+        val account = Graph.account
+        if (!account.isSignedIn) return@withContext false
+        val tracking = playbackTracking(videoId) ?: return@withContext false
+        val alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_"
+        val rnd = java.security.SecureRandom()
+        val cpn = (1..16).map { alphabet[rnd.nextInt(64)] }.joinToString("")
+        var ok = true
+        for ((i, key) in listOf("videostatsPlaybackUrl", "videostatsWatchtimeUrl").withIndex()) {
+            val base = str((tracking[key] as? JsonObject)?.get("baseUrl")) ?: return@withContext false
+            val url = base.toHttpUrlOrNull() ?: return@withContext false
+            val len = ((url.queryParameter("len")?.toDoubleOrNull() ?: 1.5) - 1).toString()
+            val b = url.newBuilder()
+                .setQueryParameter("ver", "2").setQueryParameter("cpn", cpn)
+                .setQueryParameter("cmt", len).setQueryParameter("el", "detailpage")
+            if (i == 1) b.setQueryParameter("st", "0").setQueryParameter("et", len)
+            val req = Request.Builder().url(b.build()).header("User-Agent", NetworkDownloader.USER_AGENT)
+                .header("Referer", "https://www.youtube.com/watch?v=$videoId")
+            account.authHeaders().forEach { (k, v) -> req.header(k, v) }
+            ok = ok && runCatching { client.newCall(req.build()).execute().use { it.isSuccessful || it.code == 204 } }.getOrDefault(false)
+        }
+        ok
+    }
+
+    /** playbackTracking of a signed-in player response (WEB first, TV client as fallback). */
+    private suspend fun playbackTracking(videoId: String): JsonObject? {
+        val web = runCatching {
+            post("player", buildJsonObject {
+                put("context", context()); put("videoId", videoId)
+                put("contentCheckOk", true); put("racyCheckOk", true)
+            })
+        }.getOrNull()
+        (web?.get("playbackTracking") as? JsonObject)?.let { if (it["videostatsWatchtimeUrl"] != null) return it }
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val tv = com.vidora.app.data.YtClient.TV
+                val body = buildJsonObject {
+                    putJsonObject("context") {
+                        putJsonObject("client") {
+                            put("clientName", tv.clientName); put("clientVersion", tv.version); put("userAgent", tv.userAgent)
+                            tv.extra.forEach { (k, v) -> put(k, v) }
+                        }
+                    }
+                    put("videoId", videoId); put("contentCheckOk", true); put("racyCheckOk", true)
+                }
+                val req = Request.Builder().url("https://www.youtube.com/youtubei/v1/player?prettyPrint=false")
+                    .post(body.toString().toRequestBody("application/json".toMediaType()))
+                    .header("User-Agent", tv.userAgent).header("Origin", "https://www.youtube.com")
+                    .header("X-YouTube-Client-Name", tv.clientId).header("X-YouTube-Client-Version", tv.version)
+                Graph.account.authHeaders().forEach { (k, v) -> req.header(k, v) }
+                client.newCall(req.build()).execute().use { r -> json.parseToJsonElement(r.body?.string().orEmpty()).jsonObject }
+            }.getOrNull()?.get("playbackTracking") as? JsonObject
+        }
+    }
+
+    // ------------------------------------------------------------------ diagnostics
+
+    /** Human-readable account check (no secrets): is YouTube accepting the session, and do the feeds load? */
+    suspend fun diagnose(): String {
+        val account = Graph.account
+        val lines = mutableListOf<String>()
+        val cookies = account.cookieReport()
+        lines += "Cookies: " + cookies.entries.joinToString(" ") { (k, v) -> (if (v) "✓" else "✗") + k }
+        val menu = runCatching { post("account/account_menu", buildJsonObject { put("context", context()) }, requireAuth = false) }
+        menu.onFailure { lines += "Account: ERROR ${it.message}" }
+        menu.onSuccess { res ->
+            val name = findFirst(res, "activeAccountHeaderRenderer")?.let { text(it["accountName"]) }
+            lines += "YouTube sees you as: " + when (lastLoggedIn) { true -> "SIGNED IN"; false -> "SIGNED OUT"; null -> "unknown" } + (name?.let { " ($it)" } ?: "")
+            lines += "Session id: " + (if (account.userSessionId != null) "✓" else "✗") + (if (account.delegatedSessionId != null) "  · brand channel ✓" else "")
+        }
+        for (feed in listOf(AccountFeed.RECOMMENDED, AccountFeed.HISTORY, AccountFeed.SUBSCRIPTIONS, AccountFeed.LIKED)) {
+            val r = runCatching { feedWithChips(feed) }
+            lines += feed.label + ": " + r.fold(
+                { p -> "${p.page.items.size} items" + (if (p.chips.isNotEmpty()) " · chips: " + p.chips.joinToString(", ") { it.label } else "") },
+                { "ERROR ${it.message}" })
+        }
+        lines += "YouTube Music: " + runCatching { musicHome() }.fold({ "${it.items.size} items" }, { "ERROR ${it.message}" })
+        return lines.joinToString("\n")
     }
 
     /** All channels the account is subscribed to (follows continuations). */
@@ -253,20 +516,71 @@ class AccountApi {
 
     private val videoKeys = setOf("videoRenderer", "compactVideoRenderer", "gridVideoRenderer", "playlistVideoRenderer")
 
-    private fun walk(e: JsonElement, out: MutableList<VideoItem>, tokens: MutableList<String>) {
+    private val playlistKeys = setOf("playlistRenderer", "gridPlaylistRenderer", "compactPlaylistRenderer", "radioRenderer", "compactRadioRenderer", "gridRadioRenderer")
+
+    private fun walk(e: JsonElement, out: MutableList<Entry>, tokens: MutableList<String>) {
         when (e) {
             is JsonObject -> for ((k, v) in e) {
                 when {
-                    k in videoKeys && v is JsonObject -> parseVideoRenderer(v)?.let(out::add)
-                    k == "lockupViewModel" && v is JsonObject -> parseLockup(v)?.let(out::add)
-                    k == "continuationCommand" && v is JsonObject -> str(v["token"])?.let(tokens::add)
-                    k.endsWith("adSlotRenderer", ignoreCase = true) || k.contains("promoted", true) -> Unit
+                    v !is JsonObject -> walk(v, out, tokens)
+                    k in videoKeys -> parseVideoRenderer(v)?.let { out += Entry.Video(it) }
+                    k == "reelItemRenderer" -> parseReel(v)?.let { out += Entry.Video(it) }
+                    k == "shortsLockupViewModel" -> parseShortsLockup(v)?.let { out += Entry.Video(it) }
+                    k == "lockupViewModel" -> parseLockup(v)?.let(out::add)
+                    k in playlistKeys -> parsePlaylistRenderer(v)?.let(out::add)
+                    // The feed's next page lives in a continuationItemRenderer; chip bars carry their own tokens.
+                    k == "continuationItemRenderer" -> findString(v, "token")?.let(tokens::add)
+                    k == "nextContinuationData" -> str(v["continuation"])?.let(tokens::add)
+                    k == "feedFilterChipBarRenderer" || k == "chipBarViewModel" || k == "chipCloudRenderer" -> Unit
+                    k.endsWith("adSlotRenderer", ignoreCase = true) || k.contains("promoted", true) ||
+                        k.endsWith("AdRenderer") || k == "adSlotViewModel" || k == "statementBannerRenderer" -> Unit
                     else -> walk(v, out, tokens)
                 }
             }
             is JsonArray -> e.forEach { walk(it, out, tokens) }
             else -> Unit
         }
+    }
+
+    private fun parseReel(v: JsonObject): VideoItem? {
+        val id = str(v["videoId"]) ?: return null
+        return VideoItem(
+            url = "https://www.youtube.com/shorts/$id",
+            title = text(v["headline"]) ?: text(v["accessibility"]) ?: return null,
+            thumbnail = thumb(v["thumbnail"]) ?: "https://i.ytimg.com/vi/$id/hq2.jpg",
+            views = parseCount(text(v["viewCountText"])),
+            isShort = true,
+        )
+    }
+
+    private fun parseShortsLockup(v: JsonObject): VideoItem? {
+        val id = findFirst(v["onTap"], "reelWatchEndpoint")?.let { str(it["videoId"]) }
+            ?: str(v["entityId"])?.removePrefix("shorts-shelf-item-")?.takeIf { it.length == 11 } ?: return null
+        val overlay = v["overlayMetadata"] as? JsonObject
+        val sources = findArray(v["thumbnail"], "sources")
+        return VideoItem(
+            url = "https://www.youtube.com/shorts/$id",
+            title = text(overlay?.get("primaryText")) ?: str(v["accessibilityText"])?.substringBefore(",") ?: return null,
+            thumbnail = sources?.firstOrNull()?.let { str((it as? JsonObject)?.get("url")) } ?: "https://i.ytimg.com/vi/$id/hq2.jpg",
+            views = parseCount(text(overlay?.get("secondaryText"))),
+            isShort = true,
+        )
+    }
+
+    private fun parsePlaylistRenderer(v: JsonObject): Entry? {
+        val id = str(v["playlistId"]) ?: return null
+        val firstVideo = findFirst(v["navigationEndpoint"], "watchEndpoint")?.let { str(it["videoId"]) }
+        val url = if (id.startsWith("RD") && firstVideo != null) "https://www.youtube.com/watch?v=$firstVideo&list=$id"
+        else "https://www.youtube.com/playlist?list=$id"
+        val count = text(v["videoCountText"]) ?: text(v["videoCountShortText"]) ?: str(v["videoCount"])
+        return Entry.Playlist(PlaylistItem(
+            url = url,
+            name = text(v["title"]) ?: return null,
+            thumbnail = thumb(v["thumbnail"]) ?: thumb((v["thumbnails"] as? JsonArray)?.firstOrNull())
+                ?: firstVideo?.let { "https://i.ytimg.com/vi/$it/hqdefault.jpg" },
+            uploader = text(v["longBylineText"]) ?: text(v["shortBylineText"]),
+            count = count?.let { Regex("[\\d,]+").find(it)?.value?.replace(",", "")?.toLongOrNull() } ?: -1,
+        ))
     }
 
     private fun collectChannels(e: JsonElement, out: MutableList<ChannelItem>, tokens: MutableList<String>) {
@@ -313,8 +627,43 @@ class AccountApi {
         )
     }
 
-    private fun parseLockup(v: JsonObject): VideoItem? {
-        if (str(v["contentType"])?.contains("VIDEO") != true) return null
+    private fun parseLockup(v: JsonObject): Entry? {
+        val type = str(v["contentType"]).orEmpty()
+        if (type.contains("VIDEO")) return parseLockupVideo(v)?.let { Entry.Video(it) }
+        if (!(type.contains("PLAYLIST") || type.contains("ALBUM") || type.contains("PODCAST"))) return null
+        val id = str(v["contentId"]) ?: return null
+        val meta = findFirst(v, "lockupMetadataViewModel") ?: return null
+        val title = text(meta["title"]) ?: return null
+        val firstVideo = findFirst(v["rendererContext"], "watchEndpoint")?.let { str(it["videoId"]) }
+        val url = if (id.startsWith("RD") && firstVideo != null) "https://www.youtube.com/watch?v=$firstVideo&list=$id"
+        else "https://www.youtube.com/playlist?list=$id"
+        val sources = (findFirst(v["contentImage"] ?: v, "image")?.get("sources") as? JsonArray)
+        val rows = (findFirst(meta, "contentMetadataViewModel")?.get("metadataRows") as? JsonArray).orEmpty()
+        val firstPart = rows.firstNotNullOfOrNull { row ->
+            ((row as? JsonObject)?.get("metadataParts") as? JsonArray)?.firstNotNullOfOrNull { text((it as? JsonObject)?.get("text")) }
+        }
+        val badge = findBadgeCount(v["contentImage"])
+        return Entry.Playlist(PlaylistItem(
+            url = url, name = title,
+            thumbnail = sources?.lastOrNull()?.let { str((it as? JsonObject)?.get("url")) } ?: firstVideo?.let { "https://i.ytimg.com/vi/$it/hqdefault.jpg" },
+            uploader = firstPart,
+            count = badge ?: -1,
+        ))
+    }
+
+    /** "25 videos" style thumbnail badge → 25. */
+    private fun findBadgeCount(e: JsonElement?): Long? {
+        val regex = Regex("^([\\d,]+)\\s+\\p{L}+")
+        fun rec(x: JsonElement?): Long? = when (x) {
+            is JsonPrimitive -> x.contentOrNull?.let { regex.find(it)?.groupValues?.get(1)?.replace(",", "")?.toLongOrNull() }
+            is JsonObject -> x.values.firstNotNullOfOrNull { rec(it) }
+            is JsonArray -> x.firstNotNullOfOrNull { rec(it) }
+            else -> null
+        }
+        return rec(e)
+    }
+
+    private fun parseLockupVideo(v: JsonObject): VideoItem? {
         val id = str(v["contentId"]) ?: return null
         val meta = findFirst(v, "lockupMetadataViewModel") ?: return null
         val title = text(meta["title"]) ?: return null
@@ -375,6 +724,18 @@ class AccountApi {
                 for (v in e.values) findFirst(v, key)?.let { return it }
             }
             is JsonArray -> for (v in e) findFirst(v, key)?.let { return it }
+            else -> Unit
+        }
+        return null
+    }
+
+    private fun findArray(e: JsonElement?, key: String): JsonArray? {
+        when (e) {
+            is JsonObject -> {
+                (e[key] as? JsonArray)?.let { return it }
+                for (v in e.values) findArray(v, key)?.let { return it }
+            }
+            is JsonArray -> for (v in e) findArray(v, key)?.let { return it }
             else -> Unit
         }
         return null

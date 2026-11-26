@@ -43,4 +43,33 @@ object AccountSync {
             }.onFailure { Graph.player.toast("YouTube subscription sync failed: ${it.message}") }
         }
     }
+
+    /** Result of the last watch-history report, shown in Settings → Account check. */
+    @Volatile var lastWatchSync: String = "nothing reported yet"
+        private set
+
+    /** Adds the video to the YouTube account's watch history (fire and forget). */
+    fun markWatched(video: com.vidora.app.data.VideoItem) {
+        if (!Graph.account.isSignedIn) return
+        val id = Graph.repository.videoId(video.url) ?: return
+        Graph.appScope.launch(Dispatchers.IO) {
+            val ok = runCatching { Graph.accountApi.markWatched(id) }
+            lastWatchSync = ok.fold({ if (it) "✓ \"${video.title.take(40)}\" added to YouTube history" else "✗ YouTube gave no history URL for \"${video.title.take(40)}\"" },
+                { "✗ ${it.message}" })
+        }
+    }
+
+    @Volatile private var subsImportedAt = 0L
+
+    /** Copies the account's channels into Vidora's subscriptions (at most every 6 h, silently). */
+    fun importSubscriptionsIfStale(force: Boolean = false) {
+        if (!Graph.account.isSignedIn) return
+        val now = System.currentTimeMillis()
+        if (!force && now - subsImportedAt < 6 * 3_600_000L) return
+        subsImportedAt = now
+        Graph.appScope.launch(Dispatchers.IO) {
+            runCatching { Graph.library.importSubscriptions(Graph.accountApi.subscriptions()) }
+                .onFailure { subsImportedAt = 0L }
+        }
+    }
 }
