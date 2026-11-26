@@ -172,6 +172,8 @@ data class StreamDetails(
     val frames: FrameSet? = null,
     /** Continuation token for live chat (live streams and chat replays), null if unavailable. */
     val liveChat: String? = null,
+    /** Which extraction path produced the streams (shown in Stats for nerds for debugging). */
+    val source: String = "NewPipe · visionOS",
 ) {
     /** Distinct audio languages; empty/one entry means there's nothing to choose. */
     val audioTracks: List<AudioTrack>

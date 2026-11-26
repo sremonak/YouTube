@@ -722,6 +722,7 @@ fun StatsSheet(onDismiss: () -> Unit) {
         val counters = player.videoDecoderCounters
         fun kbps(b: Int) = if (b > 0) "${b / 1000} kbps" else "—"
         buildList {
+            add("Source" to (com.vidora.app.Graph.player.state.value.details?.source ?: "—"))
             add("Video" to (v?.let { "${size.width.takeIf { it > 0 } ?: it.width}×${size.height.takeIf { it > 0 } ?: it.height}" + (if (it.frameRate > 0) " @ ${it.frameRate.toInt()} fps" else "") } ?: "Audio only"))
             add("Video codec" to (v?.let { listOfNotNull(it.codecs, it.sampleMimeType).firstOrNull() } ?: "—"))
             add("Video bitrate" to (v?.let { kbps(maxOf(it.bitrate, it.averageBitrate, it.peakBitrate)) } ?: "—"))

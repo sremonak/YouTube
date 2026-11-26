@@ -167,6 +167,10 @@ class ContentRepository {
             bot ->
                 "YouTube is blocking anonymous playback on this network (very common with VPNs). Sign in from " +
                     "Settings → Account, or switch VPN server / turn the VPN off, then tap Retry."
+            anon is org.schabi.newpipe.extractor.exceptions.GeographicRestrictionException ||
+                (last as? PlayabilityException)?.reason?.contains("country", true) == true ->
+                "This video isn't available in the country your connection comes from (your VPN location). " +
+                    "Switch the VPN to another country or turn it off, then tap Retry."
             anon is AgeRestrictedContentException && !signed -> "This video is age-restricted. Sign in from Settings → Account to watch it."
             anon is AgeRestrictedContentException -> "This video is age-restricted and YouTube refused your account too: ${lastReason ?: ""}"
             else -> anon.message ?: lastReason ?: "Couldn't load this video"
@@ -203,6 +207,7 @@ class ContentRepository {
             category = null,
             allAudioStreams = r.audios,
             subtitles = r.subtitles,
+            source = if (r.signedIn) "TV client · your account" else "TV client · anonymous",
         )
     }
 
