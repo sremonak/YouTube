@@ -31,8 +31,16 @@ jobs:
           pip install -q --upgrade "yt-dlp[default]"
           curl -fsSL https://deno.land/install.sh | sh -s -- -y >/dev/null 2>&1 || true
           export PATH="$HOME/.deno/bin:$PATH"
-          dl=$(yt-dlp --no-colors -v -f 140 --extractor-args "youtube:player_client=tv_samsung" -o /tmp/a.m4a "https://www.youtube.com/watch?v=dQw4w9WgXcQ" 2>&1 | grep -E "ERROR|WARNING|100%|download\]|HTTP Error" | tail -8 | sed 's/%/%25/g' | tr '\n' '\001' | sed 's/\x01/%0A/g')
+          yt-dlp --no-colors -v --newline -f 140 --extractor-args "youtube:player_client=tv_samsung" -o /tmp/a.m4a "https://www.youtube.com/watch?v=dQw4w9WgXcQ" > /tmp/dl.log 2>&1 || true
+          dl=$( (grep -E "ERROR|WARNING|HTTP Error|jsc|player|Solving|n challenge|signature" /tmp/dl.log | head -20; tail -3 /tmp/dl.log; ls -l /tmp/a.m4a 2>&1) | sed 's/%/%25/g' | tr '\n' '\001' | sed 's/\x01/%0A/g')
           echo "::notice title=yt-dlp download tv_samsung 140::$dl"
+          u=$(yt-dlp -g -f 140 --extractor-args "youtube:player_client=tv_samsung" "https://www.youtube.com/watch?v=dQw4w9WgXcQ" 2>/dev/null | head -1)
+          keys=$(echo "$u" | sed 's/^[^?]*?//' | tr '&' '\n' | cut -d= -f1 | tr '\n' ',')
+          h1=$(curl -s -o /dev/null -w "%{http_code}" -r 0-4095 "$u")
+          h2=$(curl -s -o /dev/null -w "%{http_code}" -A "Mozilla/5.0 (SMART-TV; Linux; Tizen 2.4.0) AppleWebKit/538.1 (KHTML, like Gecko) Version/2.4.0 TV Safari/538.1" -r 0-4095 "$u")
+          h3=$(curl -s -o /dev/null -w "%{http_code}" "$u&range=0-4095")
+          host=$(echo "$u" | cut -d/ -f3)
+          echo "::notice title=yt-dlp url tv_samsung 140::host=$host keys=$keys curlRange=$h1 curlTvUA=$h2 rangeParam=$h3"
           for c in default; do
             out=$(yt-dlp -v --no-colors -F --extractor-args "youtube:player_client=$c" "https://www.youtube.com/watch?v=dQw4w9WgXcQ" 2>&1 | grep -E "WARNING|ERROR|^[0-9]{2,3} |player API JSON|\[debug\] yt-dlp version|JS runtimes" | head -40 | sed 's/%/%25/g' | tr '\n' '\001' | sed 's/\x01/%0A/g')
             echo "::notice title=yt-dlp $c::$out"

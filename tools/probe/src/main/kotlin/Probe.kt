@@ -147,6 +147,7 @@ fun probeClient(c: Client, videoId: String, visitor: String?, sts: Int?): String
             sb.append(" itag=${f.s("itag")} GET0=${rangeStatus(url!!, c.ua, 0)} GET1.5M=${rangeStatus(url, c.ua, 1_500_000)}")
             if (c.key == "tv_samsung") {
                 val u = url!!
+                sb.append(" host=" + u.substringAfter("://").substringBefore('/'))
                 sb.append(" keys=" + u.substringAfter('?').split('&').map { it.substringBefore('=') }.joinToString(","))
                 sb.append(" rangeParam=" + runCatching { http.newCall(okhttp3.Request.Builder().url("$u&range=0-4095").header("User-Agent", c.ua).build()).execute().use { "${it.code}" } }.getOrElse { "ERR" })
                 sb.append(" ffUA=" + rangeStatus(u, FIREFOX, 0))
@@ -234,7 +235,7 @@ fun main() {
     }.getOrNull()
     loadPlayer()
     val ejsSts = playerSts()
-    val videos = listOf("dQw4w9WgXcQ", "aqz-KE-bpKQ", "M7lc1UVf-VE")
+    val videos = listOf("dQw4w9WgXcQ")
     for (v in videos) {
         val lines = mutableListOf("runner ip=$ip visitor=${visitor != null}")
         val sts = runCatching { YoutubeJavaScriptPlayerManager.getSignatureTimestamp(v) }
