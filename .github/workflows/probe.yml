@@ -35,6 +35,31 @@ jobs:
           tr=$(grep "videoplayback" /tmp/dl.log | head -1 | sed -E 's/\?[^ ]*/?…/' | sed 's/\\r\\n/\n/g' | cut -c1-400; grep -E "reply:" /tmp/dl.log | tail -2)
           tr=$(echo "$tr" | sed 's/%/%25/g' | tr '\n' '\001' | sed 's/\x01/%0A/g')
           echo "::notice title=yt-dlp traffic tv_samsung 140::$tr"
+          python3 - <<'PY' > /tmp/replay.txt 2>&1 || true
+          import re, urllib.request
+          log = open('/tmp/dl.log').read()
+          m = re.search(r"send: b'GET (/videoplayback\?[^ ]+) HTTP/1.1\\r\\nHost: ([^\\]+)\\r\\n(.*?)\\r\\n\\r\\n'", log)
+          if not m:
+              print('no match'); raise SystemExit
+          path, host, hdrs = m.group(1), m.group(2), m.group(3)
+          H = dict(h.split(': ', 1) for h in hdrs.split('\\r\\n'))
+          url = f'https://{host}{path}'
+          def t(name, headers):
+              try:
+                  r = urllib.request.urlopen(urllib.request.Request(url, headers=headers)); print(name, r.status, end=' '); r.close()
+              except Exception as e:
+                  print(name, getattr(e, 'code', e), end=' ')
+          t('exact', H)
+          t('smallRange', {**H, 'Range': 'bytes=0-4095'})
+          t('noSecFetch', {k: v for k, v in H.items() if k != 'Sec-Fetch-Mode'})
+          t('noAccept', {k: v for k, v in H.items() if k not in ('Accept', 'Accept-Language')})
+          t('tvUA', {**H, 'User-Agent': 'Mozilla/5.0 (SMART-TV; Linux; Tizen 2.4.0) AppleWebKit/538.1 (KHTML, like Gecko) Version/2.4.0 TV Safari/538.1'})
+          t('onlyUA+Range', {'User-Agent': H['User-Agent'], 'Range': H['Range']})
+          t('onlyRange', {'Range': H['Range']})
+          print('keys=', ','.join(k.split('=')[0] for k in path.split('?',1)[1].split('&')))
+          PY
+          rp=$(cat /tmp/replay.txt | sed 's/%/%25/g' | tr '\n' '\001' | sed 's/\x01/%0A/g')
+          echo "::notice title=yt-dlp replay tv_samsung 140::$rp"
           u=$(yt-dlp -g -f 140 --extractor-args "youtube:player_client=tv_samsung" "https://www.youtube.com/watch?v=dQw4w9WgXcQ" 2>/dev/null | head -1)
           CH="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36"
           r=""
