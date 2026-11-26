@@ -84,10 +84,11 @@ fun SubscriptionsScreen(nav: NavHostController, actions: VideoActions) {
     var groupId by rememberSaveable { mutableStateOf<String?>(null) }
     // Signed in + no group: YouTube's own subscriptions feed (FEsubscriptions), like the official app.
     val useAccountFeed = signedIn && groupId == null
-    val paged = remember(useAccountFeed, if (useAccountFeed) emptyList() else subs.map { it.url }) {
-        Paged(scope) { if (useAccountFeed) Graph.accountApi.feed(AccountFeed.SUBSCRIPTIONS) else loadFeed() }
+    val subsKey = if (useAccountFeed) "account" else subs.joinToString(",") { it.url }.hashCode().toString()
+    val paged = remember(subsKey) {
+        com.vidora.app.ui.UiCache.paged("subs:$subsKey") { if (useAccountFeed) Graph.accountApi.feed(AccountFeed.SUBSCRIPTIONS) else loadFeed() }
     }
-    LaunchedEffect(paged) { if (useAccountFeed || subs.isNotEmpty()) paged.load() }
+    LaunchedEffect(paged) { if (useAccountFeed || subs.isNotEmpty()) paged.ensureLoaded() }
     // Keep the channel row in sync with the account's subscriptions.
     LaunchedEffect(signedIn) { if (signedIn) AccountSync.importSubscriptionsIfStale() }
     var editing by remember { mutableStateOf<SubscriptionGroup?>(null) }

@@ -151,7 +151,16 @@ fun VideoCard(original: VideoItem, actions: VideoActions, modifier: Modifier = M
     val history by Graph.library.data.collectAsStateCompat()
     val progress = remember(history, item.url) {
         val h = history.history.firstOrNull { it.video.url == item.url }
-        if (h != null && item.duration > 0) h.positionMs / 1000f / item.duration else 0f
+        if (h != null && item.duration > 0) h.positionMs / 1000f / item.duration
+        else if (original.watchedPercent > 0) original.watchedPercent / 100f else 0f
+    }
+    // Dismissed through one of YouTube's menu actions ("Not interested"…): collapse like the app does.
+    com.vidora.app.account.AccountSync.dismissed[original.url]?.let { msg ->
+        Text(
+            msg, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp)
+        )
+        return
     }
     val clickModifier = modifier.dpadFocusRing().combinedClickable(onClick = { actions.open(original) }, onLongClick = { menu = true })
 
@@ -241,6 +250,13 @@ private fun MoreButton(item: VideoItem, actions: VideoActions, expanded: Boolean
         DropdownMenuItem(text = { Text(stringResource(R.string.ui_save_to_playlist)) }, onClick = { playlistSheet = true; onExpanded(false) })
         DropdownMenuItem(text = { Text(stringResource(R.string.ui_download)) }, leadingIcon = { Icon(Icons.Rounded.Download, null) },
             onClick = { actions.download(item); onExpanded(false) })
+        // YouTube's own actions for this item (shown with YouTube's wording, sent to the account).
+        item.feedback.forEach { f ->
+            DropdownMenuItem(text = { Text(f.label) }, onClick = {
+                onExpanded(false)
+                com.vidora.app.account.AccountSync.feedback(item, f)
+            })
+        }
         item.uploaderUrl?.let { url ->
             DropdownMenuItem(text = { Text(stringResource(R.string.ui_go_to_channel)) }, onClick = { actions.openChannel(url); onExpanded(false) })
             DropdownMenuItem(text = { Text(stringResource(R.string.ui_don_t_recommend_channel)) }, onClick = {

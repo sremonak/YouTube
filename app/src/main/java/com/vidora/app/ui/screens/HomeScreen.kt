@@ -54,6 +54,7 @@ import com.vidora.app.data.HomeSection
 import com.vidora.app.account.FeedChip
 import com.vidora.app.data.PageResult
 import com.vidora.app.ui.Paged
+import com.vidora.app.ui.UiCache
 import com.vidora.app.ui.Routes
 import com.vidora.app.ui.components.EntryGrid
 import com.vidora.app.ui.components.VideoActions
@@ -66,13 +67,13 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
     val session by Graph.account.session.collectAsState()
     val signedIn = session != null
     // Signed in: YouTube's own personalised chips (All, Music, Mixes, Gaming, Recently uploaded…) come first.
-    var accountChips by remember(signedIn) { mutableStateOf<List<FeedChip>>(emptyList()) }
+    var accountChips by remember(signedIn) { mutableStateOf(UiCache.get<List<FeedChip>>("home:chips") ?: emptyList()) }
     val tabs = remember(signedIn, accountChips) {
         buildList {
             if (signedIn) {
                 add(HomeTab("acc", "All") {
                     val first = Graph.accountApi.feedWithChips(AccountFeed.RECOMMENDED)
-                    if (first.chips.isNotEmpty()) accountChips = first.chips
+                    if (first.chips.isNotEmpty()) { accountChips = first.chips; UiCache.put("home:chips", first.chips) }
                     first.page
                 })
                 accountChips.filter { it.token != null && !it.label.equals("All", true) }.forEach { chip ->
@@ -89,13 +90,15 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
     }
     var tabKey by rememberSaveable(signedIn) { mutableStateOf(if (signedIn) "acc" else HomeSection.FOR_YOU.name) }
     val tab = tabs.firstOrNull { it.key == tabKey } ?: tabs.first()
-    val pages = remember(signedIn) { HashMap<String, Paged>() }
-    val paged = pages.getOrPut(tab.key) { Paged(scope) { tab.load() } }
+    // Cached across navigation: coming back from Settings / the player shows the same feed instantly.
+    val paged = remember(tab.key, signedIn) { UiCache.paged("home:$signedIn:${tab.key}") { tab.load() } }
     val gridState = rememberLazyGridState()
 
+    var shownTab by rememberSaveable { mutableStateOf(tab.key) }
     LaunchedEffect(tab.key, signedIn) {
-        if (paged.items.isEmpty() && !paged.loading) paged.load()
-        gridState.scrollToItem(0)
+        paged.ensureLoaded()
+        // Only jump to the top when the user switched chips — not when returning to Home.
+        if (shownTab != tab.key) { shownTab = tab.key; gridState.scrollToItem(0) }
     }
 
     Column(Modifier.fillMaxSize()) {

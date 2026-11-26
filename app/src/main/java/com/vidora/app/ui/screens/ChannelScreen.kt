@@ -60,14 +60,14 @@ import com.vidora.app.util.Format
 @Composable
 fun ChannelScreen(nav: NavHostController, actions: VideoActions, url: String) {
     val scope = rememberCoroutineScope()
-    var details by remember { mutableStateOf<ChannelDetails?>(null) }
+    var details by remember(url) { mutableStateOf(com.vidora.app.ui.UiCache.get<ChannelDetails>("channel-d:$url")) }
     var error by remember { mutableStateOf<String?>(null) }
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var reload by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(url, reload) {
         error = null
-        runCatching { Graph.repository.channel(url) }
+        runCatching { if (reload == 0 && details != null) details!! else Graph.repository.channel(url).also { com.vidora.app.ui.UiCache.put("channel-d:$url", it) } }
             .onSuccess { details = it }
             .onFailure { error = it.message ?: "Failed to load channel" }
     }
@@ -86,9 +86,9 @@ fun ChannelScreen(nav: NavHostController, actions: VideoActions, url: String) {
                 val tabs = d.tabs
                 val selected = tab.coerceIn(0, (tabs.size - 1).coerceAtLeast(0))
                 val paged = remember(d, selected) {
-                    tabs.getOrNull(selected)?.let { t -> Paged(scope) { t.load() } }
+                    tabs.getOrNull(selected)?.let { t -> com.vidora.app.ui.UiCache.paged("channel:$url:$selected") { t.load() } }
                 }
-                LaunchedEffect(paged) { paged?.load() }
+                LaunchedEffect(paged) { paged?.ensureLoaded() }
                 if (paged != null) {
                     EntryGrid(
                         paged = paged,

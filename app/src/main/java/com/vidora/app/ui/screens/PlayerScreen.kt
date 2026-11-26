@@ -182,7 +182,7 @@ fun PlayerScreen(
 
     var sheet by remember { mutableStateOf(Sheet.NONE) }
     val commentsScope = rememberCoroutineScope()
-    val comments = remember(state.current?.url) { state.current?.url?.let { CommentsState(it, commentsScope) } }
+    val comments = remember(state.current?.url) { state.current?.url?.let { com.vidora.app.ui.UiCache.comments(it) } }
     val wide = config.screenWidthDp >= 840
     val onFullscreen = {
         fullscreenRequested = true
@@ -465,10 +465,13 @@ private fun LazyListScope.detailsSection(
             }
             item {
                 val settings by Graph.settingsState.collectAsState()
-                var votes by remember(item.url) { mutableStateOf<com.vidora.app.data.Votes?>(null) }
+                var votes by remember(item.url) { mutableStateOf(com.vidora.app.ui.UiCache.get<com.vidora.app.data.Votes>("votes:${item.url}")) }
                 var disliked by remember(item.url) { mutableStateOf(false) }
                 LaunchedEffect(item.url, settings.returnDislike) {
-                    if (settings.returnDislike) votes = Graph.repository.videoId(item.url)?.let { com.vidora.app.data.Community.votes(it) }
+                    if (settings.returnDislike && votes == null) {
+                        votes = Graph.repository.videoId(item.url)?.let { com.vidora.app.data.Community.votes(it) }
+                        votes?.let { com.vidora.app.ui.UiCache.put("votes:${item.url}", it) }
+                    }
                 }
                 val count = votes?.dislikes?.let { it + if (disliked) 1 else 0 }
                 ActionChip(count?.let { Format.count(it) } ?: stringResource(R.string.chip_dislike), Icons.Rounded.ThumbDown, selected = disliked) {

@@ -24,6 +24,13 @@ class Paged(private val scope: CoroutineScope, private val first: suspend () -> 
 
     private var next: (suspend () -> PageResult)? = null
     private var job: Job? = null
+    private var loadedOnce = false
+
+    /** Loads the first page unless it is already loaded or loading (cached lists stay as they are). */
+    fun ensureLoaded() {
+        if (loadedOnce || job?.isActive == true) return
+        load()
+    }
 
     fun load(refresh: Boolean = false) {
         job?.cancel()
@@ -33,6 +40,7 @@ class Paged(private val scope: CoroutineScope, private val first: suspend () -> 
             try {
                 val result = first()
                 items = result.items.distinctBy { it.key }
+                loadedOnce = true
                 next = result.next
                 endReached = result.next == null
             } catch (t: Throwable) {

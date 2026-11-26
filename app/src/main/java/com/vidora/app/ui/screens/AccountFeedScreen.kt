@@ -46,16 +46,18 @@ fun AccountFeedScreen(nav: NavHostController, actions: VideoActions, feedName: S
     val feed = AccountFeed.entries.firstOrNull { it.name == feedName } ?: AccountFeed.RECOMMENDED
     val scope = rememberCoroutineScope()
     // YouTube's own filter chips for this feed (e.g. History: All / Videos / Shorts / Music).
-    var chips by remember(feed) { mutableStateOf<List<FeedChip>>(emptyList()) }
-    var chipLabel by remember(feed) { mutableStateOf<String?>(null) }
+    var chips by remember(feed) { mutableStateOf(com.vidora.app.ui.UiCache.get<List<FeedChip>>("acc:${feed.name}:chips") ?: emptyList()) }
+    var chipLabel by androidx.compose.runtime.saveable.rememberSaveable(feed) { mutableStateOf<String?>(null) }
     val chip = chips.firstOrNull { it.label == chipLabel && it.token != null }
     val paged = remember(feed, chip?.label) {
-        Paged(scope) {
+        com.vidora.app.ui.UiCache.paged("acc:${feed.name}:${chip?.label}") {
             if (chip != null) Graph.accountApi.chip(chip.token!!)
-            else Graph.accountApi.feedWithChips(feed).also { if (it.chips.isNotEmpty()) chips = it.chips }.page
+            else Graph.accountApi.feedWithChips(feed).also {
+                if (it.chips.isNotEmpty()) { chips = it.chips; com.vidora.app.ui.UiCache.put("acc:${feed.name}:chips", it.chips) }
+            }.page
         }
     }
-    LaunchedEffect(paged) { paged.load() }
+    LaunchedEffect(paged) { paged.ensureLoaded() }
 
     Column(Modifier.fillMaxSize()) {
         TopAppBar(

@@ -17,7 +17,14 @@ data class VideoItem(
     val isLive: Boolean = false,
     val isShort: Boolean = false,
     val verified: Boolean = false,
+    /** How much of it the signed-in account already watched (0–100, from YouTube); -1 = unknown. */
+    @kotlinx.serialization.Transient val watchedPercent: Int = -1,
+    /** YouTube's own menu actions for this item ("Not interested", "Remove from watch history"…). */
+    @kotlinx.serialization.Transient val feedback: List<FeedbackAction> = emptyList(),
 )
+
+/** One of YouTube's feedback menu actions: [label] is YouTube's localized text. */
+data class FeedbackAction(val label: String, val token: String, val icon: String?)
 
 @Serializable
 data class ChannelItem(

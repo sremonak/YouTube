@@ -49,13 +49,13 @@ import com.vidora.app.ui.components.VideoActions
 @Composable
 fun PlaylistScreen(nav: NavHostController, actions: VideoActions, url: String) {
     val scope = rememberCoroutineScope()
-    var details by remember { mutableStateOf<PlaylistDetails?>(null) }
+    var details by remember(url) { mutableStateOf(com.vidora.app.ui.UiCache.get<PlaylistDetails>("playlist-d:$url")) }
     var error by remember { mutableStateOf<String?>(null) }
     var reload by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(url, reload) {
         error = null
-        runCatching { Graph.repository.playlist(url) }
+        runCatching { if (reload == 0 && details != null) details!! else Graph.repository.playlist(url).also { com.vidora.app.ui.UiCache.put("playlist-d:$url", it) } }
             .onSuccess { details = it }
             .onFailure { error = it.message ?: "Failed to load playlist" }
     }
@@ -68,8 +68,8 @@ fun PlaylistScreen(nav: NavHostController, actions: VideoActions, url: String) {
         }
         d == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         else -> {
-            val paged = remember(d) { Paged(scope) { d.first } }
-            LaunchedEffect(paged) { paged.load() }
+            val paged = remember(d) { com.vidora.app.ui.UiCache.paged("playlist:$url") { d.first } }
+            LaunchedEffect(paged) { paged.ensureLoaded() }
             EntryGrid(paged = paged, actions = actions, header = {
                 Column(Modifier.statusBarsPadding().padding(bottom = 8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {

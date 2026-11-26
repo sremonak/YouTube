@@ -72,4 +72,18 @@ object AccountSync {
                 .onFailure { subsImportedAt = 0L }
         }
     }
+
+    /** Items hidden after a YouTube feedback action (url → message shown in their place). */
+    val dismissed = androidx.compose.runtime.mutableStateMapOf<String, String>()
+
+    fun feedback(video: com.vidora.app.data.VideoItem, action: com.vidora.app.data.FeedbackAction) {
+        dismissed[video.url] = "${action.label} ✓"
+        Graph.appScope.launch(Dispatchers.IO) {
+            runCatching { Graph.accountApi.sendFeedback(action.token) }
+                .onFailure {
+                    launch(Dispatchers.Main) { dismissed.remove(video.url) }
+                    Graph.player.toast("YouTube: ${it.message}")
+                }
+        }
+    }
 }

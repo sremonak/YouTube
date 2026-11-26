@@ -79,9 +79,9 @@ fun SearchScreen(nav: NavHostController, actions: VideoActions, initialQuery: St
     val settings by Graph.settings.flow.collectAsState(initial = null)
 
     val paged = remember(submitted, filter) {
-        Paged(scope) { Graph.repository.search(submitted, filter) }
+        com.vidora.app.ui.UiCache.paged("search:${filter.name}:$submitted", ttlMs = 10 * 60_000L) { Graph.repository.search(submitted, filter) }
     }
-    LaunchedEffect(paged) { if (submitted.isNotBlank()) paged.load() }
+    LaunchedEffect(paged) { if (submitted.isNotBlank()) paged.ensureLoaded() }
     LaunchedEffect(Unit) { if (editing) focusRequester.requestFocus() }
     LaunchedEffect(text, editing) {
         if (!editing) return@LaunchedEffect

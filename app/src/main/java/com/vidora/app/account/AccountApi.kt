@@ -3,6 +3,7 @@ package com.vidora.app.account
 import com.vidora.app.Graph
 import com.vidora.app.data.ChannelItem
 import com.vidora.app.data.Entry
+import com.vidora.app.data.FeedbackAction
 import com.vidora.app.data.NetworkDownloader
 import com.vidora.app.data.PageResult
 import com.vidora.app.data.PlaylistItem
@@ -45,6 +46,7 @@ enum class AccountFeed(val label: String, val browseId: String) {
     LIKED("Liked videos", "VLLL"),
     WATCH_LATER("Watch later", "VLWL"),
     HISTORY("Watch history", "FEhistory"),
+    PLAYLISTS("Your playlists", "FEplaylist_aggregation"),
 }
 
 /**
@@ -259,6 +261,38 @@ class AccountApi {
         // Only the feed's own chip bar (header), not chips embedded in shelves.
         rec(findFirst(res, "feedFilterChipBarRenderer") ?: findFirst(res, "chipBarViewModel"))
         return out.distinctBy { it.label }
+    }
+
+    /** Sends one of YouTube's feedback tokens (Not interested, Remove from watch history…). */
+    suspend fun sendFeedback(token: String) {
+        val res = post("feedback", buildJsonObject {
+            put("context", context())
+            put("feedbackTokens", JsonArray(listOf(JsonPrimitive(token))))
+            put("isFeedbackTokenUnencrypted", false)
+            put("shouldMerge", false)
+        })
+        val ok = findString(res, "isProcessed")
+        if (ok == "false") throw IOException("YouTube didn't accept the feedback")
+    }
+
+    /** A playlist through the account (works for private playlists, Liked videos and Watch later). */
+    suspend fun playlistDetails(playlistId: String): com.vidora.app.data.PlaylistDetails {
+        val res = post("browse", buildJsonObject { put("context", context()); put("browseId", "VL$playlistId") })
+        val title = findFirst(res, "playlistMetadataRenderer")?.let { str(it["title"]) }
+            ?: findFirst(res, "microformatDataRenderer")?.let { str(it["title"]) }
+            ?: findFirst(res, "pageHeaderViewModel")?.let { h -> findFirst(h["title"], "text")?.let { str(it["content"]) } }
+            ?: playlistId
+        val description = findFirst(res, "playlistMetadataRenderer")?.let { str(it["description"]) }.orEmpty()
+        val page = toPage(res)
+        val firstVideo = page.items.firstNotNullOfOrNull { (it as? Entry.Video)?.video }
+        return com.vidora.app.data.PlaylistDetails(
+            playlist = PlaylistItem(
+                url = "https://www.youtube.com/playlist?list=$playlistId", name = title,
+                thumbnail = firstVideo?.thumbnail, uploader = Graph.account.session.value?.name,
+            ),
+            description = description,
+            first = page,
+        )
     }
 
     // ------------------------------------------------------------------ YouTube Music
@@ -624,6 +658,8 @@ class AccountApi {
             views = parseCount(text(v["viewCountText"]) ?: text(v["shortViewCountText"])),
             uploadedText = text(v["publishedTimeText"]) ?: text(v["videoInfo"]),
             isLive = live,
+            watchedPercent = watchedPercent(v),
+            feedback = feedbackActions(v["menu"]),
         )
     }
 
@@ -689,7 +725,46 @@ class AccountApi {
             duration = parseDuration(findBadgeText(v["contentImage"])) ?: 0,
             views = parseCount(stats.firstOrNull { it.contains("view", true) }),
             uploadedText = stats.firstOrNull { !it.contains("view", true) },
+            watchedPercent = watchedPercent(v),
+            feedback = feedbackActions(meta["menuButton"] ?: v),
         )
+    }
+
+    /** Red "already watched" bar: classic overlay or the newer progress-bar view model. */
+    private fun watchedPercent(v: JsonObject): Int {
+        findFirst(v, "thumbnailOverlayResumePlaybackRenderer")?.let { o -> str(o["percentDurationWatched"])?.toIntOrNull()?.let { return it } }
+        findFirst(v, "thumbnailOverlayProgressBarViewModel")?.let { o -> str(o["startPercent"])?.toIntOrNull()?.let { return it } }
+        return -1
+    }
+
+    /** YouTube's feedback menu entries (Not interested, Don't recommend channel, Remove from history…). */
+    private fun feedbackActions(menu: JsonElement?): List<FeedbackAction> {
+        if (menu == null) return emptyList()
+        val out = mutableListOf<FeedbackAction>()
+        fun rec(e: JsonElement?) {
+            when (e) {
+                is JsonObject -> for ((k, v) in e) {
+                    if (v !is JsonObject) { rec(v); continue }
+                    when (k) {
+                        "menuServiceItemRenderer" -> {
+                            val token = findFirst(v["serviceEndpoint"], "feedbackEndpoint")?.let { str(it["feedbackToken"]) }
+                            val label = text(v["text"])
+                            if (token != null && label != null) out += FeedbackAction(label, token, findString(v["icon"], "iconType"))
+                        }
+                        "listItemViewModel" -> {
+                            val token = findFirst(v["rendererContext"], "feedbackEndpoint")?.let { str(it["feedbackToken"]) }
+                            val label = text(v["title"])
+                            if (token != null && label != null) out += FeedbackAction(label, token, findString(v["leadingImage"], "imageName"))
+                        }
+                        else -> rec(v)
+                    }
+                }
+                is JsonArray -> e.forEach(::rec)
+                else -> Unit
+            }
+        }
+        rec(menu)
+        return out.distinctBy { it.token }
     }
 
     private fun channelUrl(run: JsonObject): String? {

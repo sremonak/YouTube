@@ -514,7 +514,7 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
             onDismissRequest = { dialog = null },
             title = { Text(stringResource(R.string.ui_sign_out_2)) },
             text = { Text(stringResource(R.string.ui_your_youtube_session_will_be_removed_fro)) },
-            confirmButton = { TextButton(onClick = { Graph.account.signOut(); dialog = null }) { Text(stringResource(R.string.ui_sign_out)) } },
+            confirmButton = { TextButton(onClick = { Graph.account.signOut(); com.vidora.app.ui.UiCache.clearAll(); dialog = null }) { Text(stringResource(R.string.ui_sign_out)) } },
             dismissButton = { TextButton(onClick = { dialog = null }) { Text(stringResource(R.string.ui_cancel)) } },
         )
         "name" -> TextDialog("App display name", s.displayName, onDismiss = { dialog = null }) { v -> update { it.copy(displayName = v.take(24)) } }

@@ -468,7 +468,20 @@ class ContentRepository {
 
     // ---------------------------------------------------------------- playlist
 
-    suspend fun playlist(url: String): PlaylistDetails = io {
+    suspend fun playlist(url: String): PlaylistDetails {
+        val listId = Regex("[?&]list=([\\w-]+)").find(url)?.groupValues?.get(1)
+        // Private playlists, Liked videos (LL) and Watch later (WL) only exist for the account.
+        val personal = listId != null && (listId == "LL" || listId == "WL" || listId.startsWith("LM"))
+        if (personal && Graph.account.isSignedIn) return Graph.accountApi.playlistDetails(listId!!)
+        return try {
+            publicPlaylist(url)
+        } catch (t: Throwable) {
+            if (t is kotlinx.coroutines.CancellationException || listId == null || !Graph.account.isSignedIn) throw t
+            runCatching { Graph.accountApi.playlistDetails(listId) }.getOrElse { throw t }
+        }
+    }
+
+    private suspend fun publicPlaylist(url: String): PlaylistDetails = io {
         val info = authFallback { PlaylistInfo.getInfo(service, url) }
         PlaylistDetails(
             playlist = PlaylistItem(info.url, info.name, info.thumbnails.best(), info.uploaderName, info.streamCount),

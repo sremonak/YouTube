@@ -144,12 +144,15 @@ fun LibraryScreen(nav: NavHostController, actions: VideoActions) {
             }
             item {
                 // Signed in: the account's real YouTube watch history (falls back to this device's history).
-                var accountHistory by remember(session != null) { mutableStateOf<List<VideoItem>?>(null) }
+                var accountHistory by remember(session != null) { mutableStateOf(com.vidora.app.ui.UiCache.get<List<VideoItem>>("you:history", 5 * 60_000L)) }
                 var historyError by remember(session != null) { mutableStateOf<String?>(null) }
                 LaunchedEffect(session != null) {
-                    if (session != null) {
+                    if (session != null && accountHistory == null) {
                         runCatching { Graph.accountApi.feed(AccountFeed.HISTORY) }
-                            .onSuccess { p -> accountHistory = p.items.filterIsInstance<com.vidora.app.data.Entry.Video>().map { it.video }.take(20) }
+                            .onSuccess { p ->
+                                accountHistory = p.items.filterIsInstance<com.vidora.app.data.Entry.Video>().map { it.video }.take(20)
+                                    .also { com.vidora.app.ui.UiCache.put("you:history", it) }
+                            }
                             .onFailure { historyError = it.message }
                     }
                 }
@@ -186,6 +189,7 @@ fun LibraryScreen(nav: NavHostController, actions: VideoActions) {
                 item { LibraryRow(Icons.Rounded.History, "History", "Your YouTube watch history") { nav.navigate(Routes.accountFeed(AccountFeed.HISTORY.name)) } }
                 item { LibraryRow(Icons.Rounded.ThumbUp, "Liked videos", "From your YouTube account") { nav.navigate(Routes.accountFeed(AccountFeed.LIKED.name)) } }
                 item { LibraryRow(Icons.Rounded.WatchLater, "Watch later", "From your YouTube account") { nav.navigate(Routes.accountFeed(AccountFeed.WATCH_LATER.name)) } }
+                item { LibraryRow(Icons.AutoMirrored.Rounded.PlaylistPlay, "Your playlists", "Playlists on your YouTube account") { nav.navigate(Routes.accountFeed(AccountFeed.PLAYLISTS.name)) } }
                 item { SectionHeader("On this device") }
             }
             item { LibraryRow(Icons.Rounded.History, if (session != null) "Vidora history" else "History", "${library.history.size} videos") { nav.navigate(Routes.list("history")) } }
@@ -239,6 +243,7 @@ private fun AccountFeed.icon(): ImageVector = when (this) {
     AccountFeed.LIKED -> Icons.Rounded.ThumbUp
     AccountFeed.WATCH_LATER -> Icons.Rounded.WatchLater
     AccountFeed.HISTORY -> Icons.Rounded.History
+    AccountFeed.PLAYLISTS -> Icons.AutoMirrored.Rounded.PlaylistPlay
 }
 
 @Composable

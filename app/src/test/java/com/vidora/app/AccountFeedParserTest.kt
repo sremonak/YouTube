@@ -90,4 +90,21 @@ class AccountFeedParserTest {
             page.items.filterIsInstance<Entry.Playlist>().single().playlist.url)
         assertNotNull(page.next)
     }
+
+    @Test fun historyItemHasProgressAndYouTubeMenuActions() {
+        val res = obj("""{"contents":{"sectionListRenderer":{"contents":[{"itemSectionRenderer":{"contents":[
+          {"videoRenderer":{"videoId":"dQw4w9WgXcQ","title":{"runs":[{"text":"Never Gonna Give You Up"}]},
+            "lengthText":{"simpleText":"3:33"},
+            "thumbnailOverlays":[{"thumbnailOverlayResumePlaybackRenderer":{"percentDurationWatched":42}}],
+            "menu":{"menuRenderer":{"items":[
+              {"menuServiceItemRenderer":{"text":{"runs":[{"text":"Remove from watch history"}]},"icon":{"iconType":"DELETE"},
+                "serviceEndpoint":{"feedbackEndpoint":{"feedbackToken":"TOKEN_REMOVE"}}}},
+              {"menuServiceItemRenderer":{"text":{"runs":[{"text":"Share"}]},"serviceEndpoint":{"shareEntityServiceEndpoint":{}}}}
+            ]}}}}]}}]}}}""")
+        val v = api.toPage(res).items.filterIsInstance<Entry.Video>().single().video
+        assertEquals(42, v.watchedPercent)
+        assertEquals(listOf("Remove from watch history"), v.feedback.map { it.label })
+        assertEquals("TOKEN_REMOVE", v.feedback[0].token)
+        assertEquals("DELETE", v.feedback[0].icon)
+    }
 }

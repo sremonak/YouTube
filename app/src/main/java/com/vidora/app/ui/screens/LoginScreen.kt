@@ -161,6 +161,7 @@ private fun CookieDialog(onDismiss: () -> Unit, onSave: (String) -> Unit) {
 }
 
 private fun finishWithCookies(cookies: String, nav: NavHostController, context: android.content.Context, scope: kotlinx.coroutines.CoroutineScope) {
+    com.vidora.app.ui.UiCache.clearAll()
     Graph.account.save(AccountSession(cookies = cookies))
     scope.launch {
         val info = runCatching { Graph.accountApi.accountInfo() }

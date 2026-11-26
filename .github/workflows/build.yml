@@ -88,6 +88,23 @@ jobs:
           path: dist/*.apk
           if-no-files-found: error
 
+      # Every successful push publishes a GitHub release, so the app's built-in updater
+      # (Settings → Check for updates) and https://github.com/<repo>/releases/latest get the APK
+      # directly — no zip artifacts or GitHub login needed on the phone.
+      - name: Publish update release
+        if: github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v${VIDORA_VERSION_NAME}"
+          git log -1 --pretty=%B > notes.txt
+          gh release create "$tag" dist/*.apk --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "Vidora ${VIDORA_VERSION_NAME}" --notes-file notes.txt --latest
+          # keep the 5 newest releases
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName,createdAt \
+            --jq 'sort_by(.createdAt) | reverse | .[5:] | .[].tagName' |
+            xargs -r -n1 gh release delete --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
+
       - name: Publish GitHub release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
