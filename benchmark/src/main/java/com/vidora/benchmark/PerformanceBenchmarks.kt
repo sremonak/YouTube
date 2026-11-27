@@ -43,7 +43,9 @@ class PerformanceBenchmarks {
         },
     ) {
         startActivityAndWait()
-        check(device.wait(Until.hasObject(By.desc("Search")), 10_000))
+        check(device.wait(Until.hasObject(By.desc("More")), 30_000)) { "No content for startup fully-drawn measurement" }
+        // Keep tracing until the content/reportFullyDrawn frame has reached RenderThread.
+        device.waitForIdle(2_000)
     }
     @Test fun homeScroll() = rule.measureRepeated(
         packageName = "com.vidora.app", metrics = listOf(FrameTimingMetric()),
