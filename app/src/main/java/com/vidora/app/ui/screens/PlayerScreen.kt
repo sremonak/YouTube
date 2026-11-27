@@ -95,7 +95,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -150,7 +150,7 @@ fun PlayerScreen(
     pipMode: Boolean,
     onDownload: (VideoItem) -> Unit = {},
 ) {
-    val state by Graph.player.state.collectAsState()
+    val state by Graph.player.state.collectAsStateWithLifecycle()
     val config = LocalConfiguration.current
     var fullscreenRequested by rememberSaveable { mutableStateOf(false) }
     val landscapePhone = config.orientation == Configuration.ORIENTATION_LANDSCAPE && config.screenHeightDp < 500
@@ -217,7 +217,7 @@ fun PlayerScreen(
             }
         }
     } else {
-        val settings by Graph.settingsState.collectAsState()
+        val settings by Graph.settingsState.collectAsStateWithLifecycle()
         Box(Modifier.fillMaxSize()) {
             // Ambient mode: the video's colours glow behind the player and the title area
             if (settings.ambientMode) {
@@ -298,7 +298,7 @@ private fun VideoSurface(
     modifier: Modifier, state: PlayerUiState, showControls: Boolean, onFullscreen: () -> Unit, fullscreen: Boolean = false,
     onPublicSearch: (() -> Unit)? = null, onSignIn: (() -> Unit)? = null, openSheet: (Sheet) -> Unit = {}, onMinimize: (() -> Unit)? = null,
 ) {
-    val settings by Graph.settingsState.collectAsState()
+    val settings by Graph.settingsState.collectAsStateWithLifecycle()
     var controlsVisible by remember { mutableStateOf(true) }
     var locked by remember { mutableStateOf(false) }
     if (!fullscreen && locked) locked = false
@@ -365,7 +365,7 @@ private fun VideoSurface(
             )
         }
         if (state.loading) {
-            val status by Graph.repository.loadStatus.collectAsState()
+            val status by Graph.repository.loadStatus.collectAsStateWithLifecycle()
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 CircularProgressIndicator(color = Color.White)
                 status?.let {
@@ -415,7 +415,7 @@ private fun LazyListScope.detailsSection(
     val details = state.details
     item(key = "title") {
         var titleExpanded by rememberSaveable(item.url) { mutableStateOf(false) }
-        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp).animateContentSize()) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp).then(if (com.vidora.app.ui.theme.LocalReducedMotion.current) Modifier else Modifier.animateContentSize())) {
             if (item.title.isBlank() && details == null) {
                 // Still loading — skeleton instead of an empty, blurred band.
                 SkeletonLine(0.92f, 18.dp); Spacer(Modifier.height(6.dp)); SkeletonLine(0.6f, 18.dp)
@@ -448,7 +448,7 @@ private fun LazyListScope.detailsSection(
             }
         }
     } else item(key = "channel") {
-        val library by Graph.library.data.collectAsState()
+        val library by Graph.library.data.collectAsStateWithLifecycle()
         val subscribed = library.subscriptions.any { it.url == item.uploaderUrl }
         Row(
             Modifier.fillMaxWidth().clickable { item.uploaderUrl?.let { actions.openChannel(it) } }.padding(horizontal = 16.dp, vertical = 6.dp),
@@ -497,7 +497,7 @@ private fun LazyListScope.detailsSection(
         }
     }
     item(key = "actions") {
-        val library by Graph.library.data.collectAsState()
+        val library by Graph.library.data.collectAsStateWithLifecycle()
         val context = LocalContext.current
         val liked = library.favorites.any { it.url == item.url }
         val later = library.watchLater.any { it.url == item.url }
@@ -512,7 +512,7 @@ private fun LazyListScope.detailsSection(
                 ) { Graph.library.toggleFavorite(item) }
             }
             item {
-                val settings by Graph.settingsState.collectAsState()
+                val settings by Graph.settingsState.collectAsStateWithLifecycle()
                 var votes by remember(item.url) { mutableStateOf(com.vidora.app.ui.UiCache.get<com.vidora.app.data.Votes>("votes:${item.url}")) }
                 var disliked by remember(item.url) { mutableStateOf(false) }
                 LaunchedEffect(item.url, settings.returnDislike) {
@@ -629,7 +629,7 @@ private fun QualitySheet(state: PlayerUiState, onDismiss: () -> Unit) {
         .map { (_, list) -> list.firstOrNull { it.codec?.startsWith("avc") == true } ?: list.first() }
         .sortedByDescending { it.height * 1000 + it.fps }
     GlassBottomSheet(onDismissRequest = onDismiss) {
-        Text(stringResource(R.string.ui_video_quality), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
+        com.vidora.app.ui.theme.SheetHeading(stringResource(R.string.ui_video_quality))
         LazyColumn(Modifier.navigationBarsPadding(), contentPadding = PaddingValues(bottom = 24.dp)) {
             item {
                 val net = if (state.bandwidthKbps > 0) {
@@ -667,7 +667,7 @@ private fun QualitySheet(state: PlayerUiState, onDismiss: () -> Unit) {
 private fun SpeedSheet(current: Float, onDismiss: () -> Unit) {
     val speeds = listOf(0.25f, 0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f, 2.5f, 3f)
     GlassBottomSheet(onDismissRequest = onDismiss) {
-        Text(stringResource(R.string.ui_playback_speed), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
+        com.vidora.app.ui.theme.SheetHeading(stringResource(R.string.ui_playback_speed))
         LazyColumn(Modifier.navigationBarsPadding(), contentPadding = PaddingValues(bottom = 24.dp)) {
             items(speeds) { s ->
                 ListItem(
@@ -686,7 +686,7 @@ private fun SleepSheet(state: PlayerUiState, onDismiss: () -> Unit) {
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) { while (true) { delay(1000); now = System.currentTimeMillis() } }
     GlassBottomSheet(onDismissRequest = onDismiss) {
-        Text(stringResource(R.string.ui_sleep_timer), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
+        com.vidora.app.ui.theme.SheetHeading(stringResource(R.string.ui_sleep_timer))
         if (state.sleepTimerEndsAt > 0) {
             val left = ((state.sleepTimerEndsAt - now) / 1000).coerceAtLeast(0)
             Text("Pausing in ${Format.duration(left)}", color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 24.dp))
@@ -715,7 +715,7 @@ private fun SleepSheet(state: PlayerUiState, onDismiss: () -> Unit) {
 @Composable
 private fun QueueSheet(state: PlayerUiState, actions: VideoActions, onDismiss: () -> Unit) {
     GlassBottomSheet(onDismissRequest = onDismiss) {
-        Text(stringResource(R.string.ui_queue), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
+        com.vidora.app.ui.theme.SheetHeading(stringResource(R.string.ui_queue))
         LazyColumn(Modifier.navigationBarsPadding(), contentPadding = PaddingValues(bottom = 24.dp)) {
             itemsIndexed(state.queue, key = { _, v -> v.url }) { index, v ->
                 val isCurrent = index == state.queueIndex
@@ -742,9 +742,18 @@ private fun QueueSheet(state: PlayerUiState, actions: VideoActions, onDismiss: (
 /** Mini player shown above the navigation bar while browsing (glass card; swipe sideways to close). */
 @Composable
 fun MiniPlayer(onOpen: () -> Unit, floating: Boolean = false) {
-    val state by Graph.player.state.collectAsState()
+    val state by Graph.player.state.collectAsStateWithLifecycle()
     val item = state.current ?: return
     val glassOn = com.vidora.app.ui.theme.LocalGlass.current.enabled
+    val config = androidx.compose.ui.platform.LocalConfiguration.current
+    val narrow = config.screenWidthDp < 400 || config.fontScale > 1.3f
+    var confirmStop by remember { mutableStateOf(false) }
+    if (confirmStop) com.vidora.app.ui.theme.GlassAlertDialog(
+        onDismissRequest = { confirmStop = false }, title = { Text("Stop playback?") },
+        text = { Text("Stops this video. Saved videos and downloads are kept.") },
+        confirmButton = { TextButton(onClick = { confirmStop = false; Graph.player.stop() }) { Text("Stop") } },
+        dismissButton = { TextButton(onClick = { confirmStop = false }) { Text("Keep playing") } },
+    )
     var progress by remember { mutableStateOf(0f) }
     LaunchedEffect(item.url) {
         while (true) {
@@ -762,7 +771,7 @@ fun MiniPlayer(onOpen: () -> Unit, floating: Boolean = false) {
             .graphicsLayer { translationX = animX; alpha = 1f - (kotlin.math.abs(animX) / 900f).coerceIn(0f, 0.8f) }
             .pointerInput(item.url) {
                 detectHorizontalDragGestures(
-                    onDragEnd = { if (kotlin.math.abs(dragX) > size.width * 0.35f) Graph.player.stop(); dragX = 0f },
+                    onDragEnd = { if (kotlin.math.abs(dragX) > size.width * 0.60f) confirmStop = true; dragX = 0f },
                     onDragCancel = { dragX = 0f },
                 ) { change, d -> change.consume(); dragX += d }
             }
@@ -776,7 +785,7 @@ fun MiniPlayer(onOpen: () -> Unit, floating: Boolean = false) {
                 Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(Modifier.width(100.dp).aspectRatio(16f / 9f).clip(RoundedCornerShape(10.dp)).background(Color.Black)) {
+                Box(Modifier.width(if (narrow) 64.dp else 100.dp).aspectRatio(16f / 9f).clip(RoundedCornerShape(10.dp)).background(Color.Black)) {
                     com.vidora.app.ui.components.Thumbnail(item.copy(duration = 0, isLive = false), Modifier.fillMaxSize(), cornerOverride = 10)
                 }
                 Spacer(Modifier.width(12.dp))
@@ -792,8 +801,8 @@ fun MiniPlayer(onOpen: () -> Unit, floating: Boolean = false) {
                         Icon(if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, "Play/Pause", Modifier.size(28.dp))
                     }
                 }
-                IconButton(onClick = { Graph.player.playNext() }) { Icon(Icons.Rounded.SkipNext, "Next") }
-                IconButton(onClick = { Graph.player.stop() }) { Icon(Icons.Rounded.Close, "Close") }
+                if (!narrow) IconButton(onClick = { Graph.player.playNext() }) { Icon(Icons.Rounded.SkipNext, "Next") }
+                IconButton(onClick = { confirmStop = true }) { Icon(Icons.Rounded.Close, "Close mini-player") }
             }
             // Thin accent progress line
             Box(Modifier.fillMaxWidth().padding(horizontal = if (floating) 14.dp else 0.dp).height(2.dp).clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))) {
@@ -828,7 +837,7 @@ private fun DescriptionCard(item: VideoItem, details: StreamDetails?) {
     val linked = remember(text, primary) { linkify(text, primary) }
     com.vidora.app.ui.theme.GlassCard(
         Modifier.padding(horizontal = 12.dp, vertical = 6.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp))
-            .clickable { DescriptionUi.toggle(item.url) }.animateContentSize(),
+            .clickable { DescriptionUi.toggle(item.url) }.then(if (com.vidora.app.ui.theme.LocalReducedMotion.current) Modifier else Modifier.animateContentSize()),
         shape = RoundedCornerShape(16.dp),
         tint = MaterialTheme.colorScheme.surfaceContainerHigh,
     ) {

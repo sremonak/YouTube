@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import com.vidora.app.ui.icons.Download
@@ -40,7 +42,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -57,6 +59,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
 import com.vidora.app.Graph
 import com.vidora.app.MainActivity
 import com.vidora.app.data.AppSettings
@@ -124,13 +128,15 @@ fun AppRoot(activity: MainActivity, settings: AppSettings) {
     val nav = rememberNavController()
     val backStack by nav.currentBackStackEntryAsState()
     val route = backStack?.destination?.route
-    val playerState by Graph.player.state.collectAsState()
-    val downloads by Graph.downloads.items.collectAsState()
+    val hasCurrent by remember { Graph.player.state.map { it.current != null }.distinctUntilChanged() }.collectAsStateWithLifecycle(initialValue = false)
+    val activeDownloads by remember { Graph.downloads.items.map { rows -> rows.count {
+        it.status == DownloadStatus.RUNNING || it.status == DownloadStatus.MUXING || it.status == DownloadStatus.QUEUED
+    } }.distinctUntilChanged() }.collectAsStateWithLifecycle(initialValue = 0)
     val snackbar = remember { SnackbarHostState() }
     var downloadTarget by remember { mutableStateOf<VideoItem?>(null) }
 
-    val wide = LocalConfiguration.current.screenWidthDp >= 600
-    val activeDownloads = downloads.count { it.status == DownloadStatus.RUNNING || it.status == DownloadStatus.MUXING || it.status == DownloadStatus.QUEUED }
+    val window = LocalConfiguration.current
+    val wide = window.screenWidthDp >= 840 && window.fontScale < 1.5f
 
     val actions = remember(nav) {
         VideoActions(
@@ -178,14 +184,15 @@ fun AppRoot(activity: MainActivity, settings: AppSettings) {
     }
 
     val isTop = topDestinations.any { it.route == route }
-    val showMini = playerState.current != null && route != Routes.PLAYER && route != Routes.LOGIN && route != Routes.SHORTS
-    val showNav = route != Routes.PLAYER && route != Routes.LOGIN
+    val keyboardOpen = WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current) > 0
+    val showMini = !keyboardOpen && hasCurrent && route != Routes.PLAYER && route != Routes.LOGIN && route != Routes.SHORTS
+    val showNav = !keyboardOpen && route != Routes.PLAYER && route != Routes.LOGIN
 
     val glassState = com.vidora.app.ui.theme.rememberGlassState()
     val lowRam = androidx.compose.runtime.remember {
         (activity.getSystemService(android.content.Context.ACTIVITY_SERVICE) as android.app.ActivityManager).isLowRamDevice
     }
-    val glassOn = settings.glassUi && !lowRam
+    val glassOn = settings.glassUi && !lowRam && !com.vidora.app.ui.theme.LocalReducedMotion.current
     androidx.compose.runtime.SideEffect { com.vidora.app.ui.icons.IconStyle.ios = settings.iosIcons }
     val density = androidx.compose.ui.platform.LocalDensity.current
     var chromePx by remember { mutableStateOf(0) }
@@ -201,7 +208,7 @@ fun AppRoot(activity: MainActivity, settings: AppSettings) {
         com.vidora.app.ui.theme.LocalGlass provides com.vidora.app.ui.theme.GlassPrefs(glassOn, glassState),
         com.vidora.app.ui.theme.LocalBottomChrome provides if (padContent) 0.dp else bottomChrome,
     ) {
-    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).imePadding()) {
         Row(Modifier.fillMaxSize()) {
             if (wide && showNav) {
                 NavigationRail(Modifier.statusBarsPadding()) {
@@ -218,7 +225,7 @@ fun AppRoot(activity: MainActivity, settings: AppSettings) {
             Box(
                 Modifier.weight(1f).fillMaxSize()
                     .padding(bottom = if (padContent && !wide) bottomChrome else 0.dp)
-                    .glassSource(glassState, glassOn && !padContent)
+                    .glassSource(glassState, glassOn && !padContent && (showNav || showMini))
                     .background(MaterialTheme.colorScheme.background)
             ) {
                 // Inside the captured content glass can't sample itself → frosted tint only.

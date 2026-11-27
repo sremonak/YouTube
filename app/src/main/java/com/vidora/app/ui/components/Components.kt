@@ -7,6 +7,8 @@ import androidx.compose.ui.res.stringResource
 import com.vidora.app.R
 import com.vidora.app.data.Community
 import com.vidora.app.data.ContentFilter
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
@@ -154,12 +156,11 @@ fun Avatar(url: String?, size: Int, modifier: Modifier = Modifier) {
 fun VideoCard(original: VideoItem, actions: VideoActions, modifier: Modifier = Modifier, compact: Boolean = LocalDesign.current.compact, explainHome: Boolean = false) {
     val item = rememberDeArrow(original)
     var menu by remember { mutableStateOf(false) }
-    val history by Graph.library.data.collectAsStateCompat()
-    val progress = remember(history, item.url) {
-        val h = history.history.firstOrNull { it.video.url == item.url }
-        if (h != null && item.duration > 0) h.positionMs / 1000f / item.duration
+    val position by remember(item.url) { Graph.library.data.map { d ->
+        d.history.firstOrNull { it.video.url == item.url }?.positionMs ?: 0L
+    }.distinctUntilChanged() }.collectAsState(initial = 0L)
+    val progress = if (position > 0 && item.duration > 0) position / 1000f / item.duration
         else if (original.watchedPercent > 0) original.watchedPercent / 100f else 0f
-    }
     // Dismissed through one of YouTube's menu actions ("Not interested"…): collapse like the app does.
     com.vidora.app.account.AccountSync.dismissed[original.url]?.let { msg ->
         Text(
@@ -169,11 +170,13 @@ fun VideoCard(original: VideoItem, actions: VideoActions, modifier: Modifier = M
         return
     }
     val clickModifier = modifier.dpadFocusRing().then(if (original.isShort) Modifier else Modifier.touchPrefetch(original))
-        .combinedClickable(onClick = { actions.open(original) }, onLongClick = { menu = true })
+        .combinedClickable(onClickLabel = "Play ${item.title}", onLongClickLabel = "Video actions", onClick = { actions.open(original) }, onLongClick = { menu = true })
 
+    val config = androidx.compose.ui.platform.LocalConfiguration.current
+    val compactThumbnail = if (config.screenWidthDp < 360 || config.fontScale > 1.3f) 112.dp else 152.dp
     if (compact) {
         Row(clickModifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
-            Thumbnail(item, Modifier.width(168.dp), progress)
+            Thumbnail(item, Modifier.width(compactThumbnail), progress)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(item.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -250,7 +253,7 @@ private fun MoreButton(item: VideoItem, actions: VideoActions, expanded: Boolean
     )
     val scope = rememberCoroutineScope()
     if (playlistSheet) AddToPlaylistSheet(item) { playlistSheet = false }
-    IconButton(onClick = { onExpanded(true) }, modifier = Modifier.size(32.dp)) {
+    IconButton(onClick = { onExpanded(true) }, modifier = Modifier.size(com.vidora.app.ui.theme.VidoraSpace.touch)) {
         Icon(Icons.Rounded.MoreVert, contentDescription = "More", modifier = Modifier.size(18.dp))
     }
     DropdownMenu(expanded = expanded, onDismissRequest = { onExpanded(false) }) {
@@ -409,6 +412,7 @@ fun EntryGrid(
 
 @Composable
 fun shimmerBrush(): Brush {
+    if (com.vidora.app.ui.theme.LocalReducedMotion.current) return Brush.linearGradient(listOf(MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.colorScheme.surfaceContainerHigh))
     val transition = rememberInfiniteTransition(label = "shimmer")
     val x by transition.animateFloat(
         initialValue = -600f, targetValue = 1400f,

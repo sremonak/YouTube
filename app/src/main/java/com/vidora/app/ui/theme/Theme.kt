@@ -41,7 +41,7 @@ private fun schemeFromSeed(seed: Color, dark: Boolean, amoled: Boolean): ColorSc
         val bg = if (amoled) Color.Black else Color(0xFF0F0F0F)
         darkColorScheme(
             primary = seed,
-            onPrimary = Color.White,
+            onPrimary = accentForeground(seed),
             primaryContainer = lerp(seed, Color.Black, 0.55f),
             onPrimaryContainer = lerp(seed, Color.White, 0.8f),
             secondary = lerp(secondary, Color.White, 0.25f),
@@ -67,7 +67,7 @@ private fun schemeFromSeed(seed: Color, dark: Boolean, amoled: Boolean): ColorSc
     } else {
         lightColorScheme(
             primary = seed,
-            onPrimary = Color.White,
+            onPrimary = accentForeground(seed),
             primaryContainer = lerp(seed, Color.White, 0.82f),
             onPrimaryContainer = lerp(seed, Color.Black, 0.6f),
             secondary = lerp(secondary, Color.Black, 0.15f),
@@ -140,10 +140,12 @@ fun VidoraTheme(settings: AppSettings, content: @Composable () -> Unit) {
     CompositionLocalProvider(
         LocalDesign provides DesignPrefs(r, settings.showChannelAvatars, settings.feedLayout.name == "LIST")
     ) {
+        CompositionLocalProvider(LocalReducedMotion provides !android.animation.ValueAnimator.areAnimatorsEnabled()) {
         MaterialTheme(colorScheme = scheme, typography = AppTypography, shapes = shapes) {
             // Text outside a Surface/Scaffold falls back to LocalContentColor (black by default),
             // which made the title/description under the video invisible in dark mode.
             CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides scheme.onBackground, content = content)
+        }
         }
     }
 }

@@ -166,15 +166,15 @@ fun WelcomeCard(onSignIn: () -> Unit, onDone: () -> Unit) {
             Spacer(Modifier.height(14.dp))
             Text("Welcome to Vidora", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
             Text(
-                "YouTube the way it should be — no ads, plays in the background, downloads anything.",
+                "Public videos, background playback and offline saves where the source allows them.",
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center,
                 modifier = Modifier.padding(top = 6.dp),
             )
             Spacer(Modifier.height(16.dp))
-            WelcomePoint(IosGlyphs.shieldFill, Color(0xFF34C759), "No ads, ever", "Plus SponsorBlock skips sponsor segments")
+            WelcomePoint(IosGlyphs.shieldFill, Color(0xFF34C759), "Less interruption", "Optional SponsorBlock for supported YouTube videos")
             WelcomePoint(IosGlyphs.playCircleFill, Color(0xFFFF2D55), "Background & PiP", "Keep listening with the screen off")
             WelcomePoint(IosGlyphs.arrowDownCircleFill, Color(0xFF30B0C7), "Downloads", "Video or audio in the quality you pick")
-            WelcomePoint(IosGlyphs.personCropCircleFill, Color(0xFF007AFF), "Your YouTube", "Subscriptions, likes, history & recommendations")
+            WelcomePoint(IosGlyphs.personCropCircleFill, Color(0xFF007AFF), "Guest first", "Save locally without an account; sign in optionally for YouTube features")
             Spacer(Modifier.height(18.dp))
             Button(
                 onClick = chooseAccount,

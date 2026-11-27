@@ -205,7 +205,7 @@ fun GlassBottomSheet(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val glass = LocalGlass.current.enabled
-    val shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+    val shape = RoundedCornerShape(topStart = VidoraSpace.sheetCorner, topEnd = VidoraSpace.sheetCorner)
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
         modifier = if (glass) modifier.border(0.7.dp, glassEdge(), shape) else modifier,

@@ -13,6 +13,7 @@ class DiscoveryRepository(
     private val commonsSearch: suspend (String) -> PageResult = { q -> Graph.openVideos.commonsSearch(q) },
     private val peerHome: suspend () -> PageResult = { Graph.openVideos.peerSearch(null, count = 4) },
     private val health: ProviderHealth = ProviderHealth(),
+    private val freshness: FeedFreshness = FeedFreshness(),
 ) {
     private data class Feed(val name: String, val load: suspend () -> PageResult)
     private data class Result(val feed: Feed, val page: PageResult?)
@@ -31,13 +32,21 @@ class DiscoveryRepository(
     suspend fun search(query: String, source: VideoSource = VideoSource.ALL, filter: SearchFilter = SearchFilter.ALL) = searchUpdates(query, source, filter).last()
 
     fun homeUpdates(country: String, settings: AppSettings = AppSettings(), watched: Set<String> = emptySet()): Flow<PageResult> {
-        val topic = settings.homeInterests.sorted().firstOrNull().orEmpty()
+        val plan = freshness.next(country, settings)
         val language = HomeRanking.languageTerm(settings.homeLanguage)
-        val regional = listOf(GuestSources.countryName(country), language, topic).filter { it.isNotBlank() }.joinToString(" ")
         return updates(listOf(
-            Feed("Regional YouTube") { youtubeSearch(regional, SearchFilter.VIDEOS) },
-            Feed("Regional Commons") { commonsSearch(GuestSources.countryName(country)) },
-            Feed("PeerTube") { if (topic.isBlank()) peerHome() else peerSearch(listOf(language, topic).filter { it.isNotBlank() }.joinToString(" ")) },
+            Feed("Regional YouTube") {
+                val first = youtubeSearch(plan.query, SearchFilter.VIDEOS)
+                // Broaden candidates on explicit refresh; don't reshuffle only the same first page.
+                if (plan.round > 0 && first.next != null) {
+                    val more = try { first.next.invoke() } catch (e: CancellationException) { throw e }
+                        catch (_: Exception) { null }
+                    if (more != null) PageResult((first.items + more.items).distinctBy { it.key }, more.next,
+                        notices = first.notices + more.notices, retries = first.retries + more.retries) else first
+                } else first
+            },
+            Feed("Regional Commons") { commonsSearch(listOf(GuestSources.countryName(country), plan.topic).filter { it.isNotBlank() }.joinToString(" ")) },
+            Feed("PeerTube") { if (plan.topic.isBlank()) peerHome() else peerSearch(listOf(language, plan.topic).filter { it.isNotBlank() }.joinToString(" ")) },
         ), rank = { HomeRanking.rank(it, settings, watched) })
     }
     suspend fun home(country: String) = homeUpdates(country).last()

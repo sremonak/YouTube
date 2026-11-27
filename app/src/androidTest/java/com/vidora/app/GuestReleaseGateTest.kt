@@ -71,6 +71,34 @@ class GuestReleaseGateTest {
         compose.waitUntil(10_000) { Graph.player.state.value.current?.url == commons.url }
         assertTrue(Graph.library.data.value.watchLater.any { it.url == peer.url })
     }
+    @Test fun explicitRefreshActuallyRequestsNewFeedAndReportsSameResultsHonestly() {
+        val calls = java.util.concurrent.atomic.AtomicInteger()
+        val fresh = peer.copy(url = peer.url + "?fresh", title = "Fresh fixture result")
+        Graph.discoveryOverride = DiscoveryRepository(youtubeSearch = { _, _ ->
+            PageResult(listOf(Entry.Video(if (calls.incrementAndGet() == 1) peer else fresh)))
+        }, peerSearch = { PageResult(emptyList()) }, commonsSearch = { PageResult(emptyList()) }, peerHome = { PageResult(emptyList()) })
+        scenario = ActivityScenario.launch(MainActivity::class.java)
+        compose.waitUntil(20_000) { calls.get() > 0 && compose.onAllNodesWithText(peer.title).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() }
+        compose.onNodeWithText("Refresh feed").performClick()
+        compose.waitUntil(20_000) { compose.onAllNodesWithText(fresh.title).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() }
+        assertTrue(calls.get() >= 2)
+        compose.onNodeWithText("Feed updated · fresh results loaded").assertIsDisplayed()
+        compose.onNodeWithText("Refresh feed").performClick()
+        compose.waitUntil(20_000) { compose.onAllNodesWithText("Checked just now · providers returned the same videos").fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() }
+    }
+    @Test fun searchFiltersAreReversibleAndKeyboardDoesNotCoverResults() {
+        scenario = ActivityScenario.launch(MainActivity::class.java)
+        compose.waitUntil(20_000) { compose.onAllNodesWithContentDescription("Search").fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() }
+        compose.onNodeWithContentDescription("Search").performClick()
+        compose.onAllNodes(hasSetTextAction()).onFirst().performTextReplacement("fixture")
+        compose.onAllNodes(hasSetTextAction()).onFirst().performImeAction()
+        compose.waitUntil(15_000) { compose.onAllNodesWithText("Filters").fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() }
+        compose.onNodeWithText("Filters").performClick()
+        compose.onNodeWithText("Hide live").performScrollTo().performClick()
+        compose.onNodeWithText("Clear all filters").performScrollTo().performClick()
+        compose.onNodeWithText("Show results").performScrollTo().performClick()
+        compose.onNodeWithText("Filters").assertIsDisplayed()
+    }
     @Test fun publicSnapshotsSurviveDatabaseReopenAndClear() = runBlocking {
         val name = "release-gate-${System.nanoTime()}.db"
         var store = FeedStore(context, name)

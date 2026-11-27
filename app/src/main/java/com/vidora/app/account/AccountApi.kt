@@ -8,6 +8,7 @@ import com.vidora.app.data.NetworkDownloader
 import com.vidora.app.data.PageResult
 import com.vidora.app.data.PlaylistItem
 import com.vidora.app.data.VideoItem
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -455,9 +456,11 @@ class AccountApi {
      * recommendations — the same playback/watchtime stats pings the official player sends
      * (algorithm from yt-dlp's `--mark-watched`).
      */
-    suspend fun markWatched(videoId: String): Boolean = withContext(Dispatchers.IO) {
+    suspend fun markWatched(videoId: String, watchedSeconds: Double = 0.0): Boolean = withContext(Dispatchers.IO) {
         val account = Graph.account
-        if (!account.isSignedIn) return@withContext false
+        val seconds = WatchHistoryPolicy.seconds(watchedSeconds)
+        val privacy = Graph.settings.flow.first()
+        if (!WatchHistoryPolicy.eligible(account.isSignedIn, privacy.syncWatchHistory, privacy.incognito, true) || seconds <= 0) return@withContext false
         val tracking = playbackTracking(videoId) ?: return@withContext false
         val alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_"
         val rnd = java.security.SecureRandom()
@@ -466,7 +469,11 @@ class AccountApi {
         for ((i, key) in listOf("videostatsPlaybackUrl", "videostatsWatchtimeUrl").withIndex()) {
             val base = str((tracking[key] as? JsonObject)?.get("baseUrl")) ?: return@withContext false
             val url = base.toHttpUrlOrNull() ?: return@withContext false
-            val len = ((url.queryParameter("len")?.toDoubleOrNull() ?: 1.5) - 1).toString()
+            if (!WatchHistoryPolicy.allowedTrackingUrl(url.scheme, url.host, url.encodedPath)) return@withContext false
+            val currentSettings = Graph.settings.flow.first()
+            if (!account.isSignedIn || currentSettings.incognito || !currentSettings.syncWatchHistory) return@withContext false
+            val duration = url.queryParameter("len")?.toDoubleOrNull()?.takeIf { it.isFinite() && it > 0 } ?: seconds
+            val len = minOf(seconds, duration).toString()
             val b = url.newBuilder()
                 .setQueryParameter("ver", "2").setQueryParameter("cpn", cpn)
                 .setQueryParameter("cmt", len).setQueryParameter("el", "detailpage")

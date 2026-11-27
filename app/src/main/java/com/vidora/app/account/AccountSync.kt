@@ -49,11 +49,17 @@ object AccountSync {
         private set
 
     /** Adds the video to the YouTube account's watch history (fire and forget). */
-    fun markWatched(video: com.vidora.app.data.VideoItem) {
-        if (!Graph.account.isSignedIn) return
+    fun markWatched(video: com.vidora.app.data.VideoItem, watchedSeconds: Double) {
+        val settings = Graph.settingsState.value
+        if (!WatchHistoryPolicy.eligible(Graph.account.isSignedIn, settings.syncWatchHistory, settings.incognito,
+                Graph.repository.videoId(video.url) != null)) return
         val id = Graph.repository.videoId(video.url) ?: return
         Graph.appScope.launch(Dispatchers.IO) {
-            val ok = runCatching { Graph.accountApi.markWatched(id) }
+            val ok = runCatching { Graph.accountApi.markWatched(id, watchedSeconds) }
+            if (ok.getOrDefault(false)) kotlinx.coroutines.withContext(Dispatchers.Main) {
+                com.vidora.app.ui.UiCache.invalidate("home:true:")
+                com.vidora.app.ui.UiCache.invalidate("acc:HISTORY:")
+            }
             lastWatchSync = ok.fold({ if (it) "✓ \"${video.title.take(40)}\" added to YouTube history" else "✗ YouTube gave no history URL for \"${video.title.take(40)}\"" },
                 { "✗ ${it.message}" })
         }

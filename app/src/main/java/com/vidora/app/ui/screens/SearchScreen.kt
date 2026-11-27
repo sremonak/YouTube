@@ -3,6 +3,7 @@ package com.vidora.app.ui.screens
 import androidx.compose.ui.res.stringResource
 import com.vidora.app.R
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -63,6 +64,7 @@ import com.vidora.app.ui.components.VideoActions
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun SearchScreen(nav: NavHostController, actions: VideoActions, initialQuery: String, initialSource: VideoSource = VideoSource.ALL) {
     val scope = rememberCoroutineScope()
@@ -76,6 +78,7 @@ fun SearchScreen(nav: NavHostController, actions: VideoActions, initialQuery: St
     var dateF by rememberSaveable { mutableStateOf(com.vidora.app.data.DateFilter.ANY) }
     var hideLive by rememberSaveable { mutableStateOf(false) }
     var editing by remember { mutableStateOf(initialQuery.isBlank()) }
+    var showFilters by rememberSaveable { mutableStateOf(false) }
     var suggestions by remember { mutableStateOf<List<String>>(emptyList()) }
     val library by Graph.library.data.collectAsState()
     val settings by Graph.settings.flow.collectAsState(initial = null)
@@ -90,7 +93,8 @@ fun SearchScreen(nav: NavHostController, actions: VideoActions, initialQuery: St
     androidx.compose.runtime.DisposableEffect(paged) { onDispose { paged.cancelPending() } }
     LaunchedEffect(paged) { if (submitted.isNotBlank()) paged.ensureLoaded() }
     LaunchedEffect(Unit) { if (editing) focusRequester.requestFocus() }
-    LaunchedEffect(text, editing) {
+    LaunchedEffect(text, editing, privateMode) {
+        if (privateMode) { suggestions = emptyList(); return@LaunchedEffect }
         if (!editing) return@LaunchedEffect
         delay(220)
         suggestions = Graph.repository.suggestions(text)
@@ -153,29 +157,20 @@ fun SearchScreen(nav: NavHostController, actions: VideoActions, initialQuery: St
             )
         }
         if (!editing) {
-            LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(VideoSource.entries) { provider ->
-                    FilterChip(selected = provider == source, onClick = { source = provider }, label = { Text(provider.label) })
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                LazyRow(Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(VideoSource.entries) { provider ->
+                        FilterChip(selected = provider == source, onClick = { source = provider }, label = { Text(provider.label) })
+                    }
                 }
-            }
-            LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(SearchFilter.entries) { f ->
-                    FilterChip(selected = f == filter, onClick = { filter = f }, label = { Text(f.label) })
-                }
-            }
-            if (filter == SearchFilter.ALL || filter == SearchFilter.VIDEOS) {
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    item { RefineChip(durationF.label, durationF != com.vidora.app.data.DurationFilter.ANY, com.vidora.app.data.DurationFilter.entries.map { it.label }) { durationF = com.vidora.app.data.DurationFilter.entries[it] } }
-                    item { RefineChip(dateF.label, dateF != com.vidora.app.data.DateFilter.ANY, com.vidora.app.data.DateFilter.entries.map { it.label }) { dateF = com.vidora.app.data.DateFilter.entries[it] } }
-                    item { FilterChip(selected = hideLive, onClick = { hideLive = !hideLive }, label = { Text("Hide live") }) }
-                }
+                val count = (if (filter != SearchFilter.ALL) 1 else 0) + (if (durationF != com.vidora.app.data.DurationFilter.ANY) 1 else 0) +
+                    (if (dateF != com.vidora.app.data.DateFilter.ANY) 1 else 0) + (if (hideLive) 1 else 0)
+                androidx.compose.material3.TextButton(onClick = { showFilters = true }) { Text(if (count > 0) "Filters ($count)" else "Filters") }
             }
         }
     }) {
         if (editing) {
-            val history = if (text.isBlank()) library.searchHistory else library.searchHistory.filter { it.contains(text, true) }.take(4)
+            val history = if (privateMode || !keepSearch) emptyList() else (if (text.isBlank()) library.searchHistory else library.searchHistory.filter { it.contains(text, true) }).take(6)
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = com.vidora.app.ui.theme.topChromePadding(), bottom = com.vidora.app.ui.theme.bottomChromePadding())) {
                 items(history.distinct(), key = { "h$it" }) { q ->
                     SuggestionRow(q, isHistory = true, onClick = { submit(q) }, onFill = { text = q }, onRemove = { Graph.library.removeSearch(q) })
@@ -201,6 +196,23 @@ fun SearchScreen(nav: NavHostController, actions: VideoActions, initialQuery: St
             )
         }
     }
+    if (showFilters) com.vidora.app.ui.theme.GlassBottomSheet(onDismissRequest = { showFilters = false }) {
+        com.vidora.app.ui.theme.SheetHeading("Search filters", "Only affects these search results")
+        Column(Modifier.fillMaxWidth().verticalScroll(androidx.compose.foundation.rememberScrollState()).padding(horizontal = 24.dp)) {
+            SearchFilter.entries.forEach { f -> FilterChip(selected = f == filter, onClick = { filter = f }, label = { Text(f.label) }) }
+            if (filter == SearchFilter.ALL || filter == SearchFilter.VIDEOS) {
+                RefineChip(durationF.label, durationF != com.vidora.app.data.DurationFilter.ANY, com.vidora.app.data.DurationFilter.entries.map { it.label }) { durationF = com.vidora.app.data.DurationFilter.entries[it] }
+                RefineChip(dateF.label, dateF != com.vidora.app.data.DateFilter.ANY, com.vidora.app.data.DateFilter.entries.map { it.label }) { dateF = com.vidora.app.data.DateFilter.entries[it] }
+                FilterChip(selected = hideLive, onClick = { hideLive = !hideLive }, label = { Text("Hide live") })
+            }
+            androidx.compose.material3.TextButton(onClick = {
+                filter = SearchFilter.ALL; durationF = com.vidora.app.data.DurationFilter.ANY
+                dateF = com.vidora.app.data.DateFilter.ANY; hideLive = false; source = VideoSource.ALL
+            }) { Text("Clear all filters") }
+            androidx.compose.material3.Button(onClick = { showFilters = false }, modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)) { Text("Show results") }
+        }
+    }
+
 }
 
 @Composable

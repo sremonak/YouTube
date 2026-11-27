@@ -114,34 +114,48 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
     var dialog by remember { mutableStateOf<String?>(null) }
     val account by Graph.account.session.collectAsState()
     var importing by remember { mutableStateOf(false) }
+    var fileBusy by remember { mutableStateOf(false) }
+    var fileJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    var restoreTarget by remember { mutableStateOf<android.net.Uri?>(null) }
+    fun fileTask(success: String, work: () -> Unit) {
+        if (fileBusy) return
+        fileBusy = true
+        fileJob = scope.launch {
+            try {
+                kotlinx.coroutines.runInterruptible(kotlinx.coroutines.Dispatchers.IO) { work() }
+                Toast.makeText(context, success, Toast.LENGTH_SHORT).show()
+            } catch (cancel: kotlinx.coroutines.CancellationException) { throw cancel }
+            catch (failure: Exception) { Toast.makeText(context, "File operation failed: ${failure.message ?: "Choose a readable JSON file"}", Toast.LENGTH_LONG).show() }
+            finally { fileBusy = false }
+        }
+    }
+    fun readBackup(uri: android.net.Uri): String = context.contentResolver.openInputStream(uri)?.use {
+        com.vidora.app.data.BackupFiles.readText(it)
+    } ?: error("Could not open this file")
+    fun writeBackup(uri: android.net.Uri, text: String) {
+        val output = context.contentResolver.openOutputStream(uri, "wt") ?: error("Could not write to this location")
+        output.use { it.write(text.toByteArray()) }
+    }
 
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         uri ?: return@rememberLauncherForActivityResult
-        runCatching { context.contentResolver.openOutputStream(uri)?.use { it.write(Graph.library.exportJson().toByteArray()) } }
-            .onSuccess { Toast.makeText(context, "Library exported", Toast.LENGTH_SHORT).show() }
+        fileTask("Library exported") { writeBackup(uri, Graph.library.exportJson()) }
     }
     val checkingUpdate by com.vidora.app.util.Updater.checking.collectAsState()
     var showEq by remember { mutableStateOf(false) }
     val subsImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri ?: return@rememberLauncherForActivityResult
-        val result = runCatching {
-            val text = context.contentResolver.openInputStream(uri)?.use { it.readBytes().decodeToString() }.orEmpty()
-            val channels = com.vidora.app.data.SubscriptionImport.parse(text)
-            if (channels.isEmpty()) error("No channels found in this file")
-            Graph.library.importSubscriptions(channels) to channels.size
+        fileTask("Subscriptions imported") {
+            val channels = com.vidora.app.data.SubscriptionImport.parse(readBackup(uri))
+            require(channels.isNotEmpty()) { "No channels found in this file" }
+            Graph.library.importSubscriptions(channels)
         }
-        Toast.makeText(
-            context,
-            result.fold({ (added, total) -> "Imported $added new of $total channels" }, { "Import failed: ${it.message}" }),
-            Toast.LENGTH_LONG
-        ).show()
     }
     val subsExportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         uri ?: return@rememberLauncherForActivityResult
-        runCatching {
-            val text = com.vidora.app.data.SubscriptionImport.exportNewPipe(Graph.library.data.value.subscriptions)
-            context.contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray()) }
-        }.onSuccess { Toast.makeText(context, "Subscriptions exported", Toast.LENGTH_SHORT).show() }
+        fileTask("Subscriptions exported") {
+            writeBackup(uri, com.vidora.app.data.SubscriptionImport.exportNewPipe(Graph.library.data.value.subscriptions))
+        }
     }
     val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
     val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
@@ -155,11 +169,18 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
     }
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri ?: return@rememberLauncherForActivityResult
-        val ok = runCatching {
-            context.contentResolver.openInputStream(uri)?.use { Graph.library.importJson(it.readBytes().decodeToString()) } ?: false
-        }.getOrDefault(false)
-        Toast.makeText(context, if (ok) "Library restored" else "Invalid backup file", Toast.LENGTH_SHORT).show()
+        restoreTarget = uri
     }
+
+    if (restoreTarget != null) GlassAlertDialog(
+        onDismissRequest = { restoreTarget = null }, title = { Text("Replace local library?") },
+        text = { Text("Restore replaces this device's saved library. Export a backup first. Downloads are not deleted. Maximum file size: 8 MiB.") },
+        dismissButton = { TextButton(onClick = { restoreTarget = null }) { Text("Cancel") } },
+        confirmButton = { TextButton(onClick = {
+            val uri = restoreTarget!!; restoreTarget = null
+            fileTask("Library restored") { require(Graph.library.importJson(readBackup(uri))) { "Invalid backup file; library was not changed" } }
+        }) { Text("Restore") } },
+    )
 
     // Settings are grouped into categories (iOS-style) with a search box on top.
     var openName by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
@@ -181,6 +202,13 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
             },
             colors = com.vidora.app.ui.theme.glassBarColors()
         )
+        if (fileBusy) {
+            androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth())
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Working on your file…", modifier = Modifier.weight(1f))
+                TextButton(onClick = { fileJob?.cancel() }) { Text("Cancel") }
+            }
+        }
         if (open == null) SettingsSearchField(query) { query = it }
     }) {
         LazyColumn(state = listState, contentPadding = PaddingValues(top = com.vidora.app.ui.theme.topChromePadding(), bottom = com.vidora.app.ui.theme.bottomChromePadding()), modifier = Modifier.fillMaxWidth()) {
@@ -200,7 +228,7 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
                     ListItem(
                         leadingContent = { Icon(Icons.Rounded.AccountCircle, null, Modifier.size(40.dp), tint = MaterialTheme.colorScheme.primary) },
                         headlineContent = { Text(stringResource(R.string.ui_sign_in_with_youtube)) },
-                        supportingContent = { Text("Removes sign-in restrictions (age-restricted, \"not a bot\" checks) and adds your recommendations, subscriptions, likes & history") },
+                        supportingContent = { Text("Optional: connect your YouTube recommendations, subscriptions, likes and watch history. Some videos may still be restricted.") },
                         colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.background),
                         modifier = Modifier.clickable { nav.navigate(Routes.LOGIN) }
                     )
@@ -865,7 +893,7 @@ private fun highlight(text: String, query: String): androidx.compose.ui.text.Ann
 private fun SettingsSearchField(query: String, onChange: (String) -> Unit) {
     val shape = RoundedCornerShape(14.dp)
     Row(
-        Modifier.padding(start = 16.dp, end = 16.dp, bottom = 10.dp).fillMaxWidth().height(44.dp)
+        Modifier.padding(start = 16.dp, end = 16.dp, bottom = 10.dp).fillMaxWidth().heightIn(min = 48.dp)
             .clip(shape).background(MaterialTheme.colorScheme.surfaceContainerHighest).padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

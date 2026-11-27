@@ -34,6 +34,8 @@ import androidx.compose.ui.platform.LocalContext
 import com.vidora.app.util.Updater
 import com.vidora.app.ui.icons.IosGlyphs
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -41,7 +43,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -72,14 +74,14 @@ import com.vidora.app.ui.theme.BrandTitle
 fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSettings) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    val updateAvailable by Updater.available.collectAsState()
-    val checkingUpdate by Updater.checking.collectAsState()
-    val region by Graph.region.state.collectAsState()
+    val updateAvailable by Updater.available.collectAsStateWithLifecycle()
+    val checkingUpdate by Updater.checking.collectAsStateWithLifecycle()
+    val region by Graph.region.state.collectAsStateWithLifecycle()
     LaunchedEffect(settings.contentCountry, settings.autoRegionByIp) {
         Graph.region.resolve(settings)
     }
-    val session by Graph.account.session.collectAsState()
-    val signedIn = session != null
+    val session by Graph.account.session.collectAsStateWithLifecycle()
+    val signedIn = session != null && !settings.incognito
     // Account recommendations remain optional; Explore stays the default for every user.
     var accountChips by remember(signedIn) { mutableStateOf(UiCache.get<List<FeedChip>>("home:chips") ?: emptyList()) }
     val tabs = remember(signedIn, accountChips, region.code) {
@@ -105,7 +107,7 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
             add(HomeTab("commons", "Commons") { Graph.openVideos.commonsSearch(com.vidora.app.data.GuestSources.countryName(region.code)) })
         }
     }
-    var tabKey by rememberSaveable(signedIn) { mutableStateOf(HomeSection.FOR_YOU.name) }
+    var tabKey by rememberSaveable(signedIn) { mutableStateOf(if (signedIn) "acc" else HomeSection.FOR_YOU.name) }
     val tab = tabs.firstOrNull { it.key == tabKey } ?: tabs.first()
     // Cached across navigation: coming back from Settings / the player shows the same feed instantly.
     val rankingKey = "${settings.homeLanguage}:${settings.homeInterests.sorted()}:${settings.lessLikeVideos.hashCode()}:${settings.incognito}"
@@ -117,10 +119,29 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
     androidx.compose.runtime.DisposableEffect(paged) { onDispose { paged.cancelPending() } }
     androidx.activity.compose.ReportDrawnWhen { paged.items.isNotEmpty() || paged.error != null }
     val gridState = rememberLazyGridState()
+    var homeOptions by remember { mutableStateOf(false) }
+    var regionDetails by remember { mutableStateOf(false) }
+    var showContinue by rememberSaveable { mutableStateOf(true) }
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(paged, lifecycle) {
+        lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.RESUMED) {
+            while (true) {
+                // Revalidate old Home on return, but never jump a user who is reading down the feed.
+                if (gridState.firstVisibleItemIndex == 0) paged.ensureLoaded(com.vidora.app.data.FeedFreshness.REVALIDATE_MS)
+                delay(60_000)
+            }
+        }
+    }
+    if (regionDetails) com.vidora.app.ui.theme.GlassAlertDialog(
+        onDismissRequest = { regionDetails = false },
+        title = { Text("Home region") },
+        text = { Text("${com.vidora.app.data.GuestSources.countryName(region.code)} · ${region.method}. Public Explore uses regional topics, not official regional charts. Search is independent. Signed-in YouTube recommendations use your account.") },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = { regionDetails = false }) { Text("Done") } },
+    )
 
     var shownTab by rememberSaveable { mutableStateOf(tab.key) }
     LaunchedEffect(tab.key, signedIn, region.code, paged) {
-        paged.ensureLoaded()
+        paged.ensureLoaded(com.vidora.app.data.FeedFreshness.REVALIDATE_MS)
         // Only jump to the top when the user switched chips — not when returning to Home.
         if (shownTab != tab.key) { shownTab = tab.key; gridState.scrollToItem(0) }
     }
@@ -129,7 +150,6 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
         TopAppBar(
             title = { BrandLogo(settings.displayName.ifBlank { "Vidora" }) },
             actions = {
-                IconButton(onClick = { nav.navigate(Routes.DOWNLOADS) }) { Icon(Icons.Outlined.FileDownload, "Downloads") }
                 IconButton(onClick = { nav.navigate(Routes.search()) }) { Icon(Icons.Rounded.Search, "Search") }
                 IconButton(
                     enabled = !checkingUpdate,
@@ -140,19 +160,27 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
                         Icon(IosGlyphs.arrowDownCircleFill, if (updateAvailable != null) "Update available" else "Check for updates")
                     }
                 }
-                IconButton(onClick = { nav.navigate(Routes.LIBRARY) }) {
-                    val avatar = session?.avatar
-                    if (avatar != null) Avatar(avatar, 28)
-                    else Icon(Icons.Rounded.AccountCircle, if (signedIn) "Account" else "Your library · no login needed")
+                Box {
+                    IconButton(onClick = { homeOptions = true }) { Icon(Icons.Rounded.AccountCircle, "Home options") }
+                    androidx.compose.material3.DropdownMenu(expanded = homeOptions, onDismissRequest = { homeOptions = false }) {
+                        androidx.compose.material3.DropdownMenuItem(text = { Text("Downloads") }, onClick = { homeOptions = false; nav.navigate(Routes.DOWNLOADS) })
+                        androidx.compose.material3.DropdownMenuItem(text = { Text("Your library") }, onClick = { homeOptions = false; nav.navigate(Routes.LIBRARY) })
+                        androidx.compose.material3.DropdownMenuItem(text = { Text("Home preferences") }, onClick = { homeOptions = false; nav.navigate(Routes.SETTINGS) })
+                        androidx.compose.material3.DropdownMenuItem(text = { Text(if (showContinue) "Hide Continue watching" else "Show Continue watching") }, onClick = { showContinue = !showContinue; homeOptions = false })
+                    }
                 }
             },
             colors = com.vidora.app.ui.theme.glassBarColors()
         )
-        Text(
-            "Home: ${com.vidora.app.data.GuestSources.countryName(region.code)} · ${region.method} · Guest-friendly",
-            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp), maxLines = 2,
-        )
+        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            androidx.compose.material3.TextButton(onClick = { regionDetails = true }, modifier = Modifier.weight(1f)) {
+                Text(if (signedIn && tab.key == "acc") "Your YouTube recommendations" else "Explore · ${region.code}", maxLines = 2)
+            }
+            androidx.compose.material3.TextButton(enabled = !paged.loading && !paged.refreshing, onClick = {
+                paged.load(refresh = true)
+                scope.launch { gridState.scrollToItem(0) }
+            }) { Text(if (paged.refreshing) "Refreshing…" else "Refresh feed") }
+        }
         LazyRow(
             contentPadding = PaddingValues(horizontal = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -166,7 +194,7 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
         }
     }) {
         com.vidora.app.ui.theme.GlassRefreshBox(isRefreshing = paged.refreshing, onRefresh = { paged.load(refresh = true) }, modifier = Modifier.fillMaxSize()) {
-            val library by Graph.library.data.collectAsState()
+            val library by Graph.library.data.collectAsStateWithLifecycle()
             val resume = remember(library.history) { com.vidora.app.data.ContinueWatching.pick(library.history) }
             EntryGrid(
                 paged = paged, actions = actions, state = gridState,
@@ -175,7 +203,7 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
                 header = {
                     Column {
                         com.vidora.app.ui.components.ProviderStatus(paged)
-                        if (resume.isNotEmpty() && tab.key == HomeSection.FOR_YOU.name) ContinueWatchingRow(resume, actions)
+                        if (showContinue && resume.isNotEmpty() && tab.key == HomeSection.FOR_YOU.name) ContinueWatchingRow(resume, actions)
                     }
                 }
             )
@@ -203,7 +231,7 @@ private fun ContinueWatchingRow(entries: List<com.vidora.app.data.HistoryEntry>,
         com.vidora.app.ui.components.SectionHeader("Continue watching")
         LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             items(entries, key = { it.video.url }) { h ->
-                Column(Modifier.width(200.dp).clickable { actions.open(h.video) }) {
+                Column(Modifier.width(176.dp).clickable { actions.open(h.video) }) {
                     val progress = h.positionMs / 1000f / h.video.duration
                     com.vidora.app.ui.components.Thumbnail(h.video, Modifier.fillMaxWidth(), progress)
                     Text(
@@ -229,7 +257,7 @@ fun BrandLogo(name: String) {
                 .background(MaterialTheme.colorScheme.primary, androidx.compose.foundation.shape.RoundedCornerShape(6.dp)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Rounded.PlayArrow, null, tint = Color.White, modifier = Modifier.size(18.dp))
+            Icon(Icons.Rounded.PlayArrow, null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(18.dp))
         }
         Spacer(Modifier.width(4.dp))
         Text(name, style = BrandTitle.copy(fontSize = 20.sp, letterSpacing = (-0.8).sp), color = MaterialTheme.colorScheme.onBackground)

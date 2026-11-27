@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 concurrency:
   group: build-${{ github.ref }}
@@ -109,6 +110,24 @@ jobs:
                           msg=msg.replace('%','%25').replace('\n','%0A').replace('\r','')
                           print('::error title='+case.get('name','emulator')+'::'+msg)
           PYASSERT
+
+      - name: Return UI snapshot candidates for review
+        if: always() && github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PYUI'
+          import pathlib,gzip,base64,json
+          for image in pathlib.Path('app/build/reports/ui-snapshots').glob('*.png'):
+              payload=json.dumps({'name':image.name,'png_base64':base64.b64encode(image.read_bytes()).decode()})
+              encoded=base64.b64encode(gzip.compress(payload.encode())).decode()
+              comment=pathlib.Path('/tmp/ui-'+image.stem+'.txt')
+              comment.write_text('VIDORA_UI_CANDIDATE\n'+encoded)
+          PYUI
+          for file in /tmp/ui-*.txt; do
+            [ -f "$file" ] || continue
+            gh pr comment 1 --body-file "$file"
+          done
 
       - name: Dependency inventory
         run: ./gradlew :app:dependencies --configuration releaseRuntimeClasspath > dependency-inventory.txt

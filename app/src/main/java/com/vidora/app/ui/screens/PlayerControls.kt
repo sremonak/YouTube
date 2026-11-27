@@ -1,5 +1,9 @@
 package com.vidora.app.ui.screens
 
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.setProgress
 import com.vidora.app.ui.theme.GlassBottomSheet
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -347,7 +351,7 @@ private fun fmt(ms: Long) = Format.duration(ms / 1000).ifEmpty { "0:00" }
 private fun trimSpeedLabel(s: Float) = if (s % 1f == 0f) s.toInt().toString() else s.toString()
 
 @Composable
-internal fun GlassIconButton(icon: ImageVector, label: String, size: Dp = 42.dp, enabled: Boolean = true, onClick: () -> Unit) {
+internal fun GlassIconButton(icon: ImageVector, label: String, size: Dp = 48.dp, enabled: Boolean = true, onClick: () -> Unit) {
     Box(
         Modifier.size(size).glassOverlay(CircleShape, alpha = 0.32f).clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center
@@ -386,7 +390,7 @@ private fun ProSeekBar(
     val trackH by animateDpAsState(if (active) 6.dp else 3.dp, label = "track")
     val thumbR by animateDpAsState(if (active) 9.dp else 6.dp, label = "thumb")
     val density = LocalDensity.current
-    val frac = dragFrac ?: (position.toFloat() / duration).coerceIn(0f, 1f)
+    val frac = dragFrac ?: (position.toFloat() / duration.coerceAtLeast(1)).coerceIn(0f, 1f)
 
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val maxW = maxWidth
@@ -407,7 +411,12 @@ private fun ProSeekBar(
             }
         }
         Canvas(
-            Modifier.fillMaxWidth().height(30.dp)
+            Modifier.fillMaxWidth().height(48.dp)
+                .semantics {
+                    contentDescription = "Playback position"
+                    progressBarRangeInfo = androidx.compose.ui.semantics.ProgressBarRangeInfo(frac, 0f..1f)
+                    setProgress { value -> onSeek((value.coerceIn(0f, 1f) * duration).toLong()); true }
+                }
                 .pointerInput(duration) {
                     detectTapGestures { o ->
                         val f = (o.x / size.width).coerceIn(0f, 1f)

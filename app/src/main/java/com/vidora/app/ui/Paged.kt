@@ -18,13 +18,19 @@ class Paged(private val scope: CoroutineScope, private val first: suspend () -> 
     var fromDisk by mutableStateOf(false); private set
     private var next: (suspend () -> PageResult)? = null
     private var job: Job? = null
+    var lastUpdatedAt by mutableStateOf(0L); private set
+    var refreshMessage by mutableStateOf<String?>(null); private set
+    private var lastSuccess = 0L
     private var loadedOnce = false
     private var generation = 0
     private var updates: (() -> Flow<PageResult>)? = null
     private var diskKey: String? = null
 
     fun progressive(key: String?, stream: () -> Flow<PageResult>): Paged = apply { diskKey = key; updates = stream }
-    fun ensureLoaded() { if (!loadedOnce && job?.isActive != true) load() }
+    fun ensureLoaded(maxAgeMs: Long = Long.MAX_VALUE) {
+        if (job?.isActive == true) return
+        if (!loadedOnce || (maxAgeMs != Long.MAX_VALUE && FeedFreshness.stale(lastSuccess, System.currentTimeMillis(), maxAgeMs))) load(refresh = items.isNotEmpty())
+    }
     private suspend fun mayPersist(): Boolean {
         val s = Graph.settings.flow.first()
         return !s.incognito && (diskKey?.startsWith("search:") != true || s.saveSearchHistory)
@@ -35,6 +41,8 @@ class Paged(private val scope: CoroutineScope, private val first: suspend () -> 
         val ticket = ++generation
         if (refresh) refreshing = true else if (items.isEmpty()) loading = true
         error = null
+        refreshMessage = null
+        val previousKeys = items.map { it.key }.toSet()
         job = scope.launch {
             try {
                 if (items.isEmpty() && diskKey != null && mayPersist()) {
@@ -56,6 +64,10 @@ class Paged(private val scope: CoroutineScope, private val first: suspend () -> 
                     endReached = !page.pending && page.next == null
                 }
                 loadedOnce = true
+                if (receivedRows) {
+                    lastSuccess = System.currentTimeMillis(); lastUpdatedAt = lastSuccess
+                    if (refresh) refreshMessage = if (items.any { it.key !in previousKeys }) "Feed updated · fresh results loaded" else "Checked just now · providers returned the same videos"
+                }
                 if (receivedRows && diskKey != null && mayPersist()) {
                     try { Graph.feedStore.write(diskKey!!, items) }
                     catch (e: CancellationException) { throw e }
@@ -69,6 +81,7 @@ class Paged(private val scope: CoroutineScope, private val first: suspend () -> 
     fun retrySource(retry: ProviderRetry) {
         if (job?.isActive == true) return
         loading = true
+        val ticket = ++generation
         job = scope.launch {
             try {
                 val page = retry.load()
@@ -86,7 +99,7 @@ class Paged(private val scope: CoroutineScope, private val first: suspend () -> 
                 endReached = next == null; loadedOnce = true; error = null
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) { error = e.message }
-            finally { loading = false }
+            finally { if (ticket == generation) loading = false }
         }
     }
     private fun mergeNext(a: (suspend () -> PageResult)?, b: (suspend () -> PageResult)?): (suspend () -> PageResult)? = when {
@@ -98,6 +111,7 @@ class Paged(private val scope: CoroutineScope, private val first: suspend () -> 
         val n = next ?: return
         if (job?.isActive == true) return
         loading = true
+        val ticket = ++generation
         job = scope.launch {
             try {
                 val page = n()
@@ -107,7 +121,7 @@ class Paged(private val scope: CoroutineScope, private val first: suspend () -> 
                 next = page.next; endReached = next == null
             } catch (e: CancellationException) { throw e }
             catch (t: Exception) { error = t.message }
-            finally { loading = false }
+            finally { if (ticket == generation) loading = false }
         }
     }
 }

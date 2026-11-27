@@ -82,7 +82,7 @@ fun Modifier.glassSource(state: GlassState, enabled: Boolean): Modifier =
 fun Modifier.glass(
     shape: Shape,
     tint: Color? = null,
-    blur: Dp = 30.dp,
+    blur: Dp = 18.dp,
     border: Boolean = true,
     strength: Float = 1f,
     fallbackAlpha: Float = 0.94f,

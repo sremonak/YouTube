@@ -53,7 +53,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -77,13 +77,13 @@ import com.vidora.app.ui.components.VideoCard
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LibraryScreen(nav: NavHostController, actions: VideoActions) {
-    val library by Graph.library.data.collectAsState()
-    val session by Graph.account.session.collectAsState()
+    val library by Graph.library.data.collectAsStateWithLifecycle()
+    val session by Graph.account.session.collectAsStateWithLifecycle()
     com.vidora.app.ui.theme.GlassPage(header = {
         TopAppBar(
             title = { Text(stringResource(R.string.nav_you)) },
             actions = {
-                val incognito = Graph.settingsState.collectAsState().value.incognito
+                val incognito = Graph.settingsState.collectAsStateWithLifecycle().value.incognito
                 val scope = androidx.compose.runtime.rememberCoroutineScope()
                 IconButton(onClick = { scope.launch { Graph.settings.update { it.copy(incognito = !it.incognito) } } }) {
                     Icon(
@@ -112,16 +112,16 @@ fun LibraryScreen(nav: NavHostController, actions: VideoActions) {
                     else Icon(Icons.Rounded.AccountCircle, null, Modifier.size(64.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.width(16.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(s?.name ?: "Not signed in", style = MaterialTheme.typography.headlineSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(s?.name ?: "Your library", style = MaterialTheme.typography.headlineSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(
-                            s?.handle ?: "Sign in to sync subscriptions, likes and history",
+                            s?.handle ?: "Saved on this device · no account needed",
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2
                         )
                     }
                 }
             }
             item {
-                val downloads by Graph.downloads.items.collectAsState()
+                val downloads by Graph.downloads.items.collectAsStateWithLifecycle()
                 LazyRow(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     item { YouPill(Icons.Rounded.Download, "Downloads${if (downloads.isNotEmpty()) " · ${downloads.size}" else ""}") { nav.navigate(Routes.DOWNLOADS) } }
                     item { YouPill(Icons.Rounded.History, "History") { nav.navigate(if (session != null) Routes.accountFeed(AccountFeed.HISTORY.name) else Routes.list("history")) } }
@@ -190,7 +190,7 @@ fun LibraryScreen(nav: NavHostController, actions: VideoActions) {
             item { Spacer(Modifier.height(8.dp)) }
             // iOS-style grouped lists — every destination appears once.
             item {
-                val downloads by Graph.downloads.items.collectAsState()
+                val downloads by Graph.downloads.items.collectAsStateWithLifecycle()
                 LibraryGroup(null) {
                     LibraryRow(Icons.Rounded.Download, "Downloads", "${downloads.size} files · watch offline") { nav.navigate(Routes.DOWNLOADS) }
                     if (session == null) {
@@ -302,7 +302,7 @@ private fun LibraryGroup(title: String?, content: @Composable () -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VideoListScreen(nav: NavHostController, actions: VideoActions, kind: String) {
-    val library by Graph.library.data.collectAsState()
+    val library by Graph.library.data.collectAsStateWithLifecycle()
     var confirmClear by remember { mutableStateOf(false) }
     val (title, videos: List<VideoItem>) = when (kind) {
         "liked" -> "Liked videos" to library.favorites
