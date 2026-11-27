@@ -72,6 +72,9 @@ object Graph {
     @Volatile var discoveryOverride: com.vidora.app.data.DiscoveryRepository? = null
     @Volatile var streamOverride: (suspend (String) -> com.vidora.app.data.StreamDetails)? = null
     val discovery get() = if (BuildConfig.DEBUG) discoveryOverride ?: defaultDiscovery else defaultDiscovery
+    @Volatile var shortsOverride: com.vidora.app.data.ShortsRepository? = null
+    private val defaultShorts by lazy { com.vidora.app.data.ShortsRepository() }
+    val shorts get() = if (BuildConfig.DEBUG) shortsOverride ?: defaultShorts else defaultShorts
     val sponsorBlock by lazy { SponsorBlock(http) }
     val player by lazy { PlayerManager(app, appScope) }
     val account by lazy { AccountManager(app, appScope) }

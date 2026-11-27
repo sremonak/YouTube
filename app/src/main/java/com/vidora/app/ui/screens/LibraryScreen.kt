@@ -33,6 +33,7 @@ import com.vidora.app.ui.icons.AutoAwesome
 import com.vidora.app.ui.icons.DeleteSweep
 import com.vidora.app.ui.icons.ThumbUp
 import com.vidora.app.ui.icons.Favorite
+import com.vidora.app.ui.icons.Refresh
 import com.vidora.app.ui.icons.History
 import com.vidora.app.ui.icons.Person
 import com.vidora.app.ui.icons.Album
@@ -124,10 +125,18 @@ fun LibraryScreen(nav: NavHostController, actions: VideoActions) {
                 val downloads by Graph.downloads.items.collectAsStateWithLifecycle()
                 LazyRow(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     item { YouPill(Icons.Rounded.Download, "Downloads${if (downloads.isNotEmpty()) " · ${downloads.size}" else ""}") { nav.navigate(Routes.DOWNLOADS) } }
-                    item { YouPill(Icons.Rounded.History, "History") { nav.navigate(if (session != null) Routes.accountFeed(AccountFeed.HISTORY.name) else Routes.list("history")) } }
+                    item { YouPill(Icons.Rounded.History, "History") { nav.navigate(Routes.list("history")) } }
                     item { YouPill(Icons.Rounded.Settings, "Settings") { nav.navigate(Routes.SETTINGS) } }
+                    if (session != null) {
+                        item { YouPill(Icons.Rounded.History, "YouTube history") { nav.navigate(Routes.accountFeed(AccountFeed.HISTORY.name)) } }
+                        item { YouPill(Icons.Rounded.Refresh, "Sync recorded history") { com.vidora.app.account.AccountSync.syncRecordedHistory() } }
+                    }
                     if (session == null) item { YouPill(Icons.Rounded.AccountCircle, "Sign in") { nav.navigate(Routes.LOGIN) } }
                 }
+            }
+            if (session != null) item {
+                val status by com.vidora.app.account.AccountSync.watchStatus.collectAsStateWithLifecycle()
+                Text(status, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
             }
             if (Graph.settingsState.value.incognito) {
                 item {
@@ -143,34 +152,15 @@ fun LibraryScreen(nav: NavHostController, actions: VideoActions) {
                 }
             }
             item {
-                SectionHeader(if (session != null) "History" else stringResource(R.string.ui_recently_watched)) {
+                SectionHeader("Device history") {
                     TextButton(onClick = {
-                        nav.navigate(if (session != null) Routes.accountFeed(AccountFeed.HISTORY.name) else Routes.list("history"))
+                        nav.navigate(Routes.list("history"))
                     }) { Text(stringResource(R.string.ui_see_all)) }
                 }
             }
             item {
-                // Signed in: the account's real YouTube watch history (falls back to this device's history).
-                var accountHistory by remember(session != null) { mutableStateOf(com.vidora.app.ui.UiCache.get<List<VideoItem>>("you:history", 5 * 60_000L)) }
-                var historyError by remember(session != null) { mutableStateOf<String?>(null) }
-                LaunchedEffect(session != null) {
-                    if (session != null && accountHistory == null) {
-                        runCatching { Graph.accountApi.feed(AccountFeed.HISTORY) }
-                            .onSuccess { p ->
-                                accountHistory = p.items.filterIsInstance<com.vidora.app.data.Entry.Video>().map { it.video }.take(20)
-                                    .also { com.vidora.app.ui.UiCache.put("you:history", it) }
-                            }
-                            .onFailure { historyError = it.message }
-                    }
-                }
-                historyError?.let {
-                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
-                }
-                val recent = accountHistory?.takeIf { it.isNotEmpty() }?.map { v ->
-                    com.vidora.app.data.HistoryEntry(v, 0L, library.history.firstOrNull { it.video.url == v.url }?.positionMs ?: 0L)
-                }
-                    ?: library.history.take(12)
+                // Device playback must not disappear behind an empty/stale remote account feed.
+                val recent = library.history.take(12)
                 if (recent.isEmpty()) {
                     Text(stringResource(R.string.ui_videos_you_watch_will_show_up_here), style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))

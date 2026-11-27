@@ -15,6 +15,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -57,7 +58,8 @@ fun AccountFeedScreen(nav: NavHostController, actions: VideoActions, feedName: S
             }.page
         }
     }
-    LaunchedEffect(paged) { paged.ensureLoaded() }
+    val revision by com.vidora.app.account.AccountSync.revision.collectAsStateWithLifecycle()
+    LaunchedEffect(paged, revision) { paged.ensureLoaded(com.vidora.app.data.FeedFreshness.REVALIDATE_MS) }
 
     com.vidora.app.ui.theme.GlassPage(header = {
         TopAppBar(
@@ -87,7 +89,7 @@ fun AccountFeedScreen(nav: NavHostController, actions: VideoActions, feedName: S
         }
     }) {
         com.vidora.app.ui.theme.GlassRefreshBox(isRefreshing = paged.refreshing, onRefresh = { paged.load(refresh = true) }, modifier = Modifier.fillMaxSize()) {
-            EntryGrid(paged = paged, actions = actions)
+            EntryGrid(paged = paged, actions = actions, header = { com.vidora.app.ui.components.ProviderStatus(paged) })
         }
     }
 }

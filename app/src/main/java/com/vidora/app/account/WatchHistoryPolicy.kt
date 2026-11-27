@@ -2,7 +2,8 @@ package com.vidora.app.account
 
 /** Consent is still required even when an account session exists; guest/incognito never report. */
 object WatchHistoryPolicy {
-    const val MIN_PLAY_MS = 15_000L
+    const val MIN_PLAY_MS = 3_000L
+    fun delayFor(durationSeconds: Long): Long = if (durationSeconds > 0) minOf(MIN_PLAY_MS, maxOf(500L, durationSeconds * 500L)) else MIN_PLAY_MS
     fun eligible(signedIn: Boolean, enabled: Boolean, incognito: Boolean, youtube: Boolean) = signedIn && enabled && !incognito && youtube
     fun allowedTrackingUrl(scheme: String, host: String, path: String) = scheme == "https" &&
         host in setOf("www.youtube.com", "s.youtube.com", "youtube.com") && path.startsWith("/api/stats/")

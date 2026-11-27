@@ -25,6 +25,8 @@ import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import com.vidora.app.ui.icons.ArrowBack
+import com.vidora.app.ui.icons.Refresh
+import com.vidora.app.data.PageResult
 import com.vidora.app.ui.icons.Download
 import com.vidora.app.ui.icons.Favorite
 import com.vidora.app.ui.icons.FavoriteBorder
@@ -85,14 +87,20 @@ object ShortsSession {
 @Composable
 fun ShortsScreen(nav: NavHostController, actions: VideoActions) {
     val items = remember { mutableStateListOf<VideoItem>().apply { addAll(ShortsSession.seed.distinctBy { it.url }) } }
+    var next by remember { mutableStateOf<(suspend () -> PageResult)?>(null) }
+    var pageError by remember { mutableStateOf<String?>(null) }
     if (items.isEmpty()) {
         // Opened from the bottom bar: build a Shorts feed (like YouTube's Shorts tab).
         var failed by remember { mutableStateOf<String?>(null) }
         var attempt by remember { mutableStateOf(0) }
         LaunchedEffect(attempt) {
-            runCatching { loadShortsFeed() }
-                .onSuccess { if (it.isEmpty()) failed = "No Shorts found" else items.addAll(it) }
-                .onFailure { failed = it.message ?: "Couldn't load Shorts" }
+            try {
+                val page = Graph.shorts.load()
+                next = page.next
+                val videos = page.items.filterIsInstance<com.vidora.app.data.Entry.Video>().map { it.video }
+                if (videos.isEmpty()) failed = "No Shorts on this page · retry" else items.addAll(videos)
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+            catch (e: Exception) { failed = e.message ?: "Couldn't load Shorts" }
         }
         Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
             val f = failed
@@ -125,10 +133,22 @@ fun ShortsScreen(nav: NavHostController, actions: VideoActions) {
             }
         }
     }
+    LaunchedEffect(pager.settledPage, items.size) {
+        val load = next
+        if (pager.settledPage >= items.size - 3 && load != null) {
+            try {
+                val page = load()
+                next = page.next
+                val known = items.map { it.url }.toHashSet()
+                items.addAll(page.items.filterIsInstance<com.vidora.app.data.Entry.Video>().map { it.video }.filter { known.add(it.url) })
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+            catch (e: Exception) { pageError = e.message ?: "Shorts page failed" }
+        }
+    }
     // Extend the list with related shorts as details arrive.
     LaunchedEffect(state.details?.item?.url) {
         val related = state.details?.relatedVideos.orEmpty()
-        val shorts = related.filter { it.isShort || (it.duration in 1..75) }.ifEmpty { if (items.size < 3) related.take(6) else emptyList() }
+        val shorts = related.filter { it.isShort || (it.duration in 1..75) }
         val known = items.map { it.url }.toHashSet()
         items.addAll(shorts.filter { known.add(it.url) })
     }
@@ -170,11 +190,20 @@ fun ShortsScreen(nav: NavHostController, actions: VideoActions) {
         }
         IconButton(
             onClick = { nav.popBackStack() },
-            modifier = Modifier.statusBarsPadding().padding(8.dp).size(42.dp)
+            modifier = Modifier.statusBarsPadding().padding(8.dp).size(48.dp)
                 .glassOverlay(androidx.compose.foundation.shape.CircleShape, alpha = 0.32f)
                 .border(0.7.dp, Color.White.copy(alpha = 0.22f), androidx.compose.foundation.shape.CircleShape)
         ) {
             Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back", tint = Color.White)
+        }
+        IconButton(onClick = { next = null; pageError = null; items.clear(); ShortsSession.seed = emptyList() },
+            modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(8.dp).size(48.dp)) {
+            Icon(Icons.Rounded.Refresh, "Refresh Shorts", tint = Color.White)
+        }
+        pageError?.let { message ->
+            androidx.compose.material3.TextButton(onClick = { pageError = null; next = null; items.clear() }, modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding()) {
+                Text("$message · Retry", color = Color.White, maxLines = 2)
+            }
         }
         // Progress line
         var progress by remember { mutableStateOf(0f) }
@@ -246,18 +275,3 @@ private fun ShortAction(icon: ImageVector, label: String, onClick: () -> Unit) {
 }
 
 /** Shorts feed for the bottom-bar tab: account recommendations when signed in, otherwise a search. */
-private suspend fun loadShortsFeed(): List<VideoItem> {
-    fun List<com.vidora.app.data.Entry>.shorts() = filterIsInstance<com.vidora.app.data.Entry.Video>().map { it.video }
-        .filter { it.isShort || it.duration in 1..75 }
-    val lib = Graph.library.data.value
-    val seeds = (lib.searchHistory.take(3) + listOf("shorts", "#shorts", "funny shorts", "music shorts")).shuffled()
-    val out = LinkedHashMap<String, VideoItem>()
-    if (Graph.account.isSignedIn) {
-        runCatching { Graph.accountApi.feed(com.vidora.app.account.AccountFeed.RECOMMENDED).items.shorts() }.getOrNull()?.forEach { out[it.url] = it }
-    }
-    for (q in seeds) {
-        if (out.size >= 12) break
-        runCatching { Graph.repository.search("$q #shorts").items.shorts() }.getOrNull()?.forEach { out.putIfAbsent(it.url, it) }
-    }
-    return out.values.shuffled().take(30)
-}

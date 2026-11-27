@@ -15,7 +15,8 @@ import kotlinx.serialization.json.Json
 import java.io.File
 
 @Serializable
-data class HistoryEntry(val video: VideoItem, val watchedAt: Long, val positionMs: Long = 0)
+data class HistoryEntry(val video: VideoItem, val watchedAt: Long, val positionMs: Long = 0,
+    val watchStartSeconds: Double = 0.0, val actualWatchSeconds: Double = 0.0, val youtubeSyncedAt: Long = 0)
 
 @Serializable
 data class LibraryData(
@@ -73,13 +74,25 @@ class LibraryStore(context: Context, private val scope: CoroutineScope) {
     // history
     fun addHistory(video: VideoItem) = mutate { d ->
         val previous = d.history.firstOrNull { it.video.url == video.url }
-        val entry = HistoryEntry(video, System.currentTimeMillis(), previous?.positionMs ?: 0)
+        val entry = previous?.copy(video = video, watchedAt = System.currentTimeMillis())
+            ?: HistoryEntry(video, System.currentTimeMillis())
         d.copy(history = (listOf(entry) + d.history.filter { it.video.url != video.url }).take(500))
     }
 
     fun savePosition(url: String, positionMs: Long) = mutate { d ->
         d.copy(history = d.history.map { if (it.video.url == url) it.copy(positionMs = positionMs) else it })
     }
+
+    /** Only measured continuous playback; a resume position/seek is never fabricated as watch time. */
+    fun recordWatched(video: VideoItem, startSeconds: Double, seconds: Double) = mutate { d ->
+        val old = d.history.firstOrNull { it.video.url == video.url } ?: HistoryEntry(video, System.currentTimeMillis())
+        val updated = old.copy(watchStartSeconds = startSeconds, actualWatchSeconds = seconds)
+        d.copy(history = (listOf(updated) + d.history.filterNot { it.video.url == video.url }).take(500))
+    }
+
+    fun confirmYouTubeHistory(url: String) = mutate { d -> d.copy(history = d.history.map {
+        if (it.video.url == url) it.copy(youtubeSyncedAt = System.currentTimeMillis()) else it
+    }) }
 
     fun positionOf(url: String): Long = _data.value.history.firstOrNull { it.video.url == url }?.positionMs ?: 0
 

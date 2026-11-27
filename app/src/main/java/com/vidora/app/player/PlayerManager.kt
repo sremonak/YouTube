@@ -125,6 +125,7 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
 
     private var historyReportJob: Job? = null
     private var historyReportedFor: String? = null
+    private var historyAttempts = 0
     private var loadJob: Job? = null
     private var loudnessJob: Job? = null
 
@@ -343,16 +344,22 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
         val video = _state.value.current ?: return
         if (!isPlaying || historyReportedFor == video.url) return
         val startSeconds = exoPlayer.currentPosition.coerceAtLeast(0) / 1000.0
-        // The application scope uses Dispatchers.Default. Media3 getters must stay on
-        // the player application thread, including after the 15-second suspension.
+        // Media3 getters stay on Main before and after suspension; short videos must
+        // not end before the old 15-second timer and silently disappear from sync.
         historyReportJob = scope.launch(Dispatchers.Main) {
-            kotlinx.coroutines.delay(com.vidora.app.account.WatchHistoryPolicy.MIN_PLAY_MS)
-            if (_state.value.current?.url == video.url && exoPlayer.isPlaying && settings.syncWatchHistory &&
-                !settings.incognito && Graph.account.isSignedIn && !video.isLive && Graph.repository.videoId(video.url) != null) {
+            val wait = com.vidora.app.account.WatchHistoryPolicy.delayFor(video.duration)
+            kotlinx.coroutines.delay(wait)
+            if (_state.value.current?.url == video.url && exoPlayer.isPlaying && !settings.incognito) {
                 val seconds = (exoPlayer.currentPosition / 1000.0 - startSeconds).coerceAtLeast(0.0)
                 if (seconds > 0) {
-                    historyReportedFor = video.url
-                    com.vidora.app.account.AccountSync.markWatched(video, seconds, startSeconds)
+                    if (settings.saveHistory) Graph.library.recordWatched(video, startSeconds, seconds)
+                    historyAttempts++
+                    val synced = com.vidora.app.account.AccountSync.syncWatched(video, seconds, startSeconds)
+                    if (synced) historyReportedFor = video.url
+                    else if (historyAttempts < 3 && Graph.account.isSignedIn && settings.syncWatchHistory) {
+                        kotlinx.coroutines.delay(20_000)
+                        if (_state.value.current?.url == video.url && exoPlayer.isPlaying) scheduleWatchHistory(true)
+                    }
                 }
             }
         }
@@ -377,6 +384,8 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
             return
         }
         persistPosition()
+        historyReportedFor = null
+        historyAttempts = 0
         skippedSegments.clear()
         resetNetworkAdaptation()
         tapAt = android.os.SystemClock.elapsedRealtime()

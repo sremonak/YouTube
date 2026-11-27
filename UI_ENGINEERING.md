@@ -75,3 +75,34 @@ retrieved candidates precede already displayed ones. Account history success inv
 both the cache slot and live Paged reference so returning Home actually revalidates.
 History sync defaults on but still respects sign-in, the user's sync setting and incognito.
 No guest library is uploaded; YouTube may still return unchanged recommendations.
+
+## Account/Shorts/subscriptions and direct navigation follow-up
+
+Home actions are now separate 48dp icons rather than a profile dropdown; Downloads
+has its own bottom destination. Device history remains the primary local history even
+when an account is present, with a separate YouTube history destination. Measured
+continuous playback intervals are stored separately from resume positions; existing
+backups migrate with zero measured watch time, never invented full-video watches.
+
+History delivery now uses authenticated WEB tracking only, rejects redirects/unsafe
+hosts, surfaces transport errors, and checks the remote history feed before saying
+"Confirmed". A successful HTTP acknowledgement alone is labelled sent/unconfirmed.
+The playback threshold is three seconds or half a short video's duration (minimum
+500ms), with up to three attempts per playback. An explicit Sync recorded history
+operation retries up to 50 measured pending records, respecting session/privacy.
+Prior resume-only records cannot be reconstructed into honest watch intervals.
+
+Account-feed invalidation emits a revision collected by open Home/account/subscription
+screens. Repeated identical recommendation first pages advance actual server pages,
+not just a random reorder. Account requests bypass HTTP caches. Dedicated FEshorts
+browse has bounded search fallback, continuation support and visible refresh/retry;
+unrelated long videos are no longer inserted to disguise an empty Shorts feed.
+Subscription groups request their own channels; channel failures are visible, and a
+mixed local PeerTube list no longer disables the signed-in YouTube subscription feed.
+
+CI fixtures cover delivery-vs-confirmation, rejection/cancellation, recommendation
+page progression, Shorts/fallback/continuations, partial subscription failures, old
+history migration, and direct Home/Downloads/Shorts navigation. They do not prove a
+real private YouTube account accepted a write: no user session or Google account is
+available in CI. The app must show that account-specific result instead of promising
+that all upstream/account/network-dependent features always work.

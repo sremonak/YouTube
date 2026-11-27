@@ -105,11 +105,13 @@ class AccountApi {
             .url("${host.origin}/youtubei/v1/$endpoint?prettyPrint=false")
             .post(body.toString().toRequestBody("application/json".toMediaType()))
             .header("User-Agent", NetworkDownloader.USER_AGENT)
+            .header("Cache-Control", "no-cache, no-store")
             .header("Origin", host.origin)
             .header("Referer", "${host.origin}/")
             .header("X-Youtube-Client-Name", host.clientId)
             .header("X-Youtube-Client-Version", host.version())
-        val authed = account.isSignedIn
+        val authed = account.isSignedIn && !Graph.settings.flow.first().incognito
+        if (requireAuth && !authed) throw SignedOutException("YouTube account data is unavailable while signed out or incognito")
         val usedSessionHash = authed && account.userSessionId != null && account.sessionHashEnabled
         if (authed) account.authHeaders(host.origin).forEach { (k, v) -> builder.header(k, v) }
         val res = client.newCall(builder.build()).execute().use { r ->
@@ -280,6 +282,11 @@ class AccountApi {
         }
         val res = post("browse", buildJsonObject { put("context", context()); put("browseId", feed.browseId) })
         return AccountPage(toPage(res), collectChips(res))
+    }
+
+    suspend fun shorts(): PageResult {
+        val res = post("browse", buildJsonObject { put("context", context()); put("browseId", "FEshorts") }, requireAuth = false)
+        return toPage(res)
     }
 
     /** Loads the feed behind one of YouTube's chips (they are continuation tokens). */
@@ -460,18 +467,19 @@ class AccountApi {
         val account = Graph.account
         val seconds = WatchHistoryPolicy.seconds(watchedSeconds)
         val privacy = Graph.settings.flow.first()
-        if (!WatchHistoryPolicy.eligible(account.isSignedIn, privacy.syncWatchHistory, privacy.incognito, true) || seconds <= 0) return@withContext false
-        val tracking = playbackTracking(videoId) ?: return@withContext false
+        if (!WatchHistoryPolicy.eligible(account.isSignedIn, privacy.syncWatchHistory, privacy.incognito, true) || seconds <= 0) throw IOException("History sync disabled, signed out, or no measured playback")
+        val owner = account.session.value?.signedInAt
+        val tracking = playbackTracking(videoId) ?: throw IOException("YouTube returned no authenticated history tracking URLs")
         val alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_"
         val rnd = java.security.SecureRandom()
         val cpn = (1..16).map { alphabet[rnd.nextInt(64)] }.joinToString("")
-        var ok = true
+        val historyClient = client.newBuilder().followRedirects(false).followSslRedirects(false).build()
         for ((i, key) in listOf("videostatsPlaybackUrl", "videostatsWatchtimeUrl").withIndex()) {
-            val base = str((tracking[key] as? JsonObject)?.get("baseUrl")) ?: return@withContext false
-            val url = base.toHttpUrlOrNull() ?: return@withContext false
-            if (!WatchHistoryPolicy.allowedTrackingUrl(url.scheme, url.host, url.encodedPath)) return@withContext false
+            val base = str((tracking[key] as? JsonObject)?.get("baseUrl")) ?: throw IOException("YouTube omitted $key")
+            val url = base.toHttpUrlOrNull() ?: throw IOException("Invalid history tracking URL")
+            if (!WatchHistoryPolicy.allowedTrackingUrl(url.scheme, url.host, url.encodedPath)) throw IOException("History tracking host was rejected")
             val currentSettings = Graph.settings.flow.first()
-            if (!account.isSignedIn || currentSettings.incognito || !currentSettings.syncWatchHistory) return@withContext false
+            if (!account.isSignedIn || account.session.value?.signedInAt != owner || currentSettings.incognito || !currentSettings.syncWatchHistory) throw IOException("History sync cancelled by privacy/account change")
             val duration = url.queryParameter("len")?.toDoubleOrNull()?.takeIf { it.isFinite() && it > 0 } ?: (WatchHistoryPolicy.seconds(startSeconds) + seconds)
             val start = WatchHistoryPolicy.seconds(startSeconds).coerceAtMost(duration)
             val len = minOf(start + seconds, duration).toString()
@@ -482,40 +490,20 @@ class AccountApi {
             val req = Request.Builder().url(b.build()).header("User-Agent", NetworkDownloader.USER_AGENT)
                 .header("Referer", "https://www.youtube.com/watch?v=$videoId")
             account.authHeaders().forEach { (k, v) -> req.header(k, v) }
-            ok = ok && runCatching { client.newCall(req.build()).execute().use { it.isSuccessful || it.code == 204 } }.getOrDefault(false)
+            historyClient.newCall(req.build()).execute().use { response ->
+                if (!response.isSuccessful) throw IOException("YouTube history rejected $key: HTTP ${response.code}")
+            }
         }
-        ok
+        true
     }
 
-    /** playbackTracking of a signed-in player response (WEB first, TV client as fallback). */
+    /** Never substitute an anonymous TV response for account-bound history tracking. */
     private suspend fun playbackTracking(videoId: String): JsonObject? {
-        val web = runCatching {
-            post("player", buildJsonObject {
-                put("context", context()); put("videoId", videoId)
-                put("contentCheckOk", true); put("racyCheckOk", true)
-            })
-        }.getOrNull()
-        (web?.get("playbackTracking") as? JsonObject)?.let { if (it["videostatsWatchtimeUrl"] != null) return it }
-        return withContext(Dispatchers.IO) {
-            runCatching {
-                val tv = com.vidora.app.data.YtClient.TV
-                val body = buildJsonObject {
-                    putJsonObject("context") {
-                        putJsonObject("client") {
-                            put("clientName", tv.clientName); put("clientVersion", tv.version); put("userAgent", tv.userAgent)
-                            tv.extra.forEach { (k, v) -> put(k, v) }
-                        }
-                    }
-                    put("videoId", videoId); put("contentCheckOk", true); put("racyCheckOk", true)
-                }
-                val req = Request.Builder().url("https://www.youtube.com/youtubei/v1/player?prettyPrint=false")
-                    .post(body.toString().toRequestBody("application/json".toMediaType()))
-                    .header("User-Agent", tv.userAgent).header("Origin", "https://www.youtube.com")
-                    .header("X-YouTube-Client-Name", tv.clientId).header("X-YouTube-Client-Version", tv.version)
-                Graph.account.authHeaders().forEach { (k, v) -> req.header(k, v) }
-                client.newCall(req.build()).execute().use { r -> json.parseToJsonElement(r.body?.string().orEmpty()).jsonObject }
-            }.getOrNull()?.get("playbackTracking") as? JsonObject
-        }
+        val web = post("player", buildJsonObject {
+            put("context", context()); put("videoId", videoId)
+            put("contentCheckOk", true); put("racyCheckOk", true)
+        })
+        return web["playbackTracking"] as? JsonObject
     }
 
     // ------------------------------------------------------------------ diagnostics
@@ -683,13 +671,14 @@ class AccountApi {
     }
 
     private fun parseShortsLockup(v: JsonObject): VideoItem? {
-        val id = findFirst(v["onTap"], "reelWatchEndpoint")?.let { str(it["videoId"]) }
+        val id = findFirst(v, "reelWatchEndpoint")?.let { str(it["videoId"]) }
+            ?: str(v["videoId"])
             ?: str(v["entityId"])?.removePrefix("shorts-shelf-item-")?.takeIf { it.length == 11 } ?: return null
         val overlay = v["overlayMetadata"] as? JsonObject
         val sources = findArray(v["thumbnail"], "sources")
         return VideoItem(
             url = "https://www.youtube.com/shorts/$id",
-            title = text(overlay?.get("primaryText")) ?: str(v["accessibilityText"])?.substringBefore(",") ?: return null,
+            title = text(overlay?.get("primaryText")) ?: str(v["accessibilityText"])?.substringBefore(",") ?: "Short",
             thumbnail = sources?.lastOrNull()?.let { str((it as? JsonObject)?.get("url")) }?.let { if (it.startsWith("//")) "https:$it" else it } ?: "https://i.ytimg.com/vi/$id/hqdefault.jpg",
             views = parseCount(text(overlay?.get("secondaryText"))),
             isShort = true,

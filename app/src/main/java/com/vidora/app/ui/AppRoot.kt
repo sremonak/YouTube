@@ -116,11 +116,12 @@ object Routes {
 
 private data class TopDest(val route: String, @androidx.annotation.StringRes val label: Int, val icon: ImageVector, val selectedIcon: ImageVector)
 
-/** YouTube's bottom bar: Home · Shorts · Subscriptions · You (downloads live under You). */
+/** Primary destinations stay directly accessible, including Downloads. */
 private val topDestinations = listOf(
     TopDest(Routes.HOME, R.string.nav_home, Icons.Outlined.Home, Icons.Rounded.Home),
     TopDest(Routes.SHORTS, R.string.nav_shorts, Icons.Outlined.SlowMotionVideo, Icons.Rounded.SlowMotionVideo),
     TopDest(Routes.SUBS, R.string.nav_subscriptions, Icons.Outlined.Subscriptions, Icons.Rounded.Subscriptions),
+    TopDest(Routes.DOWNLOADS, R.string.nav_downloads, Icons.Rounded.Download, Icons.Rounded.Download),
     TopDest(Routes.LIBRARY, R.string.nav_you, Icons.Outlined.AccountCircle, Icons.Rounded.AccountCircle),
 )
 
@@ -217,7 +218,7 @@ fun AppRoot(activity: MainActivity, settings: AppSettings) {
                         NavigationRailItem(
                             selected = route == d.route,
                             onClick = { if (route == d.route) TabReselect.events.tryEmit(d.route) else nav.navigateTop(d.route) },
-                            icon = { NavIcon(d, route == d.route, if (d.route == Routes.LIBRARY) activeDownloads else 0) },
+                            icon = { NavIcon(d, route == d.route, if (d.route == Routes.DOWNLOADS) activeDownloads else 0) },
                             label = { Text(androidx.compose.ui.res.stringResource(d.label), maxLines = 1) }
                         )
                     }
@@ -309,7 +310,7 @@ fun AppRoot(activity: MainActivity, settings: AppSettings) {
                             NavigationBarItem(
                                 selected = selected,
                                 onClick = { if (route == d.route) TabReselect.events.tryEmit(d.route) else nav.navigateTop(d.route) },
-                                icon = { NavIcon(d, selected, if (d.route == Routes.LIBRARY) activeDownloads else 0) },
+                                icon = { NavIcon(d, selected, if (d.route == Routes.DOWNLOADS) activeDownloads else 0) },
                                 label = { Text(androidx.compose.ui.res.stringResource(d.label), maxLines = if (window.fontScale > 1.3f) 2 else 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall, fontWeight = if (selected) androidx.compose.ui.text.font.FontWeight.Bold else null) },
                                 colors = androidx.compose.material3.NavigationBarItemDefaults.colors(
                                     selectedIconColor = fg, selectedTextColor = fg,

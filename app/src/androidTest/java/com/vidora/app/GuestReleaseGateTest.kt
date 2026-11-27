@@ -33,6 +33,7 @@ class GuestReleaseGateTest {
         context.getSharedPreferences("vidora_onboarding", 0).edit().putBoolean("welcome_done", true).commit()
         Graph.settings.update { it.copy(autoUpdateCheck = false, autoRegionByIp = false, contentCountry = "US", glassUi = false,
             sponsorBlock = false, prefetchNext = false, persistQueue = false, onboardingDone = true, homeInterests = emptySet(), homeLanguage = "", lessLikeVideos = emptySet()) }
+        com.vidora.app.ui.screens.ShortsSession.seed = emptyList()
         Graph.discoveryOverride = DiscoveryRepository(youtubeSearch = { _, _ -> PageResult(emptyList()) },
             peerSearch = { PageResult(listOf(Entry.Video(peer))) }, commonsSearch = { PageResult(listOf(Entry.Video(commons))) },
             peerHome = { PageResult(listOf(Entry.Video(peer))) })
@@ -49,7 +50,7 @@ class GuestReleaseGateTest {
     @After fun cleanup() {
         scenario?.close()
         instrumentation.runOnMainSync { Graph.player.stop(); UiCache.clearAll() }
-        Graph.discoveryOverride = null; Graph.streamOverride = null
+        Graph.discoveryOverride = null; Graph.streamOverride = null; Graph.shortsOverride = null
     }
     @Test fun guestHomeSearchSaveAndBothSourcePlayback() {
         scenario = ActivityScenario.launch(MainActivity::class.java)
@@ -90,6 +91,21 @@ class GuestReleaseGateTest {
         compose.waitUntil(25_000) { report.isCompleted }
         assertFalse("Delayed player access failed/cancelled before completing", report.isCancelled)
         assertNull(Graph.player.state.value.error)
+        assertTrue(Graph.library.data.value.history.any { it.video.url == peer.url && it.actualWatchSeconds > 0 })
+    }
+
+    @Test fun directHomeActionsDownloadsAndShortsAreReachable() {
+        Graph.shortsOverride = ShortsRepository(browse = { PageResult(listOf(Entry.Video(peer.copy(isShort = true)))) }, search = { error("No search needed") })
+        scenario = ActivityScenario.launch(MainActivity::class.java)
+        compose.waitUntil(20_000) { compose.onAllNodesWithContentDescription("Refresh feed").fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() }
+        compose.onNodeWithContentDescription("Home options").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Library").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Settings").assertIsDisplayed()
+        compose.onNodeWithText("Downloads").performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("Downloads").fetchSemanticsNodes(atLeastOneRootRequired = false).size >= 2 }
+        compose.onNodeWithText("Shorts").performClick()
+        compose.waitUntil(20_000) { compose.onAllNodesWithContentDescription("Refresh Shorts").fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() }
+        compose.onNodeWithContentDescription("Refresh Shorts").assertIsDisplayed()
     }
 
     @Test fun explicitRefreshActuallyRequestsNewFeedAndReportsSameResultsHonestly() {
@@ -100,13 +116,11 @@ class GuestReleaseGateTest {
         }, peerSearch = { PageResult(emptyList()) }, commonsSearch = { PageResult(emptyList()) }, peerHome = { PageResult(emptyList()) })
         scenario = ActivityScenario.launch(MainActivity::class.java)
         compose.waitUntil(20_000) { calls.get() > 0 && compose.onAllNodesWithText(peer.title).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() }
-        compose.onNodeWithContentDescription("Home options").performClick()
-        compose.onNodeWithText("Refresh feed").performClick()
+        compose.onNodeWithContentDescription("Refresh feed").performClick()
         compose.waitUntil(20_000) { compose.onAllNodesWithText(fresh.title).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() }
         assertTrue(calls.get() >= 2)
         compose.waitUntil(5000) { compose.onAllNodesWithText("Feed updated · fresh results loaded").fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() }
-        compose.onNodeWithContentDescription("Home options").performClick()
-        compose.onNodeWithText("Refresh feed").performClick()
+        compose.onNodeWithContentDescription("Refresh feed").performClick()
         compose.waitUntil(20_000) { compose.onAllNodesWithText("Checked just now · providers returned the same videos").fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() }
     }
     @Test fun searchFiltersAreReversibleAndKeyboardDoesNotCoverResults() {

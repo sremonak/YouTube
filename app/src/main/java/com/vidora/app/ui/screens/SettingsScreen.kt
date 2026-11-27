@@ -1,5 +1,6 @@
 package com.vidora.app.ui.screens
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.layout.heightIn
 
 import com.vidora.app.ui.theme.GlassAlertDialog
@@ -277,9 +278,13 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
                 item {
                     SwitchRow(
                         "Add watched videos to YouTube history",
-                        "Like the official app: what you watch in Vidora shows up in your YouTube history and improves your recommendations",
+                        "Send measured playback while signed in. YouTube may pause/reject history; check the result below.",
                         s.syncWatchHistory
                     ) { v -> update { it.copy(syncWatchHistory = v) } }
+                }
+                item {
+                    val status by com.vidora.app.account.AccountSync.watchStatus.collectAsStateWithLifecycle()
+                    ClickRow("Sync recorded device history", status) { com.vidora.app.account.AccountSync.syncRecordedHistory() }
                 }
                 item {
                     ClickRow("Manage YouTube history", "Pause, clear or auto-delete your YouTube watch & search history (Google My Activity)") {

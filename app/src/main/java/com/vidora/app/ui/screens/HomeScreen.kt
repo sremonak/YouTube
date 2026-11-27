@@ -23,6 +23,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.height
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.sp
+import com.vidora.app.ui.icons.Refresh
+import com.vidora.app.ui.icons.Info
+import com.vidora.app.ui.icons.Settings
+import com.vidora.app.ui.icons.VideoLibrary
+import com.vidora.app.ui.icons.Visibility
+import com.vidora.app.ui.icons.VisibilityOff
 import com.vidora.app.ui.icons.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -82,14 +88,19 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
     }
     val session by Graph.account.session.collectAsStateWithLifecycle()
     val signedIn = session != null && !settings.incognito
+    val syncRevision by com.vidora.app.account.AccountSync.revision.collectAsStateWithLifecycle()
+    val syncStatus by com.vidora.app.account.AccountSync.watchStatus.collectAsStateWithLifecycle()
+    val recommendations = remember(session?.signedInAt, signedIn) {
+        com.vidora.app.account.RecommendationFeed { Graph.accountApi.feedWithChips(AccountFeed.RECOMMENDED) }
+    }
     // Account recommendations are the signed-in default; guests start on public Explore.
     var accountChips by remember(signedIn) { mutableStateOf(UiCache.get<List<FeedChip>>("home:chips") ?: emptyList()) }
-    val tabs = remember(signedIn, accountChips, region.code) {
+    val tabs = remember(signedIn, accountChips, region.code, recommendations) {
         buildList {
             add(HomeTab(HomeSection.FOR_YOU.name, HomeSection.FOR_YOU.label) { loadSection(HomeSection.FOR_YOU, region.code) })
             if (signedIn) {
                 add(HomeTab("acc", "YouTube account") {
-                    val first = Graph.accountApi.feedWithChips(AccountFeed.RECOMMENDED)
+                    val first = recommendations.load()
                     if (first.chips.isNotEmpty()) { accountChips = first.chips; UiCache.put("home:chips", first.chips) }
                     first.page
                 })
@@ -116,10 +127,13 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
             Graph.discovery.homeUpdates(region.code, settings, if (settings.incognito) emptySet() else Graph.library.data.value.history.map { it.video.url }.toSet())
         } else UiCache.paged("home:$signedIn:${region.code}:${tab.key}") { tab.load() }
     }
+    LaunchedEffect(paged, syncRevision) { if (signedIn) paged.ensureLoaded(com.vidora.app.data.FeedFreshness.REVALIDATE_MS) }
     androidx.compose.runtime.DisposableEffect(paged) { onDispose { paged.cancelPending() } }
     androidx.activity.compose.ReportDrawnWhen { paged.items.isNotEmpty() || paged.error != null }
     val gridState = rememberLazyGridState()
-    var homeOptions by remember { mutableStateOf(false) }
+    LaunchedEffect(paged) {
+        com.vidora.app.ui.TabReselect.events.collect { if (it == Routes.HOME) paged.load(refresh = true) }
+    }
     var regionDetails by remember { mutableStateOf(false) }
     val snackbar = remember { androidx.compose.material3.SnackbarHostState() }
     LaunchedEffect(paged, paged.refreshMessage) {
@@ -141,6 +155,8 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
         title = { Text("Feed status") },
         text = { Column {
             Text("${com.vidora.app.data.GuestSources.countryName(region.code)} · ${region.method}. ${if (signedIn && tab.key == "acc") "YouTube account recommendations" else "Public discovery"}. Search is independent.")
+            Text(if (signedIn) "YouTube history: ${if (settings.syncWatchHistory) "on" else "off"} · $syncStatus" else "Sign in to YouTube for account history and recommendations. Public feeds do not sync a guest account.")
+            if (signedIn) androidx.compose.material3.TextButton(onClick = { com.vidora.app.account.AccountSync.syncRecordedHistory() }) { Text("Sync recorded history") }
             com.vidora.app.ui.components.ProviderStatus(paged)
         } },
         confirmButton = { androidx.compose.material3.TextButton(onClick = { regionDetails = false }) { Text("Done") } },
@@ -167,23 +183,24 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
                         Icon(IosGlyphs.arrowDownCircleFill, if (updateAvailable != null) "Update available" else "Check for updates")
                     }
                 }
-                Box {
-                    IconButton(onClick = { homeOptions = true }) { Icon(Icons.Rounded.AccountCircle, "Home options") }
-                    androidx.compose.material3.DropdownMenu(expanded = homeOptions, onDismissRequest = { homeOptions = false }) {
-                        androidx.compose.material3.DropdownMenuItem(text = { Text("Refresh feed") }, enabled = !paged.loading && !paged.refreshing, onClick = {
-                            homeOptions = false; paged.load(refresh = true)
-                            scope.launch { gridState.scrollToItem(0) }
-                        })
-                        androidx.compose.material3.DropdownMenuItem(text = { Text("Feed status") }, onClick = { homeOptions = false; regionDetails = true })
-                        androidx.compose.material3.DropdownMenuItem(text = { Text("Downloads") }, onClick = { homeOptions = false; nav.navigate(Routes.DOWNLOADS) })
-                        androidx.compose.material3.DropdownMenuItem(text = { Text("Your library") }, onClick = { homeOptions = false; nav.navigate(Routes.LIBRARY) })
-                        androidx.compose.material3.DropdownMenuItem(text = { Text("Home preferences") }, onClick = { homeOptions = false; nav.navigate(Routes.SETTINGS) })
-                        androidx.compose.material3.DropdownMenuItem(text = { Text(if (showContinue) "Hide Continue watching" else "Show Continue watching") }, onClick = { showContinue = !showContinue; homeOptions = false })
-                    }
+                IconButton(onClick = { nav.navigate(if (signedIn) Routes.SETTINGS else Routes.LOGIN) }) {
+                    Icon(Icons.Rounded.AccountCircle, "Account")
                 }
             },
             colors = com.vidora.app.ui.theme.glassBarColors()
         )
+        LazyRow(contentPadding = PaddingValues(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            item { IconButton(enabled = !paged.loading && !paged.refreshing, onClick = {
+                paged.load(refresh = true); scope.launch { gridState.scrollToItem(0) }
+            }) { Icon(Icons.Rounded.Refresh, "Refresh feed") } }
+            item { IconButton(onClick = { nav.navigate(Routes.LIBRARY) }) { Icon(Icons.Rounded.VideoLibrary, "Library") } }
+            item { IconButton(onClick = { nav.navigate(Routes.SETTINGS) }) { Icon(Icons.Rounded.Settings, "Settings") } }
+            item { IconButton(onClick = { regionDetails = true }) { Icon(Icons.Rounded.Info, "Feed status") } }
+            item { IconButton(onClick = { showContinue = !showContinue }) {
+                Icon(if (showContinue) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
+                    if (showContinue) "Hide Continue watching" else "Show Continue watching")
+            } }
+        }
         LazyRow(
             contentPadding = PaddingValues(horizontal = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),

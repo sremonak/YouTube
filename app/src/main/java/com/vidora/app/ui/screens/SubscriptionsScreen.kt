@@ -81,22 +81,26 @@ fun SubscriptionsScreen(nav: NavHostController, actions: VideoActions) {
     val scope = rememberCoroutineScope()
     val subs = library.subscriptions
     val session by Graph.account.session.collectAsState()
-    val signedIn = session != null
+    val settings by Graph.settingsState.collectAsState()
+    val signedIn = session != null && !settings.incognito
     var groupId by rememberSaveable { mutableStateOf<String?>(null) }
     // Signed in + no group: YouTube's own subscriptions feed (FEsubscriptions), like the official app.
-    val useAccountFeed = signedIn && groupId == null && subs.none { com.vidora.app.data.GuestSources.isPeerChannel(it.url) }
-    val subsKey = if (useAccountFeed) "account" else subs.joinToString(",") { it.url }.hashCode().toString()
-    val paged = remember(subsKey) {
-        com.vidora.app.ui.UiCache.paged("subs:$subsKey") { if (useAccountFeed) Graph.accountApi.feed(AccountFeed.SUBSCRIPTIONS) else loadFeed() }
-    }
-    LaunchedEffect(paged) { if (useAccountFeed || subs.isNotEmpty()) paged.ensureLoaded() }
-    // Keep the channel row in sync with the account's subscriptions.
-    LaunchedEffect(signedIn) { if (signedIn) AccountSync.importSubscriptionsIfStale() }
+    val useAccountFeed = signedIn && groupId == null
     var editing by remember { mutableStateOf<SubscriptionGroup?>(null) }
     var creating by remember { mutableStateOf(false) }
     val group = library.groups.firstOrNull { it.id == groupId }
     val groupSet = remember(group) { group?.channels?.toHashSet() }
     val shownSubs = if (groupSet == null) subs else subs.filter { it.url in groupSet }
+    val revision by AccountSync.revision.collectAsState()
+    val subsKey = "$signedIn:$groupId:" + shownSubs.joinToString(",") { it.url }
+    val paged = remember(subsKey) {
+        com.vidora.app.ui.UiCache.paged("subs:$subsKey") {
+            if (useAccountFeed) Graph.accountApi.feed(AccountFeed.SUBSCRIPTIONS)
+            else com.vidora.app.data.SubscriptionFeed().load(shownSubs)
+        }
+    }
+    LaunchedEffect(paged, revision) { if (useAccountFeed || shownSubs.isNotEmpty()) paged.ensureLoaded(com.vidora.app.data.FeedFreshness.REVALIDATE_MS) }
+    LaunchedEffect(signedIn) { if (signedIn) AccountSync.importSubscriptionsIfStale() }
 
     com.vidora.app.ui.theme.GlassPage(header = {
         TopAppBar(
@@ -133,6 +137,8 @@ fun SubscriptionsScreen(nav: NavHostController, actions: VideoActions) {
                 paged = paged, actions = actions,
                 filter = { e -> useAccountFeed || groupSet == null || (e is Entry.Video && e.video.uploaderUrl in groupSet) },
                 header = {
+                    Column {
+                    com.vidora.app.ui.components.ProviderStatus(paged)
                     LazyRow(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                         items(shownSubs, key = { it.url }) { c ->
                             Column(
@@ -144,6 +150,7 @@ fun SubscriptionsScreen(nav: NavHostController, actions: VideoActions) {
                                     textAlign = TextAlign.Center, modifier = Modifier.padding(top = 4.dp))
                             }
                         }
+                    }
                     }
                 },
             )
@@ -184,20 +191,4 @@ private fun GroupEditor(initial: SubscriptionGroup?, channels: List<ChannelItem>
             }
         }
     }
-}
-
-/** Fetches the latest uploads of every subscribed channel in parallel (max 6 at once). */
-private suspend fun loadFeed(): PageResult = coroutineScope {
-    val subs = Graph.library.data.value.subscriptions
-    val gate = Semaphore(6)
-    val videos = subs.map { c ->
-        async {
-            gate.withPermit {
-                // Tag with the subscription URL so group filters match regardless of URL form (/channel/UC… vs /@handle)
-                runCatching { Graph.repository.latestUploads(c.url).take(15).map { it.copy(uploaderUrl = c.url) } }.getOrDefault(emptyList())
-            }
-        }
-    }.awaitAll().flatten()
-    val sorted = videos.sortedByDescending { it.uploadedEpoch }.distinctBy { it.url }
-    PageResult(sorted.map { Entry.Video(it) })
 }
