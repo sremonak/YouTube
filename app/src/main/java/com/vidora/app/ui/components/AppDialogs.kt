@@ -41,10 +41,14 @@ import com.vidora.app.util.Updater
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/** Shown once per launch: crash report from the previous session, then an available update. */
+/**
+ * Shown on launch: the first-run welcome, a crash report from the previous session, then a
+ * floating "update available" card (Update / Later).
+ */
 @Composable
-fun StartupDialogs() {
+fun StartupDialogs(onSignIn: () -> Unit = {}) {
     val context = LocalContext.current
+    var welcome by rememberSaveable { mutableStateOf(shouldShowWelcome(context)) }
     var crash by remember { mutableStateOf(CrashReporter.pending(context)) }
     var update by remember { mutableStateOf<UpdateInfo?>(null) }
     var checked by rememberSaveable { mutableStateOf(false) }
@@ -56,28 +60,40 @@ fun StartupDialogs() {
         if (!Graph.settingsState.value.autoUpdateCheck) return@LaunchedEffect
         val prefs = context.getSharedPreferences("updater", Context.MODE_PRIVATE)
         val last = prefs.getLong("last_check", 0)
-        if (System.currentTimeMillis() - last < 4 * 3600_000L) return@LaunchedEffect
+        if (System.currentTimeMillis() - last < 30 * 60_000L) return@LaunchedEffect
         val info = runCatching { Updater.check() }.getOrNull()
         prefs.edit().putLong("last_check", System.currentTimeMillis()).apply()
         if (info == null || prefs.getString("skipped", null) == info.version) return@LaunchedEffect
         Updater.state.value = com.vidora.app.util.UpdateState.Available(info)
         val s = Graph.settingsState.value
         if (s.autoInstallUpdates && info.apkUrl != null && Updater.canInstall(context)) {
-            // New version → download in the background and hand it to the installer automatically.
+            // The user opted into silent updates → download in the background and install.
             Toast.makeText(context, "Downloading Vidora ${info.version}…", Toast.LENGTH_SHORT).show()
             Graph.appScope.launch { Updater.downloadAndInstall(context.applicationContext, info) }
-        } else update = info
+            return@LaunchedEffect
+        }
+        // "Later" hides the card for a few hours, then it comes back on the next launch.
+        val laterVersion = prefs.getString("later_version", null)
+        val laterUntil = prefs.getLong("later_until", 0)
+        if (laterVersion == info.version && System.currentTimeMillis() < laterUntil) return@LaunchedEffect
+        while (welcome) delay(500) // never stack on top of the welcome card
+        update = info
     }
 
+    if (welcome) {
+        WelcomeCard(onSignIn = { welcome = false; onSignIn() }, onDone = { welcome = false })
+        return
+    }
     crash?.let { report ->
         CrashDialog(report) { CrashReporter.clear(context); crash = null }
         return
     }
     update?.let { info ->
-        UpdateDialog(info, onSkip = {
-            context.getSharedPreferences("updater", Context.MODE_PRIVATE).edit().putString("skipped", info.version).apply()
+        UpdateCardNotice(info) {
+            context.getSharedPreferences("updater", Context.MODE_PRIVATE).edit()
+                .putString("later_version", info.version).putLong("later_until", System.currentTimeMillis() + 6 * 3600_000L).apply()
             update = null
-        }) { update = null }
+        }
     }
 }
 
@@ -119,49 +135,6 @@ fun CrashDialog(report: String, onDismiss: () -> Unit) {
 }
 
 @Composable
-fun UpdateDialog(info: UpdateInfo, onSkip: (() -> Unit)? = null, onDismiss: () -> Unit) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val st by Updater.state.collectAsState()
-    val progress = (st as? com.vidora.app.util.UpdateState.Downloading)?.progress
-    val error = (st as? com.vidora.app.util.UpdateState.Failed)?.message
-    LaunchedEffect(st) { if (st is com.vidora.app.util.UpdateState.Installing) onDismiss() }
-    GlassAlertDialog(
-        onDismissRequest = { if (progress == null) onDismiss() },
-        title = { Text("Update available · ${info.version}") },
-        text = {
-            Column {
-                Text(
-                    info.notes.ifBlank { "A new version of Vidora is available." }.take(1500),
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.heightIn(max = 260.dp).verticalScroll(rememberScrollState())
-                )
-                progress?.let {
-                    Spacer(Modifier.height(12.dp))
-                    LinearProgressIndicator(progress = { it }, modifier = Modifier.fillMaxWidth())
-                }
-                error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
-            }
-        },
-        confirmButton = {
-            TextButton(enabled = progress == null, onClick = {
-                if (info.apkUrl == null) {
-                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(info.pageUrl))); onDismiss(); return@TextButton
-                }
-                if (!Updater.canInstall(context)) {
-                    Toast.makeText(context, "Allow Vidora to install updates, then tap Update again", Toast.LENGTH_LONG).show()
-                    Updater.openInstallPermission(context); return@TextButton
-                }
-                Graph.appScope.launch { Updater.downloadAndInstall(context.applicationContext, info) }
-            }) { Text(if (progress != null) "Downloading…" else "Update") }
-        },
-        dismissButton = {
-            if (progress == null) {
-                Column {
-                    if (onSkip != null) TextButton(onClick = onSkip) { Text(stringResource(R.string.ui_skip_this_version)) }
-                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.ui_later)) }
-                }
-            }
-        }
-    )
+fun UpdateDialog(info: UpdateInfo, @Suppress("UNUSED_PARAMETER") onSkip: (() -> Unit)? = null, onDismiss: () -> Unit) {
+    UpdateCardNotice(info, onLater = onDismiss)
 }

@@ -186,7 +186,7 @@ fun glassContainerColor(solid: Color = MaterialTheme.colorScheme.surfaceContaine
     if (LocalGlass.current.enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) solid.copy(alpha = 0.80f) else solid
 
 @Composable
-private fun glassEdge(): Brush {
+internal fun glassEdge(): Brush {
     val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     return Brush.verticalGradient(
         if (dark) listOf(Color.White.copy(alpha = 0.22f), Color.White.copy(alpha = 0.03f))

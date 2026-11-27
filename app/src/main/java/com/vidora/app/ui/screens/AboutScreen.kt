@@ -7,6 +7,7 @@ import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -66,6 +67,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import coil3.compose.AsyncImage
 import com.vidora.app.BuildConfig
@@ -88,6 +90,7 @@ fun AboutScreen(nav: NavHostController) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val about by Graph.about.state.collectAsState()
+    val developer by Graph.about.developer.collectAsState()
     val update by Updater.state.collectAsState()
     val settings by Graph.settings.flow.collectAsState(initial = null)
     var loading by remember { mutableStateOf(false) }
@@ -132,6 +135,9 @@ fun AboutScreen(nav: NavHostController) {
                 }
             }
 
+            // ------------------------------------------------------------ developer
+            item { DeveloperCard(developer, open = ::open) }
+
             // ------------------------------------------------------------ updates
             item { UpdateCard(update, settings?.autoInstallUpdates ?: true, onAutoInstall = { v -> scope.launch { Graph.settings.update { it.copy(autoInstallUpdates = v) } } }, open = ::open) }
 
@@ -162,6 +168,12 @@ fun AboutScreen(nav: NavHostController) {
                     LinkRow("Source code", "github.com/${Updater.REPO}") { open("https://github.com/${Updater.REPO}") }
                     LinkRow("All releases & changelog", "Every version with its notes") { open("https://github.com/${Updater.REPO}/releases") }
                     LinkRow("Edit this About page", "Opens ABOUT.md on GitHub (owner only)") { open(AboutRepository.editUrl()) }
+                    LinkRow("Edit developer profile", "Name, bio, WhatsApp, email, links — developer.txt (owner only)") {
+                        open(AboutRepository.editDeveloperUrl(developer?.ref ?: AboutRepository.REFS.last()))
+                    }
+                    LinkRow("Upload developer photo", "Upload photo.jpg to the about folder (owner only)") {
+                        open(AboutRepository.uploadPhotoUrl(developer?.ref ?: AboutRepository.REFS.last()))
+                    }
                     LinkRow("Open-source licences", "NewPipe Extractor GPLv3 · Media3 Apache 2.0 · Framework7 Icons MIT") {
                         open("https://github.com/${Updater.REPO}#licences")
                     }
@@ -325,4 +337,149 @@ private fun inline(text: String, links: TextLinkStyles): AnnotatedString = build
         i = m.range.last + 1
     }
     append(text.substring(i))
+}
+
+
+// ------------------------------------------------------------------------------ developer card
+
+private data class Contact(
+    val key: String, val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector, val color: Color,
+    val url: (String) -> String,
+)
+
+private fun handle(v: String) = v.trim().removePrefix("@")
+private fun web(v: String, base: String) = if (v.startsWith("http")) v else base + handle(v)
+
+/** Bangladesh-friendly: "01712-345678" → 8801712345678 for wa.me. */
+private fun waNumber(v: String): String {
+    val d = v.filter { it.isDigit() }
+    return if (d.startsWith("0") && d.length == 11) "88$d" else d
+}
+
+private val Contacts = listOf(
+    Contact("whatsapp", "WhatsApp", com.vidora.app.ui.icons.BrandGlyphs.whatsapp, Color(0xFF25D366)) { v ->
+        if (v.startsWith("http")) v else "https://wa.me/${waNumber(v)}?text=" + Uri.encode("Hi! I'm messaging from Vidora.")
+    },
+    Contact("phone", "Call", com.vidora.app.ui.icons.IosGlyphs.phoneFill, Color(0xFF34C759)) { v -> "tel:" + v.filter { it.isDigit() || it == '+' } },
+    Contact("email", "Email", com.vidora.app.ui.icons.IosGlyphs.envelopeFill, Color(0xFF007AFF)) { v ->
+        "mailto:$v?subject=" + Uri.encode("Vidora")
+    },
+    Contact("telegram", "Telegram", com.vidora.app.ui.icons.BrandGlyphs.telegram, Color(0xFF26A5E4)) { v -> web(v, "https://t.me/") },
+    Contact("facebook", "Facebook", com.vidora.app.ui.icons.BrandGlyphs.facebook, Color(0xFF0866FF)) { v -> web(v, "https://facebook.com/") },
+    Contact("instagram", "Instagram", com.vidora.app.ui.icons.BrandGlyphs.instagram, Color(0xFFE4405F)) { v -> web(v, "https://instagram.com/") },
+    Contact("youtube", "YouTube", com.vidora.app.ui.icons.BrandGlyphs.youtube, Color(0xFFFF0000)) { v -> web(v, "https://youtube.com/@") },
+    Contact("tiktok", "TikTok", com.vidora.app.ui.icons.BrandGlyphs.tiktok, Color(0xFF111111)) { v -> web(v, "https://tiktok.com/@") },
+    Contact("x", "X (Twitter)", com.vidora.app.ui.icons.BrandGlyphs.x, Color(0xFF111111)) { v -> web(v, "https://x.com/") },
+    Contact("github", "GitHub", com.vidora.app.ui.icons.BrandGlyphs.github, Color(0xFF24292F)) { v -> web(v, "https://github.com/") },
+    Contact("website", "Website", com.vidora.app.ui.icons.IosGlyphs.globe, Color(0xFF5856D6)) { v -> if (v.startsWith("http")) v else "https://$v" },
+)
+
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+private fun DeveloperCard(dev: AboutRepository.Developer?, open: (String) -> Unit) {
+    val context = LocalContext.current
+    var bigPhoto by remember { mutableStateOf(false) }
+    GlassCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.fillMaxWidth().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("DEVELOPER", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                letterSpacing = 1.5.sp)
+            Spacer(Modifier.height(14.dp))
+            // Photo with an accent ring (tap to enlarge)
+            Box(
+                Modifier.size(112.dp).clip(CircleShape)
+                    .background(androidx.compose.ui.graphics.Brush.sweepGradient(listOf(Color(0xFFFF2D55), Color(0xFFFF9500), Color(0xFFAF52DE), Color(0xFF007AFF), Color(0xFFFF2D55))))
+                    .padding(3.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surface).padding(3.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                val photo = dev?.photoUrl
+                if (photo != null) AsyncImage(
+                    photo, "Developer photo", contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize().clip(CircleShape).clickable { bigPhoto = true },
+                ) else Icon(com.vidora.app.ui.icons.IosGlyphs.personCropCircleFill, null, Modifier.fillMaxSize(), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Spacer(Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(dev?.name ?: "Vidora developer", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                if ((dev?.get("verified")?.lowercase() ?: "") in setOf("yes", "true", "1")) {
+                    Icon(com.vidora.app.ui.icons.IosGlyphs.checkmarkSealFill, null, Modifier.padding(start = 6.dp).size(20.dp), tint = Color(0xFF007AFF))
+                }
+            }
+            dev?.get("role")?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold) }
+            dev?.get("location")?.let {
+                Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(com.vidora.app.ui.icons.IosGlyphs.locationFill, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.width(4.dp))
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            dev?.get("bio")?.let {
+                Text(it.replace("\\n", "\n"), style = MaterialTheme.typography.bodyMedium, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.padding(top = 10.dp))
+            }
+            val contacts = Contacts.mapNotNull { c -> dev?.get(c.key)?.let { c to it } }
+            if (contacts.isNotEmpty()) {
+                // Quick round buttons (first four), like an iOS contact card
+                Spacer(Modifier.height(16.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    contacts.take(4).forEach { (c, v) ->
+                        Column(
+                            Modifier.clip(RoundedCornerShape(14.dp)).clickable { open(c.url(v)) }.padding(6.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Box(Modifier.size(52.dp).clip(CircleShape).background(c.color), contentAlignment = Alignment.Center) {
+                                Icon(c.icon, c.label, Modifier.size(26.dp), tint = Color.White)
+                            }
+                            Text(c.label.substringBefore(" ("), style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 4.dp))
+                        }
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                // Full list: tap opens, long-press copies
+                contacts.forEach { (c, v) ->
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                            .combinedClickable(
+                                onClick = { open(c.url(v)) },
+                                onLongClick = {
+                                    val cm = context.getSystemService(android.content.ClipboardManager::class.java)
+                                    cm.setPrimaryClip(android.content.ClipData.newPlainText(c.label, v))
+                                    Toast.makeText(context, "${c.label} copied", Toast.LENGTH_SHORT).show()
+                                },
+                            )
+                            .padding(vertical = 10.dp, horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(Modifier.size(32.dp).clip(RoundedCornerShape(8.dp)).background(c.color), contentAlignment = Alignment.Center) {
+                            Icon(c.icon, null, Modifier.size(18.dp), tint = Color.White)
+                        }
+                        Spacer(Modifier.width(14.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(c.label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(v, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                        }
+                        Icon(com.vidora.app.ui.icons.IosGlyphs.docOnDoc, "Copy", Modifier.size(18.dp).clickable {
+                            val cm = context.getSystemService(android.content.ClipboardManager::class.java)
+                            cm.setPrimaryClip(android.content.ClipData.newPlainText(c.label, v))
+                            Toast.makeText(context, "${c.label} copied", Toast.LENGTH_SHORT).show()
+                        }, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            } else if (dev == null) {
+                Text(
+                    "Developer profile loads from GitHub — connect to the internet.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
+        }
+    }
+    if (bigPhoto) dev?.photoUrl?.let { url ->
+        androidx.compose.ui.window.Dialog(onDismissRequest = { bigPhoto = false }) {
+            AsyncImage(
+                url, "Developer photo", contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).clickable { bigPhoto = false },
+            )
+        }
+    }
 }

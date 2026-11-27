@@ -119,7 +119,8 @@ data class AppSettings(
     /** Prefer AV1 / VP9 when the phone has a hardware decoder (same quality, less data). */
     val efficientCodecs: Boolean = true,
     /** Download and install new versions automatically (Android may ask to confirm). */
-    val autoInstallUpdates: Boolean = true,
+    /** Off by default: new versions show a floating Update / Later card instead of installing silently. */
+    val autoInstallUpdates: Boolean = false,
     val downloadConnections: Int = 3,
     val returnDislike: Boolean = true,
     val deArrow: Boolean = false,

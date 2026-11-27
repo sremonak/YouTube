@@ -109,7 +109,10 @@ EXTRA = ['info_circle_fill', 'arrow_2_circlepath', 'tv', 'antenna_radiowaves_lef
          'logo_github', 'device_phone_portrait', 'hand_raised_fill', 'paintbrush_fill', 'sparkles',
          # iOS Settings tiles
          'person_fill', 'square_grid_2x2_fill', 'play_rectangle_fill', 'shield_lefthalf_fill', 'hand_thumbsup_fill',
-         'arrow_down_to_line', 'gear_alt_fill', 'sun_max_fill', 'captions_bubble_fill', 'bell_fill']
+         'arrow_down_to_line', 'gear_alt_fill', 'sun_max_fill', 'captions_bubble_fill', 'bell_fill',
+         # contact card, welcome, floating notices
+         'envelope_fill', 'phone_fill', 'globe', 'location_fill', 'doc_on_doc', 'person_crop_circle_fill',
+         'play_circle_fill', 'arrow_down_circle_fill', 'square_arrow_right', 'pencil_circle_fill', 'shield_fill']
 
 def num(s): return float(s)
 

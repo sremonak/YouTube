@@ -30,6 +30,43 @@ class AboutRepository(private val context: Context) {
     private val _state = MutableStateFlow(loadCached())
     val state: StateFlow<About> = _state
 
+    // ------------------------------------------------------------ developer profile card
+    /** The owner's card (photo, name, bio, WhatsApp, email…) from `about/developer.txt`. */
+    data class Developer(val fields: Map<String, String>, val ref: String, val fetchedAt: Long) {
+        operator fun get(key: String): String? = fields[key]?.trim()?.takeIf { it.isNotEmpty() }
+        val name get() = get("name")
+        /** `photo: photo.jpg` (a file uploaded next to developer.txt) or any https link. */
+        val photoUrl: String?
+            get() = get("photo")?.let { p ->
+                if (p.startsWith("http://") || p.startsWith("https://")) p
+                else "https://raw.githubusercontent.com/${Updater.REPO}/$ref/about/${p.removePrefix("/").removePrefix("about/")}" +
+                    "?v=${fetchedAt / 3_600_000}"
+            }
+    }
+
+    private val devFile get() = File(context.filesDir, "about_developer.txt")
+    private val _developer = MutableStateFlow(loadDeveloperCached())
+    val developer: StateFlow<Developer?> = _developer
+
+    private fun loadDeveloperCached(): Developer? {
+        val f = devFile
+        if (!f.exists() || f.length() == 0L) return null
+        return Developer(parseFields(f.readText()), prefs.getString("dev_ref", REFS.last()) ?: REFS.last(), prefs.getLong("dev_at", 0))
+    }
+
+    private suspend fun refreshDeveloper() = withContext(Dispatchers.IO) {
+        for (ref in REFS) {
+            val text = runCatching { fetchApi(DEV_PATH, ref, devFile, "dev") }.getOrNull()
+                ?: runCatching { fetchRaw(DEV_PATH, ref) }.getOrNull()
+                ?: continue
+            devFile.writeText(text)
+            val now = System.currentTimeMillis()
+            prefs.edit().putString("dev_ref", ref).putLong("dev_at", now).apply()
+            _developer.value = Developer(parseFields(text), ref, now)
+            return@withContext
+        }
+    }
+
     private fun loadCached(): About {
         val f = cacheFile
         return if (f.exists() && f.length() > 0) About(f.readText(), prefs.getLong("at", 0), Source.CACHE)
@@ -38,10 +75,11 @@ class AboutRepository(private val context: Context) {
 
     /** Fetches the newest text. Returns null on success, or an error message (the cache stays). */
     suspend fun refresh(): String? = withContext(Dispatchers.IO) {
+        runCatching { refreshDeveloper() }
         var lastError: String? = null
         for (ref in REFS) {
             try {
-                val text = fetchApi(ref) ?: continue
+                val text = fetchApi(PATH, ref, cacheFile, "") ?: continue
                 save(text, ref)
                 return@withContext null
             } catch (e: Exception) {
@@ -50,7 +88,7 @@ class AboutRepository(private val context: Context) {
         }
         for (ref in REFS) {
             try {
-                val text = fetchRaw(ref) ?: continue
+                val text = fetchRaw(PATH, ref) ?: continue
                 save(text, ref)
                 return@withContext null
             } catch (e: Exception) {
@@ -68,16 +106,17 @@ class AboutRepository(private val context: Context) {
     }
 
     /** GitHub contents API with the raw media type; uses ETags so unchanged pages cost nothing. */
-    private fun fetchApi(ref: String): String? {
-        val etagKey = "etag:$ref"
+    private fun fetchApi(path: String, ref: String, cache: File, key: String): String? {
+        val etagKey = "etag$key:$ref"
+        val refKey = if (key.isEmpty()) "ref" else "${key}_ref"
         val req = Request.Builder()
-            .url("https://api.github.com/repos/${Updater.REPO}/contents/$PATH?ref=" + android.net.Uri.encode(ref))
+            .url("https://api.github.com/repos/${Updater.REPO}/contents/$path?ref=" + android.net.Uri.encode(ref))
             .header("Accept", "application/vnd.github.raw")
             .header("X-GitHub-Api-Version", "2022-11-28")
-            .apply { prefs.getString(etagKey, null)?.takeIf { prefs.getString("ref", null) == ref && cacheFile.exists() }?.let { header("If-None-Match", it) } }
+            .apply { prefs.getString(etagKey, null)?.takeIf { prefs.getString(refKey, null) == ref && cache.exists() }?.let { header("If-None-Match", it) } }
             .build()
         Graph.http.newCall(req).execute().use { r ->
-            if (r.code == 304) return cacheFile.readText()
+            if (r.code == 304) return cache.readText()
             if (r.code == 404) return null
             if (!r.isSuccessful) throw IOException("GitHub HTTP ${r.code}")
             val body = r.body?.string().orEmpty()
@@ -87,9 +126,9 @@ class AboutRepository(private val context: Context) {
         }
     }
 
-    private fun fetchRaw(ref: String): String? {
+    private fun fetchRaw(path: String, ref: String): String? {
         val req = Request.Builder()
-            .url("https://raw.githubusercontent.com/${Updater.REPO}/$ref/$PATH?t=${System.currentTimeMillis() / 60_000}")
+            .url("https://raw.githubusercontent.com/${Updater.REPO}/$ref/$path?t=${System.currentTimeMillis() / 60_000}")
             .header("Cache-Control", "no-cache")
             .build()
         Graph.http.newCall(req).execute().use { r ->
@@ -101,6 +140,15 @@ class AboutRepository(private val context: Context) {
 
     companion object {
         const val PATH = "about/ABOUT.md"
+        const val DEV_PATH = "about/developer.txt"
+        fun editDeveloperUrl(ref: String = REFS.last()) = "https://github.com/${Updater.REPO}/edit/$ref/$DEV_PATH"
+        fun uploadPhotoUrl(ref: String = REFS.last()) = "https://github.com/${Updater.REPO}/upload/$ref/about"
+
+        /** `key: value` lines; `#` lines are notes. Keys are case-insensitive. */
+        fun parseFields(text: String): Map<String, String> = text.lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() && !it.startsWith("#") && it.contains(':') }
+            .associate { line -> line.substringBefore(':').trim().lowercase() to line.substringAfter(':').trim() }
         val REFS = listOf("main", "arena/4ab58c16-youtube")
         fun editUrl(ref: String = "main") = "https://github.com/${Updater.REPO}/edit/$ref/$PATH"
 

@@ -73,7 +73,8 @@ private const val SIGN_IN_URL =
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoginScreen(nav: NavHostController) {
-    var started by remember { mutableStateOf(false) }
+    // From the welcome card: the Google account is already chosen → straight to Google's page.
+    var started by remember { mutableStateOf(com.vidora.app.ui.components.LoginHint.direct.also { com.vidora.app.ui.components.LoginHint.direct = false }) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     com.vidora.app.ui.theme.GlassPage(header = {
@@ -253,7 +254,10 @@ private fun SignInWebView(nav: NavHostController) {
                             return scheme != "https" && scheme != "http"
                         }
                     }
-                    loadUrl(SIGN_IN_URL)
+                    // Pre-fill the account picked from the phone's Google accounts: Google then asks only to
+                    // confirm it's you (a prompt on this phone) or for the password once.
+                    val hint = com.vidora.app.ui.components.LoginHint.email
+                    loadUrl(if (hint.isNullOrBlank()) SIGN_IN_URL else SIGN_IN_URL + "&Email=" + android.net.Uri.encode(hint) + "&login_hint=" + android.net.Uri.encode(hint))
                 }
             },
             onRelease = { it.stopLoading(); it.destroy() },

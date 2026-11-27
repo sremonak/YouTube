@@ -163,6 +163,12 @@ fun AppRoot(activity: MainActivity, settings: AppSettings) {
         }
     }
 
+    // Back on Home (the root) → floating "Exit Vidora?" card instead of closing straight away.
+    // Registered before the NavHost, so screens' own back handlers still win.
+    var askExit by remember { mutableStateOf(false) }
+    androidx.activity.compose.BackHandler(enabled = route == Routes.HOME && !activity.isInPip) { askExit = true }
+    if (askExit) com.vidora.app.ui.components.ExitCard(activity) { askExit = false }
+
     // While in picture-in-picture only the video surface is shown.
     if (activity.isInPip) {
         PlayerScreen(nav = nav, actions = actions, activity = activity, pipMode = true)
@@ -309,7 +315,7 @@ fun AppRoot(activity: MainActivity, settings: AppSettings) {
     }
 
     downloadTarget?.let { video -> DownloadSheet(video = video, onDismiss = { downloadTarget = null }) }
-    com.vidora.app.ui.components.StartupDialogs()
+    com.vidora.app.ui.components.StartupDialogs(onSignIn = { nav.navigate(Routes.LOGIN) { launchSingleTop = true } })
 }
 
 @Composable
