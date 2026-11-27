@@ -154,10 +154,11 @@ jobs:
           printf 'Build instructions and licence: https://github.com/%s/tree/%s\n' "$GITHUB_REPOSITORY" "$tag" >> notes.txt
           gh release create "$tag" dist/*.apk dist/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
             --title "Vidora ${VIDORA_VERSION_NAME}" --notes-file notes.txt --latest
-          # keep the 5 newest releases
+          # Keep recent binary releases plus the upgrade baseline. Preserve source tags so
+          # previously distributed APKs retain their corresponding GPL source archive URLs.
           gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName,createdAt \
             --jq 'map(select(.tagName != "v1.0.108")) | sort_by(.createdAt) | reverse | .[5:] | .[].tagName' |
-            xargs -r -n1 gh release delete --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
+            xargs -r -n1 gh release delete --repo "$GITHUB_REPOSITORY" --yes || true
 
       - name: Publish GitHub release
         if: startsWith(github.ref, 'refs/tags/v')
