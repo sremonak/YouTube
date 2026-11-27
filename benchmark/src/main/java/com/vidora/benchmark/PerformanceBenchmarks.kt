@@ -41,6 +41,7 @@ class PerformanceBenchmarks {
         setupBlock = {
             device.executeShellCommand("pm grant com.vidora.app android.permission.POST_NOTIFICATIONS")
             startActivityAndWait(); device.enterGuestHome()
+            check(device.wait(Until.hasObject(By.desc("More")), 30_000)) { "No Home video cards to measure" }
         },
     ) {
         val x = device.displayWidth / 2
@@ -56,6 +57,7 @@ class ProfileGenerator {
         device.executeShellCommand("pm grant com.vidora.app android.permission.POST_NOTIFICATIONS")
         pressHome(); startActivityAndWait()
         device.enterGuestHome()
+        check(device.wait(Until.hasObject(By.desc("More")), 30_000)) { "No Home video cards for the profile journey" }
         val x = device.displayWidth / 2
         device.swipe(x, device.displayHeight * 3 / 4, x, device.displayHeight / 3, 20)
         checkNotNull(device.findObject(By.desc("Search"))).click()
