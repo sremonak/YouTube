@@ -50,4 +50,5 @@
     <string name="widget_next">পরের</string>
     <string name="widget_play_pause">প্লে বা পজ</string>
     <string name="tile_idle">কিছু চলছে না</string>
+    <string name="playback_starting">ভিডিও চালু হচ্ছে…</string>
 </resources>

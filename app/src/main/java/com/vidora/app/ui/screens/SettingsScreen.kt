@@ -544,6 +544,14 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
 
             // ------------------------------------------------------------ content & privacy
             section(Sec.CONTENT)
+            item { SwitchRow("Continue watching on Home", "Show saved playback below the feed categories; hide it from the section itself", s.showContinueWatching) { v -> update { it.copy(showContinueWatching = v) } } }
+            item {
+                val region by Graph.region.state.collectAsStateWithLifecycle()
+                val sync by com.vidora.app.account.AccountSync.watchStatus.collectAsStateWithLifecycle()
+                ClickRow("Home feed & sync status", "Region ${region.code} · ${region.method} · $sync") {
+                    Toast.makeText(context, "Pull down on Home or tap Home again to refresh. Public Explore is separate from signed-in YouTube recommendations.", Toast.LENGTH_LONG).show()
+                }
+            }
             item { SwitchRow("Use IP country for Home", "Country-only lookup via country.is (sees your public IP). No GPS. Used only when Content country is Automatic; Search stays query-based.", s.autoRegionByIp) { v -> update { it.copy(autoRegionByIp = v) } } }
             item { ClickRow(stringResource(R.string.ui_content_country), Countries.firstOrNull { it.first == s.contentCountry }?.second ?: s.contentCountry) { dialog = "country" } }
             item { ClickRow("Home language", com.vidora.app.data.HomeRanking.languages.firstOrNull { it.first == s.homeLanguage }?.second ?: "Any language") { dialog = "homelang" } }

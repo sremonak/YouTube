@@ -75,6 +75,7 @@ data class AppSettings(
     val contentCountry: String = "",
     val autoRegionByIp: Boolean = true,
     val homeLanguage: String = "",
+    val showContinueWatching: Boolean = true,
     val homeInterests: Set<String> = emptySet(),
     val lessLikeVideos: Set<String> = emptySet(),
     val saveHistory: Boolean = true,
@@ -216,6 +217,7 @@ class SettingsRepository(private val context: Context) {
         val notifyHours = intPreferencesKey("notify_hours")
         val syncAccountActions = booleanPreferencesKey("sync_account")
         val syncWatchHistory = booleanPreferencesKey("sync_watch_history")
+        val showContinueWatching = booleanPreferencesKey("show_continue_watching")
         val persistQueue = booleanPreferencesKey("persist_queue")
     }
 
@@ -298,6 +300,7 @@ class SettingsRepository(private val context: Context) {
             notifyHours = this[K.notifyHours] ?: d.notifyHours,
             syncAccountActions = this[K.syncAccountActions] ?: d.syncAccountActions,
             syncWatchHistory = this[K.syncWatchHistory] ?: d.syncWatchHistory,
+            showContinueWatching = this[K.showContinueWatching] ?: d.showContinueWatching,
             persistQueue = this[K.persistQueue] ?: d.persistQueue,
         )
     }
@@ -379,6 +382,7 @@ class SettingsRepository(private val context: Context) {
             p[K.notifyHours] = s.notifyHours
             p[K.syncAccountActions] = s.syncAccountActions
             p[K.syncWatchHistory] = s.syncWatchHistory
+            p[K.showContinueWatching] = s.showContinueWatching
             p[K.persistQueue] = s.persistQueue
         }
     }

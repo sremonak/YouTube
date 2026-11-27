@@ -8,7 +8,7 @@ object Diagnostics {
         if (!enabled) return
         // Callers pass enum-like constants, never an exception's message.
         val c = component.takeIf { it in setOf("provider", "cache", "playback", "test") } ?: "other"
-        val o = outcome.takeIf { it in setOf("success", "failure", "write_failed", "clear_failed", "extracted", "rebuffer", "dropped_frames", "STOP", "REFRESH", "LOWER_QUALITY", "RETRY", "PAUSE", "ok") } ?: "redacted"
+        val o = outcome.takeIf { it in setOf("success", "failure", "write_failed", "clear_failed", "extracted", "rebuffer", "dropped_frames", "foreground_started", "STOP", "REFRESH", "LOWER_QUALITY", "RETRY", "PAUSE", "ok") } ?: "redacted"
         if (events.size == 80) events.removeFirst()
         events.addLast("$c $o elapsed_ms=${elapsedMs.coerceAtLeast(0)} count=${count.coerceAtLeast(0)}")
     }

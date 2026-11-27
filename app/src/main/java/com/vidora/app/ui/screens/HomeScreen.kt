@@ -15,20 +15,12 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import com.vidora.app.ui.icons.AccountCircle
 import com.vidora.app.ui.icons.PlayArrow
-import com.vidora.app.ui.icons.FileDownload
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.height
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.sp
-import com.vidora.app.ui.icons.Refresh
-import com.vidora.app.ui.icons.Info
-import com.vidora.app.ui.icons.Settings
-import com.vidora.app.ui.icons.VideoLibrary
-import com.vidora.app.ui.icons.Visibility
-import com.vidora.app.ui.icons.VisibilityOff
 import com.vidora.app.ui.icons.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -57,6 +49,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
@@ -89,7 +84,6 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
     val session by Graph.account.session.collectAsStateWithLifecycle()
     val signedIn = session != null && !settings.incognito
     val syncRevision by com.vidora.app.account.AccountSync.revision.collectAsStateWithLifecycle()
-    val syncStatus by com.vidora.app.account.AccountSync.watchStatus.collectAsStateWithLifecycle()
     val recommendations = remember(session?.signedInAt, signedIn) {
         com.vidora.app.account.RecommendationFeed { Graph.accountApi.feedWithChips(AccountFeed.RECOMMENDED) }
     }
@@ -134,12 +128,10 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
     LaunchedEffect(paged) {
         com.vidora.app.ui.TabReselect.events.collect { if (it == Routes.HOME) paged.load(refresh = true) }
     }
-    var regionDetails by remember { mutableStateOf(false) }
     val snackbar = remember { androidx.compose.material3.SnackbarHostState() }
     LaunchedEffect(paged, paged.refreshMessage) {
         paged.refreshMessage?.let { snackbar.showSnackbar(it) }
     }
-    var showContinue by rememberSaveable { mutableStateOf(true) }
     val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(paged, lifecycle) {
         lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.RESUMED) {
@@ -150,18 +142,6 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
             }
         }
     }
-    if (regionDetails) com.vidora.app.ui.theme.GlassAlertDialog(
-        onDismissRequest = { regionDetails = false },
-        title = { Text("Feed status") },
-        text = { Column {
-            Text("${com.vidora.app.data.GuestSources.countryName(region.code)} · ${region.method}. ${if (signedIn && tab.key == "acc") "YouTube account recommendations" else "Public discovery"}. Search is independent.")
-            Text(if (signedIn) "YouTube history: ${if (settings.syncWatchHistory) "on" else "off"} · $syncStatus" else "Sign in to YouTube for account history and recommendations. Public feeds do not sync a guest account.")
-            if (signedIn) androidx.compose.material3.TextButton(onClick = { com.vidora.app.account.AccountSync.syncRecordedHistory() }) { Text("Sync recorded history") }
-            com.vidora.app.ui.components.ProviderStatus(paged)
-        } },
-        confirmButton = { androidx.compose.material3.TextButton(onClick = { regionDetails = false }) { Text("Done") } },
-    )
-
     var shownTab by rememberSaveable { mutableStateOf(tab.key) }
     LaunchedEffect(tab.key, signedIn, region.code, paged) {
         paged.ensureLoaded(com.vidora.app.data.FeedFreshness.REVALIDATE_MS)
@@ -183,24 +163,9 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
                         Icon(IosGlyphs.arrowDownCircleFill, if (updateAvailable != null) "Update available" else "Check for updates")
                     }
                 }
-                IconButton(onClick = { nav.navigate(if (signedIn) Routes.SETTINGS else Routes.LOGIN) }) {
-                    Icon(Icons.Rounded.AccountCircle, "Account")
-                }
             },
             colors = com.vidora.app.ui.theme.glassBarColors()
         )
-        LazyRow(contentPadding = PaddingValues(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            item { IconButton(enabled = !paged.loading && !paged.refreshing, onClick = {
-                paged.load(refresh = true); scope.launch { gridState.scrollToItem(0) }
-            }) { Icon(Icons.Rounded.Refresh, "Refresh feed") } }
-            item { IconButton(onClick = { nav.navigate(Routes.LIBRARY) }) { Icon(Icons.Rounded.VideoLibrary, "Library") } }
-            item { IconButton(onClick = { nav.navigate(Routes.SETTINGS) }) { Icon(Icons.Rounded.Settings, "Settings") } }
-            item { IconButton(onClick = { regionDetails = true }) { Icon(Icons.Rounded.Info, "Feed status") } }
-            item { IconButton(onClick = { showContinue = !showContinue }) {
-                Icon(if (showContinue) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
-                    if (showContinue) "Hide Continue watching" else "Show Continue watching")
-            } }
-        }
         LazyRow(
             contentPadding = PaddingValues(horizontal = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -214,7 +179,9 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
         }
     }) {
         Box(Modifier.fillMaxSize()) {
-            com.vidora.app.ui.theme.GlassRefreshBox(isRefreshing = paged.refreshing, onRefresh = { paged.load(refresh = true) }, modifier = Modifier.fillMaxSize()) {
+            com.vidora.app.ui.theme.GlassRefreshBox(isRefreshing = paged.refreshing, onRefresh = { paged.load(refresh = true) }, modifier = Modifier.fillMaxSize().semantics {
+                customActions = listOf(CustomAccessibilityAction("Refresh feed") { paged.load(refresh = true); true })
+            }) {
                 val library by Graph.library.data.collectAsStateWithLifecycle()
                 val resume = remember(library.history) { com.vidora.app.data.ContinueWatching.pick(library.history) }
                 EntryGrid(
@@ -223,7 +190,10 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
                     filter = { e -> !(e is Entry.Video && ((settings.hideShorts && e.video.isShort) || (tab.key == HomeSection.FOR_YOU.name && e.video.url in settings.lessLikeVideos))) },
                     header = {
                         Column {
-                            if (showContinue && resume.isNotEmpty() && tab.key == HomeSection.FOR_YOU.name) ContinueWatchingRow(resume, actions)
+                            if (paged.error != null || paged.retries.isNotEmpty()) com.vidora.app.ui.components.ProviderStatus(paged)
+                            if (settings.showContinueWatching && resume.isNotEmpty() && tab.key == HomeSection.FOR_YOU.name) ContinueWatchingRow(resume, actions) {
+                                scope.launch { Graph.settings.update { it.copy(showContinueWatching = false) } }
+                            }
                         }
                     }
                 )
@@ -248,9 +218,11 @@ private suspend fun loadSection(section: HomeSection, country: String): PageResu
 }
 
 @Composable
-private fun ContinueWatchingRow(entries: List<com.vidora.app.data.HistoryEntry>, actions: VideoActions) {
+private fun ContinueWatchingRow(entries: List<com.vidora.app.data.HistoryEntry>, actions: VideoActions, onHide: () -> Unit) {
     Column(Modifier.padding(bottom = 8.dp)) {
-        com.vidora.app.ui.components.SectionHeader("Continue watching")
+        com.vidora.app.ui.components.SectionHeader("Continue watching") {
+            androidx.compose.material3.TextButton(onClick = onHide) { Text("Hide") }
+        }
         LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             items(entries, key = { it.video.url }) { h ->
                 Column(Modifier.width(176.dp).clickable { actions.open(h.video) }) {

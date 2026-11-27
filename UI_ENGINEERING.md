@@ -106,3 +106,27 @@ history migration, and direct Home/Downloads/Shorts navigation. They do not prov
 real private YouTube account accepted a write: no user session or Google account is
 available in CI. The app must show that account-specific result instead of promising
 that all upstream/account/network-dependent features always work.
+
+## Android 11 foreground-service deadline / calm Home follow-up
+
+Media3 can enqueue startForegroundService during playing and deliver that start after
+pause/stop or an empty timeline. PlaybackService previously relied entirely on a future
+Media3 READY notification. It now acknowledges every delivered onStartCommand with a
+synchronous ServiceCompat.startForeground **before** session/player lazy construction.
+A pre-existing Media3 notification is reused; the bootstrap and the provider share ID
+1001/channel playback, so controls/artwork are not replaced by a second notification.
+Bound-only idle Home does not promote the service. A bounded startup cleanup removes
+an idle bootstrap; ongoing/paused media ownership returns to Media3 without an update
+loop. Idle service restarts are non-sticky; this does not autoplay a saved queue.
+
+The mandatory API 30/API 34 gate starts the real foreground service with an empty
+player, repeats queued starts during rapid local playback/stop, crosses the real Android
+watchdog interval, and checks idle foreground/notification cleanup. These are emulator
+regressions, not certification of the Symphony vendor firmware.
+
+The Home utility icon tray is removed. The toolbar contains only brand, Search and
+Update; feed-category chips remain navigation. Library/Account/Settings stay under You,
+Downloads remains a bottom destination, pull/reselect refresh remains, and TalkBack has
+a custom Refresh feed action. Continue watching has an in-section Hide action and a
+persisted Content-settings switch. Region/sync explanations live in Settings rather
+than an always-visible Home row. Shared card/sheet visual baselines remain unchanged.

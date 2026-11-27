@@ -32,7 +32,7 @@ class GuestReleaseGateTest {
         }
         context.getSharedPreferences("vidora_onboarding", 0).edit().putBoolean("welcome_done", true).commit()
         Graph.settings.update { it.copy(autoUpdateCheck = false, autoRegionByIp = false, contentCountry = "US", glassUi = false,
-            sponsorBlock = false, prefetchNext = false, persistQueue = false, onboardingDone = true, homeInterests = emptySet(), homeLanguage = "", lessLikeVideos = emptySet()) }
+            sponsorBlock = false, prefetchNext = false, persistQueue = false, showContinueWatching = true, onboardingDone = true, homeInterests = emptySet(), homeLanguage = "", lessLikeVideos = emptySet()) }
         com.vidora.app.ui.screens.ShortsSession.seed = emptyList()
         Graph.discoveryOverride = DiscoveryRepository(youtubeSearch = { _, _ -> PageResult(emptyList()) },
             peerSearch = { PageResult(listOf(Entry.Video(peer))) }, commonsSearch = { PageResult(listOf(Entry.Video(commons))) },
@@ -97,12 +97,17 @@ class GuestReleaseGateTest {
     @Test fun directHomeActionsDownloadsAndShortsAreReachable() {
         Graph.shortsOverride = ShortsRepository(browse = { PageResult(listOf(Entry.Video(peer.copy(isShort = true)))) }, search = { error("No search needed") })
         scenario = ActivityScenario.launch(MainActivity::class.java)
-        compose.waitUntil(20_000) { compose.onAllNodesWithContentDescription("Refresh feed").fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() }
+        compose.waitUntil(20_000) { compose.onAllNodesWithContentDescription("Search").fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() }
         compose.onNodeWithContentDescription("Home options").assertDoesNotExist()
-        compose.onNodeWithContentDescription("Library").assertIsDisplayed()
-        compose.onNodeWithContentDescription("Settings").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Library").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Settings").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Feed status").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Refresh feed").assertDoesNotExist()
         compose.onNodeWithText("Downloads").performClick()
         compose.waitUntil(10_000) { compose.onAllNodesWithText("Downloads").fetchSemanticsNodes(atLeastOneRootRequired = false).size >= 2 }
+        compose.onNodeWithText("You").performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithContentDescription("Settings").fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() }
+        compose.onNodeWithContentDescription("Settings").assertIsDisplayed()
         compose.onNodeWithText("Shorts").performClick()
         compose.waitUntil(20_000) { compose.onAllNodesWithContentDescription("Refresh Shorts").fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() }
         compose.onNodeWithContentDescription("Refresh Shorts").assertIsDisplayed()
@@ -116,11 +121,11 @@ class GuestReleaseGateTest {
         }, peerSearch = { PageResult(emptyList()) }, commonsSearch = { PageResult(emptyList()) }, peerHome = { PageResult(emptyList()) })
         scenario = ActivityScenario.launch(MainActivity::class.java)
         compose.waitUntil(20_000) { calls.get() > 0 && compose.onAllNodesWithText(peer.title).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() }
-        compose.onNodeWithContentDescription("Refresh feed").performClick()
+        compose.onNodeWithText("Home").performClick()
         compose.waitUntil(20_000) { compose.onAllNodesWithText(fresh.title).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() }
         assertTrue(calls.get() >= 2)
         compose.waitUntil(5000) { compose.onAllNodesWithText("Feed updated · fresh results loaded").fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() }
-        compose.onNodeWithContentDescription("Refresh feed").performClick()
+        compose.onNodeWithText("Home").performClick()
         compose.waitUntil(20_000) { compose.onAllNodesWithText("Checked just now · providers returned the same videos").fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() }
     }
     @Test fun searchFiltersAreReversibleAndKeyboardDoesNotCoverResults() {
