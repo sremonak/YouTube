@@ -9,6 +9,19 @@ plugins {
 val releaseKeystore: String? = System.getenv("VIDORA_KEYSTORE_FILE")
 val hasReleaseKey = !releaseKeystore.isNullOrBlank() && file(releaseKeystore).exists()
 
+// Derive the runtime pin from the actual signing certificate, never from an installed APK.
+// The public fallback key preserves upgrades but is NOT a private anti-clone identity.
+val signingCertificateSha256 = run {
+    val store = java.security.KeyStore.getInstance("PKCS12")
+    val path = if (hasReleaseKey) file(releaseKeystore!!) else file("debug.keystore")
+    val password = if (hasReleaseKey) System.getenv("VIDORA_KEYSTORE_PASSWORD") else "android"
+    val alias = if (hasReleaseKey) System.getenv("VIDORA_KEY_ALIAS") else "androiddebugkey"
+    path.inputStream().use { store.load(it, requireNotNull(password).toCharArray()) }
+    val certificate = requireNotNull(store.getCertificate(requireNotNull(alias))) { "Signing certificate missing" }
+    java.security.MessageDigest.getInstance("SHA-256").digest(certificate.encoded)
+        .joinToString("") { "%02x".format(it) }
+}
+
 val ciVersionCode = System.getenv("VIDORA_VERSION_CODE")?.toIntOrNull()
 val ciVersionName = System.getenv("VIDORA_VERSION_NAME")
 
@@ -22,6 +35,7 @@ android {
         targetSdk = 36
         versionCode = ciVersionCode ?: 1
         versionName = ciVersionName ?: "1.0.0"
+        buildConfigField("String", "TRUSTED_SIGNER_SHA256", "\"$signingCertificateSha256\"")
         vectorDrawables.useSupportLibrary = true
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

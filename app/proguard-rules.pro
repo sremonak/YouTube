@@ -1,5 +1,7 @@
 # ---- Vidora R8 rules ----
--dontobfuscate
+# Release class/member names are obfuscated by R8.
+-renamesourcefileattribute SourceFile
+-keepattributes SourceFile,LineNumberTable
 
 # NewPipe Extractor (uses reflection + Rhino JS engine for signature deciphering)
 -keep class org.schabi.newpipe.extractor.** { *; }

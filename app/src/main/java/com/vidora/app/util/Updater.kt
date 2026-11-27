@@ -24,7 +24,6 @@ data class UpdateInfo(
     val version: String,
     val notes: String,
     val apkUrl: String?,
-    val pageUrl: String,
     val sizeBytes: Long,
 )
 
@@ -40,7 +39,7 @@ object Updater {
             .build()
         Graph.http.newCall(req).execute().use { r ->
             if (r.code == 404) return@withContext null // no releases published yet
-            if (!r.isSuccessful) throw IOException("GitHub HTTP ${r.code}")
+            if (!r.isSuccessful) throw IOException("Update service unavailable (${r.code})")
             val o = json.parseToJsonElement(r.body?.string().orEmpty()).jsonObject
             val tag = o["tag_name"]?.jsonPrimitive?.contentOrNull ?: return@withContext null
             if (!Versions.isNewer(tag, BuildConfig.VERSION_NAME)) return@withContext null
@@ -48,9 +47,8 @@ object Updater {
                 ?.firstOrNull { it["name"]?.jsonPrimitive?.contentOrNull?.endsWith(".apk") == true }
             UpdateInfo(
                 version = tag,
-                notes = o["body"]?.jsonPrimitive?.contentOrNull.orEmpty().take(4000),
+                notes = com.vidora.app.ui.PublicText.releaseNotes(o["body"]?.jsonPrimitive?.contentOrNull.orEmpty().take(4000)),
                 apkUrl = asset?.get("browser_download_url")?.jsonPrimitive?.contentOrNull,
-                pageUrl = o["html_url"]?.jsonPrimitive?.contentOrNull ?: "https://github.com/$REPO/releases",
                 sizeBytes = (asset as? JsonObject)?.get("size")?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: -1,
             )
         }
@@ -79,6 +77,12 @@ object Updater {
                 }
             }
         }
+        try {
+            com.vidora.app.security.AppIntegrity.verifyUpdate(context, out)
+        } catch (e: Exception) {
+            out.delete()
+            throw IOException("Update authenticity verification failed", e)
+        }
         out
     }
 
@@ -100,6 +104,7 @@ object Updater {
      * installer intent if the session API fails.
      */
     fun install(context: Context, apk: File) {
+        com.vidora.app.security.AppIntegrity.verifyUpdate(context, apk)
         runCatching { installSession(context, apk) }.onFailure {
             android.util.Log.w("Updater", "session install failed, using installer intent", it)
             installWithIntent(context, apk)
@@ -107,6 +112,7 @@ object Updater {
     }
 
     fun installWithIntent(context: Context, apk: File) {
+        com.vidora.app.security.AppIntegrity.verifyUpdate(context, apk)
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", apk)
         context.startActivity(
             Intent(Intent.ACTION_VIEW)
@@ -152,7 +158,7 @@ object Updater {
     /** Check → (optionally) download → install, reporting progress through [state]. */
     suspend fun checkAndMaybeInstall(context: Context, install: Boolean): UpdateInfo? {
         state.value = UpdateState.Checking
-        val info = runCatching { check() }.getOrElse { state.value = UpdateState.Failed(it.message ?: "Update check failed"); return null }
+        val info = runCatching { check() }.getOrElse { state.value = UpdateState.Failed("Could not check for updates. Please try again."); return null }
         if (info == null) { state.value = UpdateState.UpToDate(System.currentTimeMillis()); return null }
         state.value = UpdateState.Available(info)
         if (install) downloadAndInstall(context, info)
@@ -162,12 +168,15 @@ object Updater {
     suspend fun downloadAndInstall(context: Context, info: UpdateInfo) {
         if (!canInstall(context)) { state.value = UpdateState.NeedsPermission(info); return }
         state.value = UpdateState.Downloading(info, 0f)
-        runCatching { download(context, info) { p -> state.value = UpdateState.Downloading(info, p) } }
-            .onSuccess { apk ->
-                state.value = UpdateState.Installing(info)
-                withContext(Dispatchers.Main) { install(context, apk) }
-            }
-            .onFailure { state.value = UpdateState.Failed(it.message ?: "Download failed", info) }
+        try {
+            val apk = download(context, info) { p -> state.value = UpdateState.Downloading(info, p) }
+            state.value = UpdateState.Installing(info)
+            withContext(Dispatchers.Main) { install(context, apk) }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            state.value = UpdateState.Failed("Update failed. Please check your connection and try again.", info)
+        }
     }
 }
 

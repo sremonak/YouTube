@@ -95,7 +95,7 @@ class AboutRepository(private val context: Context) {
                 lastError = e.message
             }
         }
-        lastError ?: "About page not found on GitHub"
+        lastError ?: "About information is temporarily unavailable"
     }
 
     private fun save(text: String, ref: String) {
@@ -118,7 +118,7 @@ class AboutRepository(private val context: Context) {
         Graph.http.newCall(req).execute().use { r ->
             if (r.code == 304) return cache.readText()
             if (r.code == 404) return null
-            if (!r.isSuccessful) throw IOException("GitHub HTTP ${r.code}")
+            if (!r.isSuccessful) throw IOException("About service unavailable (${r.code})")
             val body = r.body?.string().orEmpty()
             if (body.isBlank()) return null
             r.header("ETag")?.let { prefs.edit().putString(etagKey, it).apply() }
@@ -141,8 +141,6 @@ class AboutRepository(private val context: Context) {
     companion object {
         const val PATH = "about/ABOUT.md"
         const val DEV_PATH = "about/developer.txt"
-        fun editDeveloperUrl(ref: String = REFS.last()) = "https://github.com/${Updater.REPO}/edit/$ref/$DEV_PATH"
-        fun uploadPhotoUrl(ref: String = REFS.last()) = "https://github.com/${Updater.REPO}/upload/$ref/about"
 
         /** `key: value` lines; `#` lines are notes. Keys are case-insensitive. */
         fun parseFields(text: String): Map<String, String> = text.lineSequence()
@@ -150,7 +148,6 @@ class AboutRepository(private val context: Context) {
             .filter { it.isNotEmpty() && !it.startsWith("#") && it.contains(':') }
             .associate { line -> line.substringBefore(':').trim().lowercase() to line.substringAfter(':').trim() }
         val REFS = listOf("main", "arena/4ab58c16-youtube")
-        fun editUrl(ref: String = "main") = "https://github.com/${Updater.REPO}/edit/$ref/$PATH"
 
         private val BUILT_IN = """
             # Vidora
@@ -165,7 +162,6 @@ class AboutRepository(private val context: Context) {
             ## Open source
             Powered by NewPipe Extractor (GPLv3), Media3/ExoPlayer and Framework7 Icons (MIT).
 
-            [Source code on GitHub](https://github.com/sremonak/YouTube)
         """.trimIndent()
     }
 }

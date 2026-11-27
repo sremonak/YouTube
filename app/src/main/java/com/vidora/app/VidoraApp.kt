@@ -82,6 +82,7 @@ class VidoraApp : Application(), SingletonImageLoader.Factory {
 
     override fun onCreate() {
         super.onCreate()
+        com.vidora.app.security.AppIntegrity.enforce(this)
         Graph.init(this)
         CrashReporter.install(this)
 

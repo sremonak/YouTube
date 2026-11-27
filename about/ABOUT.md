@@ -1,7 +1,7 @@
 # Vidora
 Ad-free YouTube with background play, downloads and a clean **glass** design.
 
-> This page is live. Edit this file on GitHub and every installed Vidora shows the change the next time About is opened — no app update needed.
+> News and details from the developer. Use the refresh button to get the latest information.
 
 ## What's inside
 - No ads, SponsorBlock, DeArrow and Return YouTube Dislike
@@ -13,11 +13,6 @@ Ad-free YouTube with background play, downloads and a clean **glass** design.
 
 ## Developer
 Made by **sremonak**.
-
-## Links
-[Source code on GitHub](https://github.com/sremonak/YouTube)
-[All releases](https://github.com/sremonak/YouTube/releases)
-[Report a problem](https://github.com/sremonak/YouTube/issues/new)
 
 ## Open source
 Powered by NewPipe Extractor (GPLv3), Media3/ExoPlayer, SponsorBlock, DeArrow, Return YouTube Dislike and Framework7 Icons (MIT).

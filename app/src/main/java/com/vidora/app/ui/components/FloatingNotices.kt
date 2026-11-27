@@ -288,7 +288,7 @@ fun UpdateCardNotice(info: UpdateInfo, onLater: () -> Unit) {
                 modifier = Modifier.padding(top = 10.dp).clip(RoundedCornerShape(8.dp)).clickable { notes = !notes }.padding(vertical = 4.dp),
             )
             if (notes) Text(
-                info.notes.take(1500), style = MaterialTheme.typography.bodySmall,
+                com.vidora.app.ui.PublicText.releaseNotes(info.notes).take(1500), style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(top = 4.dp).heightIn(max = 220.dp).verticalScroll(rememberScrollState()),
             )
         }
@@ -305,7 +305,7 @@ fun UpdateCardNotice(info: UpdateInfo, onLater: () -> Unit) {
                 enabled = progress == null,
                 onClick = {
                     if (info.apkUrl == null) {
-                        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(info.pageUrl))) }; onLater(); return@Button
+                        Toast.makeText(context, "Update file is not available yet. Please try later.", Toast.LENGTH_LONG).show(); return@Button
                     }
                     if (!Updater.canInstall(context)) {
                         Toast.makeText(context, "Allow Vidora to install updates, then tap Update again", Toast.LENGTH_LONG).show()

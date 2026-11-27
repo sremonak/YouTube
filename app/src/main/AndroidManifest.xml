@@ -20,7 +20,8 @@
 
     <application
         android:name=".VidoraApp"
-        android:allowBackup="true"
+        android:allowBackup="false"
+        android:usesCleartextTraffic="false"
         android:enableOnBackInvokedCallback="true"
         android:localeConfig="@xml/locales_config"
         android:icon="@mipmap/ic_launcher_classic"

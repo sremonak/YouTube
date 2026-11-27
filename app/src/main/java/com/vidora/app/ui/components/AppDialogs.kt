@@ -115,12 +115,10 @@ fun CrashDialog(report: String, onDismiss: () -> Unit) {
         },
         confirmButton = {
             TextButton(onClick = {
-                val title = "Crash: " + report.lineSequence().firstOrNull { it.contains("Exception") || it.contains("Error") }.orEmpty().take(90)
-                val url = "https://github.com/${Updater.REPO}/issues/new?title=" + Uri.encode(title) +
-                    "&body=" + Uri.encode("```\n" + report.take(6000) + "\n```")
-                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+                context.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Vidora crash", report))
+                Toast.makeText(context, "Report copied", Toast.LENGTH_SHORT).show()
                 onDismiss()
-            }) { Text(stringResource(R.string.ui_report_on_github)) }
+            }) { Text("Copy report") }
         },
         dismissButton = {
             Column {

@@ -93,6 +93,7 @@ fun AboutScreen(nav: NavHostController) {
     val developer by Graph.about.developer.collectAsState()
     val update by Updater.state.collectAsState()
     val settings by Graph.settings.flow.collectAsState(initial = null)
+    var showLegal by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
@@ -102,7 +103,7 @@ fun AboutScreen(nav: NavHostController) {
         scope.launch { error = Graph.about.refresh(); loading = false }
     }
     LaunchedEffect(Unit) { refresh() }
-    fun open(url: String) { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) } }
+    fun open(url: String) { if (com.vidora.app.ui.PublicText.isRepository(url)) return; runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) } }
 
     GlassPage(header = {
         TopAppBar(
@@ -139,24 +140,24 @@ fun AboutScreen(nav: NavHostController) {
             item { DeveloperCard(developer, open = ::open) }
 
             // ------------------------------------------------------------ updates
-            item { UpdateCard(update, settings?.autoInstallUpdates ?: true, onAutoInstall = { v -> scope.launch { Graph.settings.update { it.copy(autoInstallUpdates = v) } } }, open = ::open) }
+            item { UpdateCard(update, settings?.autoInstallUpdates ?: false, onAutoInstall = { v -> scope.launch { Graph.settings.update { it.copy(autoInstallUpdates = v) } } }, open = ::open) }
 
             // ------------------------------------------------------------ live page
             item {
                 GlassCard(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(18.dp)) {
-                        Markdown(about.markdown, onLink = { open(it) })
+                        Markdown(com.vidora.app.ui.PublicText.about(about.markdown), onLink = { open(it) })
                         Spacer(Modifier.height(12.dp))
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                         Spacer(Modifier.height(8.dp))
                         val label = when (about.source) {
-                            AboutRepository.Source.LIVE -> "Live from GitHub · updated just now"
+                            AboutRepository.Source.LIVE -> "Updated just now"
                             AboutRepository.Source.CACHE -> "Saved copy · " + if (about.fetchedAt > 0) DateUtils.getRelativeTimeSpanString(about.fetchedAt) else "offline"
                             AboutRepository.Source.BUILT_IN -> "Built-in copy · connect to the internet for the live page"
                         }
                         Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         if (error != null && about.source != AboutRepository.Source.LIVE) {
-                            Text("Couldn't refresh: $error", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                            Text("Couldn't refresh. Showing the saved information.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
                         }
                     }
                 }
@@ -165,22 +166,12 @@ fun AboutScreen(nav: NavHostController) {
             // ------------------------------------------------------------ links
             item {
                 GlassCard(Modifier.fillMaxWidth()) {
-                    LinkRow("Source code", "github.com/${Updater.REPO}") { open("https://github.com/${Updater.REPO}") }
-                    LinkRow("All releases & changelog", "Every version with its notes") { open("https://github.com/${Updater.REPO}/releases") }
-                    LinkRow("Edit this About page", "Opens ABOUT.md on GitHub (owner only)") { open(AboutRepository.editUrl()) }
-                    LinkRow("Edit developer profile", "Name, bio, WhatsApp, email, links — developer.txt (owner only)") {
-                        open(AboutRepository.editDeveloperUrl(developer?.ref ?: AboutRepository.REFS.last()))
-                    }
-                    LinkRow("Upload developer photo", "Upload photo.jpg to the about folder (owner only)") {
-                        open(AboutRepository.uploadPhotoUrl(developer?.ref ?: AboutRepository.REFS.last()))
-                    }
-                    LinkRow("Open-source licences", "NewPipe Extractor GPLv3 · Media3 Apache 2.0 · Framework7 Icons MIT") {
-                        open("https://github.com/${Updater.REPO}#licences")
-                    }
+                    LinkRow("Licences & source information", "Legal notices and open-source licence") { showLegal = true }
                 }
             }
         }
     }
+    if (showLegal) com.vidora.app.ui.components.LegalDialog { showLegal = false }
 }
 
 @Composable
@@ -200,7 +191,7 @@ private fun UpdateCard(st: UpdateState, autoInstall: Boolean, onAutoInstall: (Bo
                 else -> null
             }
             val status = when (st) {
-                UpdateState.Idle -> "Tap to check GitHub for a newer version."
+                UpdateState.Idle -> "Tap to check for a newer version."
                 UpdateState.Checking -> "Checking…"
                 is UpdateState.UpToDate -> "You're on the latest version."
                 is UpdateState.Available -> "Version ${st.info.version} is available" + (if (st.info.sizeBytes > 0) " · ${st.info.sizeBytes / 1_048_576} MB" else "")
@@ -218,7 +209,7 @@ private fun UpdateCard(st: UpdateState, autoInstall: Boolean, onAutoInstall: (Bo
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                 when {
                     info != null && st !is UpdateState.Downloading && st !is UpdateState.Installing -> Button(onClick = {
-                        if (info.apkUrl == null) { open(info.pageUrl); return@Button }
+                        if (info.apkUrl == null) { Toast.makeText(context, "Update file is not available yet. Please try later.", Toast.LENGTH_LONG).show(); return@Button }
                         if (!Updater.canInstall(context)) {
                             Toast.makeText(context, "Allow Vidora to install updates, then come back", Toast.LENGTH_LONG).show()
                             Updater.state.value = UpdateState.NeedsPermission(info)
@@ -237,7 +228,7 @@ private fun UpdateCard(st: UpdateState, autoInstall: Boolean, onAutoInstall: (Bo
                     Modifier.padding(top = 8.dp).fillMaxWidth().heightIn(max = 320.dp)
                         .clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
                         .verticalScroll(rememberScrollState()).padding(12.dp)
-                ) { Markdown(info.notes, onLink = open) }
+                ) { Text(com.vidora.app.ui.PublicText.releaseNotes(info.notes)) }
             }
             Spacer(Modifier.height(8.dp))
             Row(Modifier.fillMaxWidth().clickable { onAutoInstall(!autoInstall) }, verticalAlignment = Alignment.CenterVertically) {
@@ -370,7 +361,6 @@ private val Contacts = listOf(
     Contact("youtube", "YouTube", com.vidora.app.ui.icons.BrandGlyphs.youtube, Color(0xFFFF0000)) { v -> web(v, "https://youtube.com/@") },
     Contact("tiktok", "TikTok", com.vidora.app.ui.icons.BrandGlyphs.tiktok, Color(0xFF111111)) { v -> web(v, "https://tiktok.com/@") },
     Contact("x", "X (Twitter)", com.vidora.app.ui.icons.BrandGlyphs.x, Color(0xFF111111)) { v -> web(v, "https://x.com/") },
-    Contact("github", "GitHub", com.vidora.app.ui.icons.BrandGlyphs.github, Color(0xFF24292F)) { v -> web(v, "https://github.com/") },
     Contact("website", "Website", com.vidora.app.ui.icons.IosGlyphs.globe, Color(0xFF5856D6)) { v -> if (v.startsWith("http")) v else "https://$v" },
 )
 
@@ -416,7 +406,7 @@ private fun DeveloperCard(dev: AboutRepository.Developer?, open: (String) -> Uni
                 Text(it.replace("\\n", "\n"), style = MaterialTheme.typography.bodyMedium, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                     modifier = Modifier.padding(top = 10.dp))
             }
-            val contacts = Contacts.mapNotNull { c -> dev?.get(c.key)?.let { c to it } }
+            val contacts = Contacts.mapNotNull { c -> dev?.get(c.key)?.takeUnless { com.vidora.app.ui.PublicText.isRepository(it) }?.let { c to it } }
             if (contacts.isNotEmpty()) {
                 // Quick round buttons (first four), like an iOS contact card
                 Spacer(Modifier.height(16.dp))
@@ -467,7 +457,7 @@ private fun DeveloperCard(dev: AboutRepository.Developer?, open: (String) -> Uni
                 }
             } else if (dev == null) {
                 Text(
-                    "Developer profile loads from GitHub — connect to the internet.",
+                    "Connect to the internet to load the developer profile.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 8.dp),
                 )

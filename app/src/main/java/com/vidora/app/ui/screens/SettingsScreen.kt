@@ -531,7 +531,7 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
                     update { it.copy(poToken = v) }
                 }
             }
-            item { SwitchRow(stringResource(R.string.ui_check_for_updates_automatically), "From github.com/${com.vidora.app.util.Updater.REPO} releases", s.autoUpdateCheck) { v -> update { it.copy(autoUpdateCheck = v) } } }
+            item { SwitchRow(stringResource(R.string.ui_check_for_updates_automatically), "Check for new Vidora versions in the app", s.autoUpdateCheck) { v -> update { it.copy(autoUpdateCheck = v) } } }
             item { SwitchRow("Download & install updates automatically", "New versions download in the background and install on their own (Android 12+ after the first in-app update)", s.autoInstallUpdates) { v -> update { it.copy(autoInstallUpdates = v) } } }
             item {
                 ClickRow(if (checkingUpdate) "Checking…" else "Check for updates now", "Current version ${BuildConfig.VERSION_NAME}") {
@@ -542,15 +542,16 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
                         checkingUpdate = false
                         r.onSuccess { info ->
                             if (info == null) Toast.makeText(context, "You're on the latest version", Toast.LENGTH_SHORT).show() else updateInfo = info
-                        }.onFailure { Toast.makeText(context, "Update check failed: ${it.message}", Toast.LENGTH_LONG).show() }
+                        }.onFailure { Toast.makeText(context, "Could not check for updates. Please try again.", Toast.LENGTH_LONG).show() }
                     }
                 }
             }
             item {
-                ClickRow(stringResource(R.string.ui_report_a_problem), stringResource(R.string.ui_opens_a_github_issue_with_device_details)) {
+                ClickRow(stringResource(R.string.ui_report_a_problem), "Copy a report to send to the developer") {
                     val body = com.vidora.app.util.CrashReporter.report(null, "Describe the problem:")
-                    val url = "https://github.com/${com.vidora.app.util.Updater.REPO}/issues/new?body=" + android.net.Uri.encode(body)
-                    runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))) }
+                    context.getSystemService(android.content.ClipboardManager::class.java)
+                        .setPrimaryClip(android.content.ClipData.newPlainText("Vidora report", body))
+                    Toast.makeText(context, "Report copied", Toast.LENGTH_SHORT).show()
                 }
             }
 
