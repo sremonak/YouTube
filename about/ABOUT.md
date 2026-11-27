@@ -14,7 +14,7 @@ Ad-free YouTube with background play, downloads and a clean **glass** design.
 ## Developer
 Made by **sremonak**.
 
-## Open source
+## Licences
 Powered by NewPipe Extractor (GPLv3), Media3/ExoPlayer, SponsorBlock, DeArrow, Return YouTube Dislike and Framework7 Icons (MIT).
 
 ---

@@ -159,7 +159,7 @@ class AboutRepository(private val context: Context) {
             - Download video or audio in any quality
             - Optional YouTube sign-in for your own feeds
 
-            ## Open source
+            ## Licences
             Powered by NewPipe Extractor (GPLv3), Media3/ExoPlayer and Framework7 Icons (MIT).
 
         """.trimIndent()

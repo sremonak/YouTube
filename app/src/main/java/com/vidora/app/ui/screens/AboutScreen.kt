@@ -166,7 +166,7 @@ fun AboutScreen(nav: NavHostController) {
             // ------------------------------------------------------------ links
             item {
                 GlassCard(Modifier.fillMaxWidth()) {
-                    LinkRow("Licences & source information", "Legal notices and open-source licence") { showLegal = true }
+                    LinkRow("Licences", "Copyright, legal notices and software licences") { showLegal = true }
                 }
             }
         }

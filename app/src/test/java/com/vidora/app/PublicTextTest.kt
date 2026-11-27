@@ -20,4 +20,8 @@ class PublicTextTest {
         val notes = PublicText.releaseNotes("New player\nhttps://example.com/details\nhttps://github.com/owner/repo/releases")
         assertEquals("New player", notes)
     }
+    @Test fun distributionSourceFooterIsNotAnInAppChangelog() {
+        val notes = "Easier Google sign-in\n\n## Corresponding source (GPLv3)\nSource archive: https://github.com/owner/repo/archive/v1.zip"
+        assertEquals("Easier Google sign-in", PublicText.releaseNotes(notes))
+    }
 }

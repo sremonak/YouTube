@@ -42,8 +42,9 @@ are filtered from old cached/live About text and URLs removed from release notes
 choice, NOT endpoint secrecy: network traffic, assets and reverse engineering can reveal the
 update/profile host. The public source repository is not made private.
 
-An offline Licences & source information dialog retains GPL licence text, notices and the source
-location/release tag, without a browser shortcut. This project and NewPipe Extractor are GPLv3;
+An offline Licences dialog retains GPL licence text and required notices, without a source URL
+or browser shortcut. The APK download/release page provides the matching source archive and
+build instructions. This project and NewPipe Extractor are GPLv3;
 recipients keep their rights to inspect, modify, rebuild and redistribute source. Authenticity
 checks do not revoke those rights. The owner can still edit `about/developer.txt` and upload
 `about/photo.jpg` directly from GitHub on a phone; owner-edit shortcuts are no longer in the app.
@@ -64,7 +65,25 @@ Device checks before changing signing policy:
 4. Verify normal Settings launcher name/icon changes still work.
 5. Offer an APK with a wrong certificate/package or older version to the updater: rejected.
 6. Check About, Settings, crash reports and Update/Later show no repository navigation; legal
-   source information remains available offline.
+   licence text remains available offline; matching source is linked on the download page.
 
 The sandbox has no local Android SDK/emulator. Do not claim device checks ran unless recorded
 separately. Private-key migration and server-backed attestation are not implemented here.
+
+## Sign-in assistance is not native Google OAuth
+
+The phone's account picker supplies only a user-selected email hint. It does not authenticate
+YouTube or extract credentials from Google Play Services. It is now available from regular
+sign-in as well as welcome; cancelling leaves the current screen unchanged.
+
+The embedded sign-in reuses its own existing WebView cookies rather than clearing them on every
+attempt (explicit sign-out still clears them). Password Autofill is enabled; an HTTPS host label
+and a top-level Google/YouTube allowlist protect the sign-in surface. Google may block embedded
+sign-in regardless. Passkey/phone-confirmation suggestions apply ONLY if Google offers those
+methods; this change does not add native passkey/Credential Manager integration or promise
+passwordless access.
+
+Forgot-email and account-recovery links open official Google pages in the user's browser.
+Browser and native Google sessions cannot be copied into Vidora. A fully native authorization
+flow would require maintainer-owned OAuth configuration and a compatible YouTube API/account
+architecture; an OAuth ID token alone cannot authenticate the current YouTube cookie APIs.

@@ -98,6 +98,9 @@ jobs:
         run: |
           tag="v${VIDORA_VERSION_NAME}"
           git log -1 --pretty=%B > notes.txt
+          # Source access belongs on the binary download page, not in the app UI.
+          printf '\nCorresponding source (GPLv3) for this APK: https://github.com/%s/archive/refs/tags/%s.zip\n' "$GITHUB_REPOSITORY" "$tag" >> notes.txt
+          printf 'Build instructions and licence: https://github.com/%s/tree/%s\n' "$GITHUB_REPOSITORY" "$tag" >> notes.txt
           gh release create "$tag" dist/*.apk --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
             --title "Vidora ${VIDORA_VERSION_NAME}" --notes-file notes.txt --latest
           # keep the 5 newest releases
@@ -111,3 +114,6 @@ jobs:
         with:
           files: dist/*.apk
           generate_release_notes: true
+          body: |
+            Corresponding source (GPLv3) for this APK: https://github.com/${{ github.repository }}/archive/refs/tags/${{ github.ref_name }}.zip
+            Build instructions and licence: https://github.com/${{ github.repository }}/tree/${{ github.ref_name }}

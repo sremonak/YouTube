@@ -22,9 +22,7 @@ fun LegalDialog(onDismiss: () -> Unit) {
     val notices = remember {
         buildString {
             appendLine("Vidora ${BuildConfig.VERSION_NAME} — GPL-3.0")
-            appendLine("Copyright Vidora contributors. No warranty. You may obtain, study, modify and redistribute the corresponding source under GPLv3.")
-            appendLine("Corresponding source, build instructions and licence: https://github.com/sremonak/YouTube (release tag v${BuildConfig.VERSION_NAME})")
-            appendLine("Release authenticity checks identify this distribution, not a restriction on GPL source rebuilds.")
+            appendLine("Copyright Vidora contributors. No warranty. You may modify and redistribute this software under GPLv3.")
             appendLine()
             appendLine("NewPipe Extractor — GPLv3, Team NewPipe contributors.")
             appendLine("AndroidX / Media3 / Compose — The Android Open Source Project, Apache-2.0.")
@@ -41,7 +39,7 @@ fun LegalDialog(onDismiss: () -> Unit) {
     }
     GlassAlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Licences & source information") },
+        title = { Text("Licences") },
         text = {
             Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
                 Text(notices, style = MaterialTheme.typography.bodySmall)

@@ -10,5 +10,6 @@ object PublicText {
     // Also applies to cached/older live About content so a release doesn't depend on a remote edit.
     fun about(value: String): String = value.lineSequence().filterNot(::isRepository).joinToString("\n")
 
-    fun releaseNotes(value: String): String = about(value).replace(url, "").trim()
+    fun releaseNotes(value: String): String = about(value.substringBefore("## Corresponding source (GPLv3)"))
+        .replace(url, "").trim()
 }

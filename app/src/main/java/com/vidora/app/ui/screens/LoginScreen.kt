@@ -10,6 +10,10 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,6 +36,7 @@ import com.vidora.app.ui.icons.Shield
 import com.vidora.app.ui.icons.VerifiedUser
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.CircularProgressIndicator
@@ -44,6 +49,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,6 +58,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
@@ -60,11 +68,11 @@ import androidx.navigation.NavHostController
 import com.vidora.app.Graph
 import com.vidora.app.account.AccountManager
 import com.vidora.app.account.AccountSession
+import com.vidora.app.account.GoogleSignInLinks
+import com.vidora.app.ui.components.LoginHint
+import com.vidora.app.ui.components.rememberGoogleAccountPicker
+import com.vidora.app.ui.icons.BrandGlyphs
 import kotlinx.coroutines.launch
-
-private const val SIGN_IN_URL =
-    "https://accounts.google.com/ServiceLogin?service=youtube&uilel=3&passive=true" +
-        "&continue=https%3A%2F%2Fwww.youtube.com%2Fsignin%3Faction_handle_signin%3Dtrue%26app%3Ddesktop%26next%3Dhttps%253A%252F%252Fwww.youtube.com%252F"
 
 /**
  * Sign in on Google's own page inside a WebView. Vidora never sees the password — it only keeps
@@ -73,60 +81,124 @@ private const val SIGN_IN_URL =
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoginScreen(nav: NavHostController) {
-    // From the welcome card: the Google account is already chosen → straight to Google's page.
-    var started by remember { mutableStateOf(com.vidora.app.ui.components.LoginHint.direct.also { com.vidora.app.ui.components.LoginHint.direct = false }) }
+    var selectedEmail by rememberSaveable { mutableStateOf(LoginHint.email.also { LoginHint.email = null }) }
+    var started by rememberSaveable { mutableStateOf(LoginHint.direct.also { LoginHint.direct = false }) }
+    var help by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val chooseAccount = rememberGoogleAccountPicker { email ->
+        selectedEmail = email
+        started = true
+    }
+    BackHandler(enabled = started) { started = false }
+    if (help) SignInHelpDialog(selectedEmail, onDismiss = { help = false })
     com.vidora.app.ui.theme.GlassPage(header = {
         TopAppBar(
             title = { Text(if (started) "Sign in with Google" else "Sign in") },
-            navigationIcon = { IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") } },
+            navigationIcon = { IconButton(onClick = { if (started) started = false else nav.popBackStack() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") } },
+            actions = { TextButton(onClick = { help = true }) { Text("Help") } },
             colors = com.vidora.app.ui.theme.glassBarColors()
         )
     }) {
         Column(Modifier.fillMaxSize()) {
             com.vidora.app.ui.theme.TopChromeSpacer()
-            if (!started) Intro(onContinue = { started = true }, onCookiesPasted = { finishWithCookies(it, nav, context, scope) })
-            else SignInWebView(nav)
+            if (!started) Intro(
+                onGoogle = chooseAccount,
+                onManual = { selectedEmail = null; started = true },
+                onHelp = { help = true },
+                onGuest = { nav.popBackStack() },
+                onCookiesPasted = { finishWithCookies(it, nav, context, scope) },
+            ) else key(selectedEmail) {
+                SignInWebView(nav, email = selectedEmail)
+            }
         }
     }
 }
 
 @Composable
-private fun Intro(onContinue: () -> Unit, onCookiesPasted: (String) -> Unit) {
+private fun Intro(onGoogle: () -> Unit, onManual: () -> Unit, onHelp: () -> Unit, onGuest: () -> Unit, onCookiesPasted: (String) -> Unit) {
     var pasteDialog by remember { mutableStateOf(false) }
+    var advanced by rememberSaveable { mutableStateOf(false) }
     if (pasteDialog) CookieDialog(onDismiss = { pasteDialog = false }, onSave = { pasteDialog = false; onCookiesPasted(it) })
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         Column(
             Modifier.widthIn(max = 560.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(24.dp).navigationBarsPadding(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Icon(Icons.Rounded.VerifiedUser, null, Modifier.size(72.dp), tint = MaterialTheme.colorScheme.primary)
+            Icon(Icons.Rounded.VerifiedUser, null, Modifier.size(64.dp), tint = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.height(16.dp))
-            Text(stringResource(R.string.ui_sign_in_to_your_youtube_account), style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
+            Text("Use your Google account", style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
             Spacer(Modifier.height(8.dp))
             Text(
-                "Unlock age-restricted videos, fix \"confirm you're not a bot\" errors, and get your recommendations, " +
-                    "subscriptions, liked videos, watch later and history — still with no ads.",
+                "Choose an account already on this phone — no need to remember or type its email address.",
                 style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(24.dp))
-            Point(Icons.Rounded.Lock, "You type your password on Google's own sign-in page. Vidora never sees it.")
-            Point(Icons.Rounded.Shield, "Only the session is kept, encrypted with the Android Keystore, and sent only to youtube.com.")
-            Point(Icons.Rounded.VerifiedUser, "Sign out any time from Settings — the session is wiped from the device.")
+            Button(
+                onClick = onGoogle,
+                colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color(0xFF1F1F1F)),
+                shape = RoundedCornerShape(26.dp),
+                modifier = Modifier.fillMaxWidth().height(52.dp).border(1.dp, Color(0xFFDADCE0), RoundedCornerShape(26.dp)),
+            ) {
+                Image(BrandGlyphs.googleG, null, Modifier.size(22.dp))
+                Spacer(Modifier.width(12.dp))
+                Text("Sign in with Google")
+            }
+            TextButton(onClick = onManual) { Text("Use another account") }
             Spacer(Modifier.height(12.dp))
-            Text(
-                "Tip: third-party apps are not officially supported by Google. If you're worried about your main " +
-                    "account, use a secondary Google account.",
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center
-            )
-            Spacer(Modifier.height(24.dp))
-            Button(onClick = onContinue, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text(stringResource(R.string.ui_continue_to_google_sign_in)) }
+            com.vidora.app.ui.theme.GlassCard(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp)) {
+                    Text("Don't remember your password?", style = MaterialTheme.typography.titleSmall)
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "On Google's page, tap Try another way if offered. Google may let you confirm on your phone or use a passkey. Available options depend on your account and device.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    TextButton(onClick = onHelp) { Text("Forgot email or password? Get help") }
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            Point(Icons.Rounded.Lock, "Google verifies your identity. Choosing a phone account is not automatic authorization; Google may still request a password.")
+            Point(Icons.Rounded.Shield, "Your YouTube session is stored encrypted on this phone. Vidora does not ask for your password in its own form.")
             Spacer(Modifier.height(8.dp))
-            TextButton(onClick = { pasteDialog = true }) { Text(stringResource(R.string.ui_google_sign_in_blocked_paste_cookies_ins)) }
+            TextButton(onClick = onGuest) { Text("Continue without signing in") }
+            TextButton(onClick = { advanced = !advanced }) { Text(if (advanced) "Hide advanced options" else "Advanced options") }
+            if (advanced) {
+                Text("Google may block embedded sign-in in third-party apps. Cookie import is for experienced users only; never share session cookies with anyone.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                TextButton(onClick = { pasteDialog = true }) { Text("Import YouTube session cookies") }
+            }
         }
     }
+}
+
+@Composable
+private fun SignInHelpDialog(email: String?, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    fun open(url: String) {
+        runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))) }
+            .onFailure { Toast.makeText(context, "No browser available. Open Google account recovery in your browser.", Toast.LENGTH_LONG).show() }
+    }
+    GlassAlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Google sign-in help") },
+        text = {
+            Column(Modifier.heightIn(max = 380.dp).verticalScroll(rememberScrollState())) {
+                Text("1. Tap Sign in with Google and choose an account on this phone. This fills its email; it does not grant access by itself.")
+                Spacer(Modifier.height(10.dp))
+                Text("2. On Google's page, look for Try another way. Use a phone confirmation, recovery number/email or passkey only if Google offers it. These options may not work in an embedded browser.")
+                Spacer(Modifier.height(10.dp))
+                Text("3. If you forgot the email, use Find my email. If you forgot the password, use Account recovery. Only Google can restore access.")
+                Spacer(Modifier.height(10.dp))
+                Text("Recovery opens in your browser. After recovery, return to Vidora to finish signing in. Signing in in your browser does not automatically sign Vidora in.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                TextButton(onClick = { open(GoogleSignInLinks.recovery(email)) }) { Text("Account recovery") }
+                TextButton(onClick = { open(GoogleSignInLinks.FIND_EMAIL) }) { Text("Find my email") }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Got it") } },
+    )
 }
 
 @Composable
@@ -186,11 +258,12 @@ private fun finishWithCookies(cookies: String, nav: NavHostController, context: 
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
-private fun SignInWebView(nav: NavHostController) {
+private fun SignInWebView(nav: NavHostController, email: String?) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var loading by remember { mutableStateOf(true) }
     var finishing by remember { mutableStateOf(false) }
+    var host by remember { mutableStateOf("accounts.google.com") }
 
     var fallbackScheduled by remember { mutableStateOf(false) }
 
@@ -206,8 +279,7 @@ private fun SignInWebView(nav: NavHostController) {
     // is only set by www.youtube.com/signin.
     fun tryFinish(url: String?, pageDone: Boolean) {
         if (finishing || url == null) return
-        val uri = runCatching { android.net.Uri.parse(url) }.getOrNull() ?: return
-        val host = uri.host.orEmpty()
+        val host = GoogleSignInLinks.trustedHost(url) ?: return
         if (host != "www.youtube.com" && host != "m.youtube.com" && host != "youtube.com") return
         val cookies = CookieManager.getInstance().getCookie("https://www.youtube.com") ?: return
         if (!AccountManager.hasSessionCookies(cookies)) return
@@ -223,46 +295,55 @@ private fun SignInWebView(nav: NavHostController) {
     }
 
     Box(Modifier.fillMaxSize()) {
-        AndroidView(
-            factory = { ctx ->
-                CookieManager.getInstance().setAcceptCookie(true)
-                CookieManager.getInstance().removeAllCookies(null)
-                WebView(ctx).apply {
-                    CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
-                    settings.javaScriptEnabled = true
-                    settings.domStorageEnabled = true
-                    settings.loadWithOverviewMode = true
-                    settings.useWideViewPort = true
-                    // Present a regular mobile Chrome user agent (Google rejects the "wv" WebView marker).
-                    settings.userAgentString = settings.userAgentString
-                        .replace("; wv", "")
-                        .replace(Regex("Version/\\d+\\.\\d+ "), "")
-                    webViewClient = object : WebViewClient() {
-                        override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                            loading = true
-                            tryFinish(url, pageDone = false)
-                        }
+        Column(Modifier.fillMaxSize()) {
+            Text("Sign-in page · $host", style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp))
+            AndroidView(
+                factory = { ctx ->
+                    CookieManager.getInstance().setAcceptCookie(true)
+                    WebView(ctx).apply {
+                        CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+                        settings.javaScriptEnabled = true
+                        settings.domStorageEnabled = true
+                        settings.allowFileAccess = false
+                        settings.allowContentAccess = false
+                        settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                        importantForAutofill = android.view.View.IMPORTANT_FOR_AUTOFILL_YES
+                        settings.loadWithOverviewMode = true
+                        settings.useWideViewPort = true
+                        // Present a regular mobile Chrome user agent (Google rejects the "wv" WebView marker).
+                        settings.userAgentString = settings.userAgentString
+                            .replace("; wv", "")
+                            .replace(Regex("Version/\\d+\\.\\d+ "), "")
+                        webViewClient = object : WebViewClient() {
+                            override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                                val trusted = GoogleSignInLinks.trustedHost(url)
+                                if (trusted == null) { view?.stopLoading(); return }
+                                host = trusted
+                                loading = true
+                                tryFinish(url, pageDone = false)
+                            }
 
-                        override fun onPageFinished(view: WebView?, url: String?) {
-                            loading = false
-                            tryFinish(url, pageDone = true)
-                        }
+                            override fun onPageFinished(view: WebView?, url: String?) {
+                                loading = false
+                                tryFinish(url, pageDone = true)
+                            }
 
-                        override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                            val scheme = request?.url?.scheme
-                            // keep everything inside the WebView; block intent:// / app links
-                            return scheme != "https" && scheme != "http"
+                            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                                // Only restrict top-level navigation; Google challenges can use subframes.
+                                if (request?.isForMainFrame == false) return false
+                                return GoogleSignInLinks.trustedHost(request?.url?.toString()) == null
+                            }
                         }
+                        // Reuse this app's WebView session when possible; sign-out clears it.
+                        // Device-account/browser sessions are separate and cannot be copied here.
+                        loadUrl(GoogleSignInLinks.signIn(email))
                     }
-                    // Pre-fill the account picked from the phone's Google accounts: Google then asks only to
-                    // confirm it's you (a prompt on this phone) or for the password once.
-                    val hint = com.vidora.app.ui.components.LoginHint.email
-                    loadUrl(if (hint.isNullOrBlank()) SIGN_IN_URL else SIGN_IN_URL + "&Email=" + android.net.Uri.encode(hint) + "&login_hint=" + android.net.Uri.encode(hint))
-                }
-            },
-            onRelease = { it.stopLoading(); it.destroy() },
-            modifier = Modifier.fillMaxSize()
-        )
+                },
+                onRelease = { it.stopLoading(); it.destroy() },
+                modifier = Modifier.weight(1f).fillMaxWidth()
+            )
+        }
         if (loading && !finishing) LinearProgressIndicator(Modifier.fillMaxWidth().align(Alignment.TopCenter))
         if (finishing) {
             Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {

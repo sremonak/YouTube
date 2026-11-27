@@ -5,8 +5,6 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.fadeIn
@@ -147,16 +145,12 @@ object LoginHint {
     var direct: Boolean = false
 }
 
-/**
- * First-launch welcome. "Sign in with Google" shows the phone's own Google-account picker, then
- * opens Google's sign-in page with that account already filled in — Google then usually just asks
- * to confirm on the phone ("Yes, it's me") or for the password once.
- */
+/** First-launch welcome. Account selection supplies only an email hint; Google verifies access. */
 @Composable
 fun WelcomeCard(onSignIn: () -> Unit, onDone: () -> Unit) {
     val context = LocalContext.current
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
-        LoginHint.email = r.data?.getStringExtra(android.accounts.AccountManager.KEY_ACCOUNT_NAME)?.takeIf { r.resultCode == Activity.RESULT_OK }
+    val chooseAccount = rememberGoogleAccountPicker { email ->
+        LoginHint.email = email
         LoginHint.direct = true
         markWelcomeDone(context)
         onSignIn()
@@ -183,16 +177,7 @@ fun WelcomeCard(onSignIn: () -> Unit, onDone: () -> Unit) {
             WelcomePoint(IosGlyphs.personCropCircleFill, Color(0xFF007AFF), "Your YouTube", "Subscriptions, likes, history & recommendations")
             Spacer(Modifier.height(18.dp))
             Button(
-                onClick = {
-                    val intent = runCatching {
-                        android.accounts.AccountManager.newChooseAccountIntent(
-                            null, null, arrayOf("com.google"), null, null, null, null
-                        )
-                    }.getOrNull()
-                    if (intent != null) runCatching { picker.launch(intent) }.onFailure {
-                        LoginHint.direct = true; markWelcomeDone(context); onSignIn()
-                    } else { LoginHint.direct = true; markWelcomeDone(context); onSignIn() }
-                },
+                onClick = chooseAccount,
                 colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color(0xFF1F1F1F)),
                 shape = RoundedCornerShape(26.dp),
                 modifier = Modifier.fillMaxWidth().height(52.dp).border(1.dp, Color(0xFFDADCE0), RoundedCornerShape(26.dp)),
