@@ -197,7 +197,7 @@ fun AppRoot(activity: MainActivity, settings: AppSettings) {
                     topDestinations.forEach { d ->
                         NavigationRailItem(
                             selected = route == d.route,
-                            onClick = { nav.navigateTop(d.route) },
+                            onClick = { if (route == d.route) TabReselect.events.tryEmit(d.route) else nav.navigateTop(d.route) },
                             icon = { NavIcon(d, route == d.route, if (d.route == Routes.LIBRARY) activeDownloads else 0) },
                             label = { Text(androidx.compose.ui.res.stringResource(d.label), maxLines = 1) }
                         )
@@ -286,7 +286,7 @@ fun AppRoot(activity: MainActivity, settings: AppSettings) {
                             val selected = route == d.route
                             NavigationBarItem(
                                 selected = selected,
-                                onClick = { nav.navigateTop(d.route) },
+                                onClick = { if (route == d.route) TabReselect.events.tryEmit(d.route) else nav.navigateTop(d.route) },
                                 icon = { NavIcon(d, selected, if (d.route == Routes.LIBRARY) activeDownloads else 0) },
                                 label = { Text(androidx.compose.ui.res.stringResource(d.label), maxLines = 1, style = MaterialTheme.typography.labelSmall, fontWeight = if (selected) androidx.compose.ui.text.font.FontWeight.Bold else null) },
                                 colors = androidx.compose.material3.NavigationBarItemDefaults.colors(

@@ -211,14 +211,60 @@ class AccountApi {
     }
 
     /** Related videos for a watch page (`next`, signed in when possible), used when the extractor is blocked. */
-    suspend fun watchNext(videoId: String): List<VideoItem> {
+    suspend fun watchNext(videoId: String): List<VideoItem> = watchPage(videoId).related
+
+    /** Title, channel, views, date, description… from the watch page (TV player responses lack them). */
+    data class WatchMeta(
+        val title: String?, val channel: String?, val channelUrl: String?, val channelAvatar: String?,
+        val subscribers: Long, val views: Long, val dateText: String?, val description: String?, val likes: Long,
+    )
+    data class WatchPage(val related: List<VideoItem>, val meta: WatchMeta?)
+
+    suspend fun watchPage(videoId: String): WatchPage {
         val res = post("next", buildJsonObject {
             put("context", context()); put("videoId", videoId)
             put("contentCheckOk", true); put("racyCheckOk", true)
         }, requireAuth = false)
         val out = mutableListOf<Entry>()
-        walk(res, out, mutableListOf())
-        return out.filterIsInstance<Entry.Video>().map { it.video }.filter { !it.url.contains(videoId) }.distinctBy { it.url }
+        val secondary = res["contents"]?.let { findFirst(it, "secondaryResults") }
+        walk(secondary ?: res, out, mutableListOf())
+        val related = out.filterIsInstance<Entry.Video>().map { it.video }
+            .filter { !it.url.contains(videoId) && isRealVideo(it) }
+            .distinctBy { it.url }
+        val meta = runCatching { parseWatchMeta(res) }.getOrNull()
+        return WatchPage(related, meta)
+    }
+
+    /** Drops YouTube's own promos ("Upgrade to YouTube Premium…") that look like videos. */
+    private fun isRealVideo(v: VideoItem): Boolean {
+        val id = v.url.substringAfter("v=", "").substringBefore('&')
+        if (id.length != 11) return false
+        if (v.title.contains("YouTube Premium", true) || v.title.contains("YouTube Music Premium", true)) return false
+        return true
+    }
+
+    private fun parseWatchMeta(res: JsonObject): WatchMeta? {
+        val primary = findFirst(res, "videoPrimaryInfoRenderer")
+        val secondary = findFirst(res, "videoSecondaryInfoRenderer")
+        if (primary == null && secondary == null) return null
+        val owner = secondary?.let { findFirst(it, "videoOwnerRenderer") }
+        val viewsText = primary?.let { findFirst(it, "videoViewCountRenderer") }?.let { text(it["viewCount"]) ?: text(it["originalViewCount"]) }
+        val ownerRun = (owner?.get("title") as? JsonObject)?.get("runs")?.let { (it as? JsonArray)?.firstOrNull() as? JsonObject }
+        val likeText = primary?.let { p ->
+            findString(p, "likeCountWithLikeText") ?: findFirst(p, "likeButtonViewModel")?.let { findString(it, "title") }
+        }
+        return WatchMeta(
+            title = text(primary?.get("title")),
+            channel = text(owner?.get("title")),
+            channelUrl = ownerRun?.let { channelUrl(it) } ?: owner?.let { channelUrl(it) },
+            channelAvatar = owner?.let { thumb(it["thumbnail"]) },
+            subscribers = parseCount(text(owner?.get("subscriberCountText"))),
+            views = parseCount(viewsText),
+            dateText = text(primary?.get("relativeDateText")) ?: text(primary?.get("dateText")),
+            description = (secondary?.get("attributedDescription") as? JsonObject)?.let { str(it["content"]) }
+                ?: text(secondary?.get("description")),
+            likes = likeText?.let { parseCount(it) } ?: -1,
+        )
     }
 
     // ------------------------------------------------------------------ feeds
@@ -607,7 +653,7 @@ class AccountApi {
                     k == "continuationItemRenderer" -> findString(v, "token")?.let(tokens::add)
                     k == "nextContinuationData" -> str(v["continuation"])?.let(tokens::add)
                     k == "feedFilterChipBarRenderer" || k == "chipBarViewModel" || k == "chipCloudRenderer" -> Unit
-                    k.endsWith("adSlotRenderer", ignoreCase = true) || k.contains("promoted", true) ||
+                    k.endsWith("adSlotRenderer", ignoreCase = true) || k.contains("promo", true) ||
                         k.endsWith("AdRenderer") || k == "adSlotViewModel" || k == "statementBannerRenderer" -> Unit
                     else -> walk(v, out, tokens)
                 }
@@ -622,7 +668,7 @@ class AccountApi {
         return VideoItem(
             url = "https://www.youtube.com/shorts/$id",
             title = text(v["headline"]) ?: text(v["accessibility"]) ?: return null,
-            thumbnail = thumb(v["thumbnail"]) ?: "https://i.ytimg.com/vi/$id/hq2.jpg",
+            thumbnail = thumb(v["thumbnail"]) ?: "https://i.ytimg.com/vi/$id/hqdefault.jpg",
             views = parseCount(text(v["viewCountText"])),
             isShort = true,
         )
@@ -636,7 +682,7 @@ class AccountApi {
         return VideoItem(
             url = "https://www.youtube.com/shorts/$id",
             title = text(overlay?.get("primaryText")) ?: str(v["accessibilityText"])?.substringBefore(",") ?: return null,
-            thumbnail = sources?.firstOrNull()?.let { str((it as? JsonObject)?.get("url")) } ?: "https://i.ytimg.com/vi/$id/hq2.jpg",
+            thumbnail = sources?.lastOrNull()?.let { str((it as? JsonObject)?.get("url")) }?.let { if (it.startsWith("//")) "https:$it" else it } ?: "https://i.ytimg.com/vi/$id/hqdefault.jpg",
             views = parseCount(text(overlay?.get("secondaryText"))),
             isShort = true,
         )

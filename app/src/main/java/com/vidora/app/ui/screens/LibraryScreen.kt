@@ -98,7 +98,9 @@ fun LibraryScreen(nav: NavHostController, actions: VideoActions) {
             colors = com.vidora.app.ui.theme.glassBarColors()
         )
     }) {
-        LazyColumn(contentPadding = PaddingValues(top = com.vidora.app.ui.theme.topChromePadding(), bottom = com.vidora.app.ui.theme.bottomChromePadding())) {
+        val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+        LaunchedEffect(listState) { com.vidora.app.ui.TabReselect.events.collect { listState.animateScrollToItem(0) } }
+        LazyColumn(state = listState, contentPadding = PaddingValues(top = com.vidora.app.ui.theme.topChromePadding(), bottom = com.vidora.app.ui.theme.bottomChromePadding())) {
             // YouTube-style profile header
             item {
                 val s = session
@@ -185,22 +187,43 @@ fun LibraryScreen(nav: NavHostController, actions: VideoActions) {
                     }
                 }
             }
-            item { Spacer(Modifier.height(12.dp)) }
+            item { Spacer(Modifier.height(8.dp)) }
+            // iOS-style grouped lists — every destination appears once.
             item {
                 val downloads by Graph.downloads.items.collectAsState()
-                LibraryRow(Icons.Rounded.Download, "Downloads", "${downloads.size} files · watch offline") { nav.navigate(Routes.DOWNLOADS) }
+                LibraryGroup(null) {
+                    LibraryRow(Icons.Rounded.Download, "Downloads", "${downloads.size} files · watch offline") { nav.navigate(Routes.DOWNLOADS) }
+                    if (session == null) {
+                        LibraryRow(Icons.Rounded.ThumbUp, "Liked videos", "${library.favorites.size} videos") { nav.navigate(Routes.list("liked")) }
+                        LibraryRow(Icons.Rounded.WatchLater, "Watch later", "${library.watchLater.size} videos") { nav.navigate(Routes.list("later")) }
+                        LibraryRow(Icons.Rounded.Subscriptions, "Subscriptions", "${library.subscriptions.size} channels") { nav.navigate(Routes.SUBS) }
+                    }
+                }
             }
             if (session != null) {
-                item { LibraryRow(Icons.Rounded.History, "History", "Your YouTube watch history") { nav.navigate(Routes.accountFeed(AccountFeed.HISTORY.name)) } }
-                item { LibraryRow(Icons.Rounded.ThumbUp, "Liked videos", "From your YouTube account") { nav.navigate(Routes.accountFeed(AccountFeed.LIKED.name)) } }
-                item { LibraryRow(Icons.Rounded.WatchLater, "Watch later", "From your YouTube account") { nav.navigate(Routes.accountFeed(AccountFeed.WATCH_LATER.name)) } }
-                item { LibraryRow(Icons.AutoMirrored.Rounded.PlaylistPlay, "Your playlists", "Playlists on your YouTube account") { nav.navigate(Routes.accountFeed(AccountFeed.PLAYLISTS.name)) } }
-                item { SectionHeader("On this device") }
+                item {
+                    LibraryGroup("Your YouTube") {
+                        listOf(AccountFeed.LIKED, AccountFeed.WATCH_LATER, AccountFeed.PLAYLISTS, AccountFeed.SUBSCRIPTIONS, AccountFeed.RECOMMENDED).forEach { feed ->
+                            LibraryRow(feed.icon(), feed.label, null) { nav.navigate(Routes.accountFeed(feed.name)) }
+                        }
+                    }
+                }
+                item {
+                    LibraryGroup("YouTube Music") {
+                        AccountFeed.entries.filter { it.music }.forEach { feed ->
+                            LibraryRow(feed.icon(), feed.label.removePrefix("YouTube Music · "), null) { nav.navigate(Routes.accountFeed(feed.name)) }
+                        }
+                    }
+                }
+                item {
+                    LibraryGroup("On this device") {
+                        LibraryRow(Icons.Rounded.History, "Vidora history", "${library.history.size} videos") { nav.navigate(Routes.list("history")) }
+                        LibraryRow(Icons.Rounded.Favorite, "Favourites", "${library.favorites.size} videos") { nav.navigate(Routes.list("liked")) }
+                        LibraryRow(Icons.Rounded.WatchLater, "Saved for later", "${library.watchLater.size} videos") { nav.navigate(Routes.list("later")) }
+                        LibraryRow(Icons.Rounded.Subscriptions, "Subscribed channels", "${library.subscriptions.size} channels") { nav.navigate(Routes.SUBS) }
+                    }
+                }
             }
-            item { LibraryRow(Icons.Rounded.History, if (session != null) "Vidora history" else "History", "${library.history.size} videos") { nav.navigate(Routes.list("history")) } }
-            item { LibraryRow(Icons.Rounded.Favorite, if (session != null) "Favourites" else "Liked videos", "${library.favorites.size} videos") { nav.navigate(Routes.list("liked")) } }
-            item { LibraryRow(Icons.Rounded.WatchLater, if (session != null) "Saved for later" else "Watch later", "${library.watchLater.size} videos") { nav.navigate(Routes.list("later")) } }
-            item { LibraryRow(Icons.Rounded.Subscriptions, "Subscriptions", "${library.subscriptions.size} channels") { nav.navigate(Routes.SUBS) } }
 
             // ---------------------------------------------------------- local playlists
             item {
@@ -215,27 +238,21 @@ fun LibraryScreen(nav: NavHostController, actions: VideoActions) {
                     }
                 }
             }
-            if (library.playlists.isEmpty()) {
-                item {
+            item {
+                if (library.playlists.isEmpty()) {
                     Text(stringResource(R.string.ui_create_playlists_from_any_video_s_menu_s), style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
-                }
-            }
-            items(library.playlists, key = { "pl:" + it.id }) { p ->
-                LibraryRow(Icons.AutoMirrored.Rounded.PlaylistPlay, p.name, "${p.videos.size} videos") { nav.navigate(Routes.localPlaylist(p.id)) }
-            }
-
-            // ---------------------------------------------------------- YouTube account
-            item { SectionHeader(if (session != null) "YouTube account · ${session?.name ?: "signed in"}" else "YouTube account") }
-            if (session == null) {
-                item {
-                    LibraryRow(Icons.Rounded.AccountCircle, "Sign in with YouTube", "Unlock restricted videos and your own feeds") {
-                        nav.navigate(Routes.LOGIN)
+                } else LibraryGroup(null) {
+                    library.playlists.forEach { p ->
+                        LibraryRow(Icons.AutoMirrored.Rounded.PlaylistPlay, p.name, "${p.videos.size} videos") { nav.navigate(Routes.localPlaylist(p.id)) }
                     }
                 }
-            } else {
-                items(AccountFeed.entries, key = { "acc:" + it.name }) { feed ->
-                    LibraryRow(feed.icon(), feed.label, "From your YouTube account") { nav.navigate(Routes.accountFeed(feed.name)) }
+            }
+            if (session == null) {
+                item {
+                    LibraryGroup("YouTube account") {
+                        LibraryRow(Icons.Rounded.AccountCircle, "Sign in with YouTube", "Unlock restricted videos and your own feeds") { nav.navigate(Routes.LOGIN) }
+                    }
                 }
             }
         }
@@ -256,15 +273,29 @@ private fun AccountFeed.icon(): ImageVector = when (this) {
 }
 
 @Composable
-private fun LibraryRow(icon: ImageVector, title: String, subtitle: String, onClick: () -> Unit) {
+private fun LibraryRow(icon: ImageVector, title: String, subtitle: String?, onClick: () -> Unit) {
     ListItem(
         headlineContent = { Text(title) },
-        supportingContent = { Text(subtitle) },
+        supportingContent = subtitle?.let { { Text(it) } },
         leadingContent = { Icon(icon, null, tint = MaterialTheme.colorScheme.primary) },
-        trailingContent = { Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null) },
-        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.background),
+        trailingContent = { Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+        colors = ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent),
         modifier = Modifier.clickable(onClick = onClick)
     )
+}
+
+/** iOS-style inset group: optional title, then rows on one rounded glass card. */
+@Composable
+private fun LibraryGroup(title: String?, content: @Composable () -> Unit) {
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+        if (title != null) Text(
+            title, style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+            modifier = Modifier.padding(start = 4.dp, top = 10.dp, bottom = 8.dp)
+        )
+        com.vidora.app.ui.theme.GlassCard(Modifier.fillMaxWidth(), shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp)) {
+            Column(Modifier.padding(vertical = 4.dp)) { content() }
+        }
+    }
 }
 
 /** Full-screen list for history / liked / watch later. */

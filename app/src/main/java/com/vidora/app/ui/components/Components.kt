@@ -101,10 +101,15 @@ fun Thumbnail(item: VideoItem, modifier: Modifier = Modifier, progress: Float = 
             .clip(RoundedCornerShape(corner.dp))
             .background(MaterialTheme.colorScheme.surfaceContainerHighest)
     ) {
+        // Fallback chain: feed thumbnail → i.ytimg.com/vi/<id>/hqdefault → mqdefault (some feeds give
+        // animated / expired / protocol-less URLs that don't load).
+        val candidates = remember(item.thumbnail, item.url) { thumbnailCandidates(item) }
+        var attempt by remember(candidates) { mutableStateOf(0) }
         AsyncImage(
-            model = item.thumbnail,
+            model = candidates.getOrNull(attempt),
             contentDescription = null,
             contentScale = ContentScale.Crop,
+            onError = { if (attempt < candidates.lastIndex) attempt++ },
             modifier = Modifier.fillMaxSize()
         )
         val badge = when {
@@ -340,6 +345,7 @@ fun EntryGrid(
             last >= state.layoutInfo.totalItemsCount - 6
         }
     }
+    LaunchedEffect(state) { com.vidora.app.ui.TabReselect.events.collect { state.animateScrollToItem(0) } }
     LaunchedEffect(shouldLoadMore, paged.items.size) {
         if (shouldLoadMore && !paged.endReached && paged.items.isNotEmpty()) paged.loadMore()
     }
@@ -472,4 +478,17 @@ fun Modifier.dpadFocusRing(): Modifier = composed {
                 .background(color.copy(alpha = 0.08f), RoundedCornerShape(LocalDesign.current.corner.dp + 4.dp))
             else Modifier
         )
+}
+
+
+private val VIDEO_ID = Regex("""(?:v=|youtu\.be/|/shorts/|/live/|/embed/)([A-Za-z0-9_-]{11})""")
+
+internal fun thumbnailCandidates(item: VideoItem): List<String> {
+    val id = VIDEO_ID.find(item.url)?.groupValues?.get(1)
+    val first = item.thumbnail?.trim()?.takeIf { it.isNotBlank() }?.let { if (it.startsWith("//")) "https:$it" else it }
+    return listOfNotNull(
+        first,
+        id?.let { "https://i.ytimg.com/vi/$it/hqdefault.jpg" },
+        id?.let { "https://i.ytimg.com/vi/$it/mqdefault.jpg" },
+    ).distinct()
 }

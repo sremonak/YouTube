@@ -227,11 +227,15 @@ class ContentRepository {
         }
     }
 
-    private suspend fun ytDetails(url: String, withAccount: Boolean, client: YtClient): StreamDetails {
+    private suspend fun ytDetails(url: String, withAccount: Boolean, client: YtClient): StreamDetails = kotlinx.coroutines.coroutineScope {
         val handler = service.streamLHFactory.fromUrl(url)
         val id = handler.id
-        val r = runInterruptible { TvPlayer.fetch(id, withAccount, client) }
-        val related = runCatching { withTimeout(12_000) { Graph.accountApi.watchNext(id) } }.getOrDefault(emptyList())
+        // Watch page (title, channel, description, related) loads in parallel with the player response.
+        val pageJob = async { runCatching { withTimeout(12_000) { Graph.accountApi.watchPage(id) } }.getOrNull() }
+        val r = try { runInterruptible { TvPlayer.fetch(id, withAccount, client) } } catch (e: Throwable) { pageJob.cancel(); throw e }
+        val page = pageJob.await()
+        val related = page?.related.orEmpty()
+        val meta = page?.meta
         // TV stream URLs answer 403 until YouTube's announced pre-roll time has passed (yt-dlp waits too).
         while (true) {
             val left = r.availableAt - System.currentTimeMillis()
@@ -239,27 +243,31 @@ class ContentRepository {
             _loadStatus.value = "Starting in ${(left + 999) / 1000} s…"
             delay(left.coerceAtMost(1000))
         }
+        // TV player responses often come without title / channel / description → fill them from the watch page.
+        val description = r.description.ifBlank { meta?.description.orEmpty() }
         val item = VideoItem(
             url = handler.url,
-            title = r.title,
-            thumbnail = r.thumbnail ?: "https://i.ytimg.com/vi/$id/hqdefault.jpg",
-            uploader = r.author,
-            uploaderUrl = r.channelId?.let { "https://www.youtube.com/channel/$it" },
+            title = r.title.ifBlank { meta?.title.orEmpty() },
+            thumbnail = r.thumbnail?.takeIf { it.isNotBlank() } ?: "https://i.ytimg.com/vi/$id/hqdefault.jpg",
+            uploader = r.author?.takeIf { it.isNotBlank() } ?: meta?.channel,
+            uploaderUrl = r.channelId?.let { "https://www.youtube.com/channel/$it" } ?: meta?.channelUrl,
+            uploaderAvatar = meta?.channelAvatar,
             duration = r.lengthSeconds,
-            views = r.views,
+            views = if (r.views > 0) r.views else meta?.views ?: -1,
+            uploadedText = meta?.dateText,
             isLive = r.isLive,
         )
-        return StreamDetails(
+        StreamDetails(
             item = item,
-            description = r.description,
-            likes = -1,
-            subscriberCount = -1,
+            description = description,
+            likes = meta?.likes ?: -1,
+            subscriberCount = meta?.subscribers ?: -1,
             videoStreams = r.videos,
             audioStreams = mainAudios(r.audios),
             hlsUrl = r.hlsUrl,
             dashUrl = r.dashUrl,
             related = related.map { Entry.Video(it) },
-            chapters = Chapters.fromDescription(r.description),
+            chapters = Chapters.fromDescription(description),
             tags = emptyList(),
             category = null,
             allAudioStreams = r.audios,
@@ -332,7 +340,7 @@ class ContentRepository {
             audioStreams = audios,
             hlsUrl = hlsUrl?.takeIf { it.isNotBlank() },
             dashUrl = dashMpdUrl?.takeIf { it.isNotBlank() },
-            related = relatedItems.mapNotNull(::toEntry),
+            related = relatedItems.mapNotNull(::toEntry).filterNot { e -> e is Entry.Video && e.video.title.contains("YouTube Premium", true) },
             chapters = streamSegments.map { Chapter(it.title, it.startTimeSeconds, it.previewUrl) },
             tags = tags ?: emptyList(),
             category = category,

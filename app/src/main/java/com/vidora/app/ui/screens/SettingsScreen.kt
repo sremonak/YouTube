@@ -32,6 +32,19 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import com.vidora.app.ui.icons.ArrowBack
+import com.vidora.app.ui.icons.KeyboardArrowRight
+import com.vidora.app.ui.icons.Search
+import com.vidora.app.ui.icons.Close
+import com.vidora.app.ui.icons.AutoAwesome
+import com.vidora.app.ui.icons.Edit
+import com.vidora.app.ui.icons.ClosedCaption
+import com.vidora.app.ui.icons.ThumbUp
+import com.vidora.app.ui.icons.NotificationsActive
+import com.vidora.app.ui.icons.Shield
+import com.vidora.app.ui.icons.Download
+import com.vidora.app.ui.icons.Lock
+import com.vidora.app.ui.icons.Settings
+import com.vidora.app.ui.icons.Info
 import com.vidora.app.ui.icons.AccountCircle
 import com.vidora.app.ui.icons.Check
 import com.vidora.app.ui.icons.PlayArrow
@@ -147,17 +160,40 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
         Toast.makeText(context, if (ok) "Library restored" else "Invalid backup file", Toast.LENGTH_SHORT).show()
     }
 
+    // Settings are grouped into categories (iOS-style) with a search box on top.
+    var openName by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
+    var query by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
+    val open = openName?.let { n -> Sec.entries.firstOrNull { it.name == n } }
+    val q = query.trim()
+    val labels = remember { Sec.entries.associateWith { context.getString(it.title) } }
+    androidx.activity.compose.BackHandler(enabled = open != null || q.isNotEmpty()) {
+        if (q.isNotEmpty()) query = "" else openName = null
+    }
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    androidx.compose.runtime.LaunchedEffect(openName) { listState.scrollToItem(0) }
+
     com.vidora.app.ui.theme.GlassPage(header = {
         TopAppBar(
-            title = { Text(stringResource(R.string.settings)) },
-            navigationIcon = { IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") } },
+            title = { Text(open?.let { labels[it] } ?: stringResource(R.string.settings)) },
+            navigationIcon = {
+                IconButton(onClick = { if (open != null) openName = null else nav.popBackStack() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") }
+            },
             colors = com.vidora.app.ui.theme.glassBarColors()
         )
+        if (open == null) SettingsSearchField(query) { query = it }
     }) {
-        LazyColumn(contentPadding = PaddingValues(top = com.vidora.app.ui.theme.topChromePadding(), bottom = com.vidora.app.ui.theme.bottomChromePadding()), modifier = Modifier.fillMaxWidth()) {
+        LazyColumn(state = listState, contentPadding = PaddingValues(top = com.vidora.app.ui.theme.topChromePadding(), bottom = com.vidora.app.ui.theme.bottomChromePadding()), modifier = Modifier.fillMaxWidth()) {
+            if (open == null && q.isEmpty()) {
+                settingsHome(s, account?.name, labels, onOpen = { openName = it.name }) { block -> update(block) }
+            }
+            if (q.isNotEmpty()) item {
+                Text("Results for \"$q\"", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
+            }
+            with(SettingsBuilder(this, open, q, labels)) {
             // ------------------------------------------------------------ account
-            item { Header(stringResource(R.string.h_account)) }
-            item {
+            section(Sec.ACCOUNT)
+            item("account sign in login google youtube sign out") {
                 val session = account
                 if (session == null) {
                     ListItem(
@@ -268,8 +304,8 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
                 }
             }
             // ------------------------------------------------------------ appearance
-            item { Header(stringResource(R.string.h_appearance)) }
-            item {
+            section(Sec.APPEARANCE)
+            item("theme dark light black amoled night mode") {
                 Column(Modifier.padding(horizontal = 16.dp)) {
                     Text(stringResource(R.string.ui_theme), style = MaterialTheme.typography.titleSmall)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -292,7 +328,7 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 item { SwitchRow(stringResource(R.string.ui_material_you_colours), stringResource(R.string.ui_match_colours_to_your_wallpaper), s.dynamicColor) { v -> update { it.copy(dynamicColor = v) } } }
             }
-            item {
+            item("accent colour color") {
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                     Text(stringResource(R.string.ui_accent_colour), style = MaterialTheme.typography.titleSmall)
                     if (s.dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -313,7 +349,7 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
                 }
             }
             item { ClickRow(stringResource(R.string.ui_app_display_name), s.displayName) { dialog = "name" } }
-            item {
+            item("feed layout grid list compact") {
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                     Text(stringResource(R.string.ui_feed_layout), style = MaterialTheme.typography.titleSmall)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -323,7 +359,7 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
                     }
                 }
             }
-            item {
+            item("corner roundness radius rounded") {
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                     Text("Corner roundness · ${s.cornerRadius} dp", style = MaterialTheme.typography.titleSmall)
                     Slider(
@@ -335,8 +371,8 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
             item { SwitchRow(stringResource(R.string.ui_channel_avatars_in_feed), null, s.showChannelAvatars) { v -> update { it.copy(showChannelAvatars = v) } } }
 
             // ------------------------------------------------------------ icon & name
-            item { Header(stringResource(R.string.h_icon)) }
-            item {
+            section(Sec.ICON)
+            item("app icon launcher name logo home screen") {
                 Column(Modifier.padding(horizontal = 16.dp)) {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         LauncherCatalog.icons.forEach { icon ->
@@ -373,7 +409,7 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
             }
 
             // ------------------------------------------------------------ player
-            item { Header(stringResource(R.string.h_player)) }
+            section(Sec.PLAYER)
             item { ClickRow(if (s.smartQuality) "Max video quality (Wi-Fi)" else stringResource(R.string.ui_default_video_quality), "${s.defaultQuality}p") { dialog = "quality" } }
             item { SwitchRow("Smart quality (Auto)", "Starts instantly at a low quality on slow networks, then sharpens automatically like YouTube", s.smartQuality) { v -> update { it.copy(smartQuality = v) } } }
             item { ClickRow("Mobile data quality limit", if (s.mobileQuality == 0) "No limit" else "${s.mobileQuality}p") { dialog = "mobilequality" } }
@@ -402,11 +438,11 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
             item { ClickRow(stringResource(R.string.ui_equalizer_audio_boost), if (s.eqEnabled || s.volumeBoost > 0) "On" else "Off") { showEq = true } }
 
             // ------------------------------------------------------------ captions & audio language
-            item { Header(stringResource(R.string.h_captions)) }
+            section(Sec.CAPTIONS)
             item { SwitchRow(stringResource(R.string.ui_show_captions_by_default), null, s.captionsEnabled) { v -> update { it.copy(captionsEnabled = v) } } }
             item { ClickRow(stringResource(R.string.ui_caption_language), s.captionLang.ifBlank { "Device language (${java.util.Locale.getDefault().displayLanguage})" }) { dialog = "caplang" } }
             item { SwitchRow(stringResource(R.string.ui_auto_translate_captions), stringResource(R.string.ui_translate_into_your_device_language_when), s.captionTranslate) { v -> update { it.copy(captionTranslate = v) } } }
-            item {
+            item("caption subtitle size text bigger smaller") {
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                     Text("Caption size · ${(s.captionScale * 100).toInt()}%", style = MaterialTheme.typography.titleSmall)
                     Slider(value = s.captionScale, valueRange = 0.6f..2f, steps = 6, onValueChange = { v -> update { it.copy(captionScale = v) } })
@@ -415,23 +451,23 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
             item { ClickRow(stringResource(R.string.ui_preferred_audio_track), s.preferredAudioLang.ifBlank { "Original" }) { update { it.copy(preferredAudioLang = "") }; Toast.makeText(context, "Reset to original audio. Pick a dubbed track from the player to remember it.", Toast.LENGTH_LONG).show() } }
 
             // ------------------------------------------------------------ community
-            item { Header(stringResource(R.string.h_community)) }
+            section(Sec.COMMUNITY)
             item { SwitchRow(stringResource(R.string.ui_return_youtube_dislike), stringResource(R.string.ui_show_dislike_counts_from_returnyoutubedi), s.returnDislike) { v -> update { it.copy(returnDislike = v) } } }
             item { SwitchRow(stringResource(R.string.ui_dearrow), stringResource(R.string.ui_replace_clickbait_titles_thumbnails_with), s.deArrow) { v -> update { it.copy(deArrow = v) } } }
             item { SwitchRow(stringResource(R.string.ui_vertical_shorts_player), stringResource(R.string.ui_swipe_through_shorts_full_screen), s.shortsPlayer) { v -> update { it.copy(shortsPlayer = v) } } }
             item { ClickRow(stringResource(R.string.ui_content_filters), "${s.blockedChannels.size} blocked channels · ${s.blockedKeywords.size} keywords") { nav.navigate(Routes.FILTERS) } }
 
             // ------------------------------------------------------------ notifications
-            item { Header(stringResource(R.string.h_notifications)) }
+            section(Sec.NOTIFICATIONS)
             item {
                 ClickRow(stringResource(R.string.ui_new_video_notifications), if (s.notifyHours <= 0) "Off" else "Check subscriptions every ${s.notifyHours} h") { dialog = "notify" }
             }
 
             // ------------------------------------------------------------ sponsorblock
-            item { Header(stringResource(R.string.h_sponsorblock)) }
+            section(Sec.SPONSORBLOCK)
             item { SwitchRow(stringResource(R.string.ui_skip_sponsored_segments), stringResource(R.string.ui_community_submitted_segments_from_sponso), s.sponsorBlock) { v -> update { it.copy(sponsorBlock = v) } } }
             if (s.sponsorBlock) {
-                item {
+                item("sponsor categories segments intro outro selfpromo") {
                     FlowRow(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         SponsorCategories.forEach { (id, label) ->
                             FilterChip(selected = id in s.sponsorCategories, onClick = {
@@ -443,7 +479,7 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
             }
 
             // ------------------------------------------------------------ downloads
-            item { Header(stringResource(R.string.h_downloads)) }
+            section(Sec.DOWNLOADS)
             item { SwitchRow(stringResource(R.string.ui_ask_quality_every_time), stringResource(R.string.ui_choose_video_audio_and_quality_before_ea), s.askDownloadQuality) { v -> update { it.copy(askDownloadQuality = v) } } }
             item { ClickRow(stringResource(R.string.ui_default_download_quality), "${s.downloadQuality}p") { dialog = "dlquality" } }
             item { ClickRow(stringResource(R.string.ui_preferred_audio_format), s.downloadAudioPref.label) { dialog = "audiofmt" } }
@@ -473,7 +509,7 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
             }
 
             // ------------------------------------------------------------ content & privacy
-            item { Header(stringResource(R.string.h_content)) }
+            section(Sec.CONTENT)
             item { ClickRow(stringResource(R.string.ui_content_country), Countries.firstOrNull { it.first == s.contentCountry }?.second ?: s.contentCountry) { dialog = "country" } }
             item { SwitchRow(stringResource(R.string.ui_hide_shorts), null, s.hideShorts) { v -> update { it.copy(hideShorts = v) } } }
             item { ClickRow(stringResource(R.string.ui_import_subscriptions), stringResource(R.string.ui_from_newpipe_libretube_freetube_json_goo)) { subsImportLauncher.launch(arrayOf("*/*")) } }
@@ -489,7 +525,7 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
             item { ClickRow(stringResource(R.string.ui_reset_all_settings_2), null) { dialog = "reset" } }
 
             // ------------------------------------------------------------ advanced
-            item { Header(stringResource(R.string.h_advanced)) }
+            section(Sec.ADVANCED)
             item {
                 SwitchRow(stringResource(R.string.ui_use_potoken_botguard), "Generates YouTube integrity tokens locally. Used when YouTube blocks the normal player (VPN / \"not a bot\" fallback). Status: ${com.vidora.app.potoken.PoTokenProviderImpl.lastStatus}", s.poToken) { v ->
                     update { it.copy(poToken = v) }
@@ -519,9 +555,9 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
             }
 
             // ------------------------------------------------------------ about
-            item { Header(stringResource(R.string.h_about)) }
+            section(Sec.ABOUT)
             item { ClickRow("About ${s.displayName}", "Version ${BuildConfig.VERSION_NAME} · updates · live news from the developer") { nav.navigate(com.vidora.app.ui.Routes.ABOUT) } }
-            item {
+            item("about version licence license open source credits") {
                 com.vidora.app.ui.theme.GlassCard(
                     Modifier.fillMaxWidth().padding(16.dp),
                     tint = MaterialTheme.colorScheme.primaryContainer
@@ -536,6 +572,12 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
                         )
                     }
                 }
+            }
+            }
+            if (q.isNotEmpty()) item {
+                Text("Can't find it? Try another word — e.g. quality, dark, download, captions, sponsor.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp))
             }
         }
     }
@@ -596,8 +638,11 @@ private fun Header(title: String) {
 
 @Composable
 private fun SwitchRow(title: String, subtitle: String?, checked: Boolean, onChange: (Boolean) -> Unit) {
+    val search = LocalSettingsSearch.current
+    if (!search.matches(title, subtitle)) return
     ListItem(
-        headlineContent = { Text(title) },
+        overlineContent = search.overline(),
+        headlineContent = { Text(highlight(title, search.query)) },
         supportingContent = subtitle?.let { { Text(it) } },
         trailingContent = { Switch(checked = checked, onCheckedChange = onChange) },
         colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.background),
@@ -607,8 +652,12 @@ private fun SwitchRow(title: String, subtitle: String?, checked: Boolean, onChan
 
 @Composable
 private fun ClickRow(title: String, subtitle: String?, onClick: () -> Unit) {
+    val search = LocalSettingsSearch.current
+    if (!search.matches(title, subtitle)) return
     ListItem(
-        headlineContent = { Text(title) },
+        overlineContent = search.overline(),
+        headlineContent = { Text(highlight(title, search.query)) },
+        trailingContent = { Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
         supportingContent = subtitle?.let { { Text(it) } },
         colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.background),
         modifier = Modifier.clickable(onClick = onClick)
@@ -657,3 +706,215 @@ private val CaptionLanguages = listOf(
     "ja" to "日本語", "ko" to "한국어", "zh-Hans" to "中文 (简体)", "id" to "Bahasa Indonesia", "tr" to "Türkçe",
     "it" to "Italiano", "ta" to "தமிழ்", "te" to "తెలుగు", "ml" to "മലയാളം", "vi" to "Tiếng Việt",
 )
+
+// ====================================================================== categories + search
+
+/** The setting categories, shown as an iOS-style grouped list on the Settings home page. */
+private enum class Sec(val title: Int, val group: Int, val summary: String) {
+    ACCOUNT(R.string.h_account, 0, "YouTube sign-in, sync, history"),
+    APPEARANCE(R.string.h_appearance, 1, "Theme, glass, colours, layout"),
+    ICON(R.string.h_icon, 1, "Home-screen icon and name"),
+    PLAYER(R.string.h_player, 2, "Quality, background play, gestures, speed"),
+    CAPTIONS(R.string.h_captions, 2, "Subtitles, size, translation, dubbed audio"),
+    SPONSORBLOCK(R.string.h_sponsorblock, 2, "Skip sponsors, intros and reminders"),
+    COMMUNITY(R.string.h_community, 2, "Dislikes, DeArrow, Shorts, filters"),
+    DOWNLOADS(R.string.h_downloads, 3, "Quality, format, folder, subtitles"),
+    NOTIFICATIONS(R.string.h_notifications, 3, "New videos from your subscriptions"),
+    CONTENT(R.string.h_content, 3, "Country, history, incognito, backup"),
+    ADVANCED(R.string.h_advanced, 4, "Updates, PoToken, report a problem"),
+    ABOUT(R.string.h_about, 4, "Version, news, credits"),
+}
+
+private val Sec.icon: androidx.compose.ui.graphics.vector.ImageVector
+    get() = when (this) {
+        Sec.ACCOUNT -> Icons.Rounded.AccountCircle
+        Sec.APPEARANCE -> Icons.Rounded.AutoAwesome
+        Sec.ICON -> Icons.Rounded.Edit
+        Sec.PLAYER -> Icons.Rounded.PlayArrow
+        Sec.CAPTIONS -> Icons.Rounded.ClosedCaption
+        Sec.SPONSORBLOCK -> Icons.Rounded.Shield
+        Sec.COMMUNITY -> Icons.Rounded.ThumbUp
+        Sec.DOWNLOADS -> Icons.Rounded.Download
+        Sec.NOTIFICATIONS -> Icons.Rounded.NotificationsActive
+        Sec.CONTENT -> Icons.Rounded.Lock
+        Sec.ADVANCED -> Icons.Rounded.Settings
+        Sec.ABOUT -> Icons.Rounded.Info
+    }
+
+/** iOS Settings-style coloured icon tiles. */
+private val Sec.tile: Color
+    get() = when (this) {
+        Sec.ACCOUNT -> Color(0xFFFF3B30)
+        Sec.APPEARANCE -> Color(0xFF5856D6)
+        Sec.ICON -> Color(0xFFAF52DE)
+        Sec.PLAYER -> Color(0xFFFF2D55)
+        Sec.CAPTIONS -> Color(0xFF007AFF)
+        Sec.SPONSORBLOCK -> Color(0xFF34C759)
+        Sec.COMMUNITY -> Color(0xFFFF9500)
+        Sec.DOWNLOADS -> Color(0xFF30B0C7)
+        Sec.NOTIFICATIONS -> Color(0xFFFF3B30)
+        Sec.CONTENT -> Color(0xFF8E8E93)
+        Sec.ADVANCED -> Color(0xFF636366)
+        Sec.ABOUT -> Color(0xFF007AFF)
+    }
+
+/** What the rows of the current list should show: everything (inside a category) or only search matches. */
+private data class SettingsSearch(val query: String = "", val section: String? = null, val keywords: String? = null) {
+    private val words = query.lowercase().split(' ').filter { it.isNotBlank() }
+    fun matches(vararg texts: String?): Boolean {
+        if (words.isEmpty()) return true
+        val hay = (texts.toList() + section + keywords).filterNotNull().joinToString(" ").lowercase()
+        return words.all { hay.contains(it) }
+    }
+    fun overline(): (@Composable () -> Unit)? = if (words.isEmpty() || section == null) null else ({
+        Text(section, color = MaterialTheme.colorScheme.primary)
+    })
+}
+
+private val LocalSettingsSearch = androidx.compose.runtime.compositionLocalOf { SettingsSearch() }
+
+/**
+ * Wraps the LazyColumn so the long settings list can be shown one category at a time, or
+ * filtered by a search query. `section()` replaces the old headers; `item {}` keeps the old call sites.
+ */
+private class SettingsBuilder(
+    private val lazy: androidx.compose.foundation.lazy.LazyListScope,
+    private val open: Sec?,
+    private val query: String,
+    private val labels: Map<Sec, String>,
+) {
+    private var current = Sec.ACCOUNT
+    fun section(sec: Sec) { current = sec }
+
+    fun item(keywords: String? = null, content: @Composable androidx.compose.foundation.lazy.LazyItemScope.() -> Unit) {
+        val sec = current
+        val label = labels[sec]
+        if (query.isEmpty()) {
+            if (open != sec) return
+            lazy.item { content() }
+            return
+        }
+        // Custom widgets (chips, sliders…) are found through their keywords; plain rows filter themselves.
+        if (keywords != null && !SettingsSearch(query, label, keywords).matches()) return
+        lazy.item {
+            androidx.compose.runtime.CompositionLocalProvider(LocalSettingsSearch provides SettingsSearch(query, label, keywords)) { content() }
+        }
+    }
+}
+
+@Composable
+private fun highlight(text: String, query: String): androidx.compose.ui.text.AnnotatedString {
+    val color = MaterialTheme.colorScheme.primary
+    val words = query.lowercase().split(' ').filter { it.isNotBlank() }
+    return androidx.compose.ui.text.buildAnnotatedString {
+        append(text)
+        val lower = text.lowercase()
+        words.forEach { w ->
+            var i = lower.indexOf(w)
+            while (i >= 0) {
+                addStyle(androidx.compose.ui.text.SpanStyle(color = color, fontWeight = FontWeight.Bold), i, i + w.length)
+                i = lower.indexOf(w, i + w.length)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsSearchField(query: String, onChange: (String) -> Unit) {
+    val shape = RoundedCornerShape(14.dp)
+    Row(
+        Modifier.padding(start = 16.dp, end = 16.dp, bottom = 10.dp).fillMaxWidth().height(44.dp)
+            .clip(shape).background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f)).padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Rounded.Search, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.width(8.dp))
+        Box(Modifier.weight(1f)) {
+            if (query.isEmpty()) Text("Search settings", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge)
+            androidx.compose.foundation.text.BasicTextField(
+                value = query, onValueChange = onChange, singleLine = true,
+                textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        if (query.isNotEmpty()) {
+            Icon(Icons.Rounded.Close, "Clear", Modifier.size(20.dp).clip(CircleShape).clickable { onChange("") },
+                tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+/** Settings home: quick toggles, then the categories in iOS-style groups. */
+@OptIn(ExperimentalLayoutApi::class)
+private fun androidx.compose.foundation.lazy.LazyListScope.settingsHome(
+    s: AppSettings,
+    accountName: String?,
+    labels: Map<Sec, String>,
+    onOpen: (Sec) -> Unit,
+    update: ((AppSettings) -> AppSettings) -> Unit,
+) {
+    item(key = "quick") {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+            Text("Quick settings", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(start = 4.dp, top = 6.dp, bottom = 8.dp))
+            com.vidora.app.ui.theme.GlassCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+                FlowRow(Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    QuickChip("Background play", s.backgroundPlay) { v -> update { it.copy(backgroundPlay = v) } }
+                    QuickChip("Data saver", s.dataSaver) { v -> update { it.copy(dataSaver = v) } }
+                    QuickChip("Incognito", s.incognito) { v -> update { it.copy(incognito = v) } }
+                    QuickChip("SponsorBlock", s.sponsorBlock) { v -> update { it.copy(sponsorBlock = v) } }
+                    QuickChip("Captions", s.captionsEnabled) { v -> update { it.copy(captionsEnabled = v) } }
+                    QuickChip("Hide Shorts", s.hideShorts) { v -> update { it.copy(hideShorts = v) } }
+                    QuickChip("Glass UI", s.glassUi) { v -> update { it.copy(glassUi = v) } }
+                    QuickChip("iPhone icons", s.iosIcons) { v -> update { it.copy(iosIcons = v) } }
+                }
+            }
+        }
+    }
+    Sec.entries.groupBy { it.group }.forEach { (group, secs) ->
+        item(key = "group$group") {
+            com.vidora.app.ui.theme.GlassCard(
+                Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth(), shape = RoundedCornerShape(18.dp)
+            ) {
+                secs.forEachIndexed { i, sec ->
+                    val summary = when (sec) {
+                        Sec.ACCOUNT -> accountName?.let { "Signed in as $it" } ?: "Not signed in · tap to sign in"
+                        Sec.PLAYER -> "${if (s.smartQuality) "Smart quality" else "${s.defaultQuality}p"} · ${s.defaultSpeed}x" +
+                            if (s.backgroundPlay) " · background play on" else ""
+                        Sec.DOWNLOADS -> "${s.downloadQuality}p · ${s.downloadAudioPref.label}"
+                        Sec.ABOUT -> "Version ${BuildConfig.VERSION_NAME}"
+                        else -> sec.summary
+                    }
+                    Row(
+                        Modifier.fillMaxWidth().clickable { onOpen(sec) }.padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(Modifier.size(32.dp).clip(RoundedCornerShape(8.dp)).background(sec.tile), contentAlignment = Alignment.Center) {
+                            Icon(sec.icon, null, Modifier.size(19.dp), tint = Color.White)
+                        }
+                        Spacer(Modifier.width(14.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(labels[sec].orEmpty(), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+                            Text(summary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                        }
+                        Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    if (i < secs.lastIndex) androidx.compose.material3.HorizontalDivider(
+                        Modifier.padding(start = 60.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun QuickChip(label: String, on: Boolean, onChange: (Boolean) -> Unit) {
+    FilterChip(
+        selected = on, onClick = { onChange(!on) }, label = { Text(label) },
+        leadingIcon = if (on) ({ Icon(Icons.Rounded.Check, null, Modifier.size(16.dp)) }) else null,
+    )
+}

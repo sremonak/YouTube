@@ -95,7 +95,7 @@ fun GlassPage(
             CompositionLocalProvider(LocalGlass provides GlassPrefs(true, state)) {
                 Column(
                     Modifier.fillMaxWidth()
-                        .glass(RectangleShape, tint = bg, border = false, strength = 0.9f)
+                        .glass(RectangleShape, tint = bg, border = false, strength = 1f)
                         .drawBehind {
                             drawLine(hairline, Offset(0f, size.height), Offset(size.width, size.height), 1f)
                         }

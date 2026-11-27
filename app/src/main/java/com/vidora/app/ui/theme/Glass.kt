@@ -85,7 +85,7 @@ fun Modifier.glass(
     blur: Dp = 30.dp,
     border: Boolean = true,
     strength: Float = 1f,
-    fallbackAlpha: Float = 0.88f,
+    fallbackAlpha: Float = 0.94f,
 ): Modifier = composed {
     val prefs = LocalGlass.current
     val base = tint ?: MaterialTheme.colorScheme.surface
@@ -97,7 +97,9 @@ fun Modifier.glass(
     val blurPx = with(LocalDensity.current) { blur.toPx() }
     val fillAlpha = when {
         !prefs.enabled -> 1f
-        canBlur -> (if (dark) 0.52f else 0.62f) * strength + (1 - strength) * 0.2f
+        // Opaque enough that text scrolling underneath never competes with the bar's own
+        // text, even on phones where the backdrop blur is unavailable or switched off.
+        canBlur -> (if (dark) 0.78f else 0.82f) * strength + (1 - strength) * 0.3f
         else -> fallbackAlpha
     }
     val highlight = if (dark) Color.White.copy(alpha = 0.07f) else Color.White.copy(alpha = 0.55f)

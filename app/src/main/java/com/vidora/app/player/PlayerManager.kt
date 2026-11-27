@@ -355,9 +355,20 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
                 val details = Graph.repository.stream(item.url)
                 val extractMs = android.os.SystemClock.elapsedRealtime() - tapAt
                 _state.value = _state.value.copy(extractMs = extractMs)
-                val merged = details.item.copy(
-                    thumbnail = details.item.thumbnail ?: item.thumbnail,
-                    uploaderAvatar = details.item.uploaderAvatar ?: item.uploaderAvatar,
+                // Never lose what the feed already knew (title, channel, views…) when a fallback
+                // player source returns blanks.
+                val d = details.item
+                val merged = d.copy(
+                    title = d.title.ifBlank { item.title },
+                    thumbnail = d.thumbnail?.takeIf { it.isNotBlank() } ?: item.thumbnail,
+                    uploader = d.uploader?.takeIf { it.isNotBlank() } ?: item.uploader,
+                    uploaderUrl = d.uploaderUrl?.takeIf { it.isNotBlank() } ?: item.uploaderUrl,
+                    uploaderAvatar = d.uploaderAvatar?.takeIf { it.isNotBlank() } ?: item.uploaderAvatar,
+                    views = if (d.views > 0) d.views else item.views,
+                    uploadedText = d.uploadedText?.takeIf { it.isNotBlank() } ?: item.uploadedText,
+                    uploadedEpoch = if (d.uploadedEpoch > 0) d.uploadedEpoch else item.uploadedEpoch,
+                    duration = if (d.duration > 0) d.duration else item.duration,
+                    verified = d.verified || item.verified,
                 )
                 detailsFetchedAt = System.currentTimeMillis()
                 refreshAttempts = 0

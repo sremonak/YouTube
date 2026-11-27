@@ -14,6 +14,7 @@ import android.content.res.Configuration
 import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -409,8 +410,11 @@ private fun LazyListScope.detailsSection(
     item(key = "title") {
         var titleExpanded by rememberSaveable(item.url) { mutableStateOf(false) }
         Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp).animateContentSize()) {
-            Text(
-                item.title,
+            if (item.title.isBlank() && details == null) {
+                // Still loading — skeleton instead of an empty, blurred band.
+                SkeletonLine(0.92f, 18.dp); Spacer(Modifier.height(6.dp)); SkeletonLine(0.6f, 18.dp)
+            } else Text(
+                item.title.ifBlank { "Untitled video" },
                 style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp, lineHeight = 24.sp, fontWeight = FontWeight.Bold),
                 color = MaterialTheme.colorScheme.onBackground,
                 maxLines = if (titleExpanded) 10 else 2, overflow = TextOverflow.Ellipsis,
@@ -429,7 +433,15 @@ private fun LazyListScope.detailsSection(
             }
         }
     }
-    item(key = "channel") {
+    if (item.uploader.isNullOrBlank() && item.uploaderUrl == null) {
+        if (details == null) item(key = "channel_skeleton") {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(36.dp).clip(androidx.compose.foundation.shape.CircleShape).background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)))
+                Spacer(Modifier.width(12.dp))
+                SkeletonLine(0.4f, 14.dp)
+            }
+        }
+    } else item(key = "channel") {
         val library by Graph.library.data.collectAsState()
         val subscribed = library.subscriptions.any { it.url == item.uploaderUrl }
         Row(
@@ -759,12 +771,14 @@ fun MiniPlayer(onOpen: () -> Unit, floating: Boolean = false) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(Modifier.width(100.dp).aspectRatio(16f / 9f).clip(RoundedCornerShape(10.dp)).background(Color.Black)) {
-                    AsyncImage(item.thumbnail, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                    com.vidora.app.ui.components.Thumbnail(item.copy(duration = 0, isLive = false), Modifier.fillMaxSize(), cornerOverride = 10)
                 }
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(item.title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(item.uploader.orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                    Text(item.title.ifBlank { if (state.loading) "Loading…" else "Now playing" }, style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(item.uploader?.takeIf { it.isNotBlank() } ?: "Vidora", style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 IconButton(onClick = { Graph.player.togglePlay() }) {
                     if (state.loading) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
@@ -875,3 +889,16 @@ private fun linkify(text: String, color: Color): androidx.compose.ui.text.Annota
         }
         append(text.substring(i))
     }
+
+
+/** Pulsing grey bar used while text is loading. */
+@Composable
+private fun SkeletonLine(fraction: Float, height: androidx.compose.ui.unit.Dp) {
+    val t = androidx.compose.animation.core.rememberInfiniteTransition(label = "skeleton")
+    val a by t.animateFloat(
+        0.06f, 0.14f,
+        androidx.compose.animation.core.infiniteRepeatable(androidx.compose.animation.core.tween(800), androidx.compose.animation.core.RepeatMode.Reverse),
+        label = "skeletonAlpha",
+    )
+    Box(Modifier.fillMaxWidth(fraction).height(height).clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.onSurface.copy(alpha = a)))
+}
