@@ -87,6 +87,7 @@ object Routes {
     const val DOWNLOADS = "downloads"
     const val LIBRARY = "library"
     const val SEARCH = "search?q={q}"
+    const val PUBLIC_SEARCH = "publicsearch?q={q}"
     const val PLAYER = "player"
     const val CHANNEL = "channel/{url}"
     const val PLAYLIST = "playlist/{url}"
@@ -100,6 +101,7 @@ object Routes {
     const val ABOUT = "about"
 
     fun search(q: String = "") = "search?q=" + Uri.encode(q)
+    fun publicSearch(q: String) = "publicsearch?q=" + Uri.encode(q)
     fun channel(url: String) = "channel/" + Uri.encode(url)
     fun playlist(url: String) = "playlist/" + Uri.encode(url)
     fun list(kind: String) = "list/$kind"
@@ -231,6 +233,9 @@ fun AppRoot(activity: MainActivity, settings: AppSettings) {
                         Routes.SEARCH,
                         arguments = listOf(navArgument("q") { type = NavType.StringType; defaultValue = "" })
                     ) { entry -> SearchScreen(nav, actions, initialQuery = entry.arguments?.getString("q").orEmpty()) }
+                    composable(Routes.PUBLIC_SEARCH, arguments = listOf(navArgument("q") { type = NavType.StringType; defaultValue = "" })) { entry ->
+                        SearchScreen(nav, actions, entry.arguments?.getString("q").orEmpty(), com.vidora.app.data.VideoSource.PUBLIC)
+                    }
                     composable(Routes.PLAYER) { PlayerScreen(nav = nav, actions = actions, activity = activity, pipMode = false, onDownload = { downloadTarget = it }) }
                     composable(Routes.CHANNEL, arguments = listOf(navArgument("url") { type = NavType.StringType })) { entry ->
                         ChannelScreen(nav, actions, Uri.decode(entry.arguments?.getString("url").orEmpty()))

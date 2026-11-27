@@ -56,6 +56,7 @@ import androidx.navigation.NavHostController
 import com.vidora.app.Graph
 import com.vidora.app.data.Entry
 import com.vidora.app.data.SearchFilter
+import com.vidora.app.data.VideoSource
 import com.vidora.app.ui.Paged
 import com.vidora.app.ui.components.EntryGrid
 import com.vidora.app.ui.components.VideoActions
@@ -63,12 +64,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 
 @Composable
-fun SearchScreen(nav: NavHostController, actions: VideoActions, initialQuery: String) {
+fun SearchScreen(nav: NavHostController, actions: VideoActions, initialQuery: String, initialSource: VideoSource = VideoSource.ALL) {
     val scope = rememberCoroutineScope()
     val focus = LocalFocusManager.current
     val focusRequester = remember { FocusRequester() }
     var text by rememberSaveable { mutableStateOf(initialQuery) }
     var submitted by rememberSaveable { mutableStateOf(initialQuery) }
+    var source by rememberSaveable { mutableStateOf(initialSource) }
     var filter by rememberSaveable { mutableStateOf(SearchFilter.ALL) }
     var durationF by rememberSaveable { mutableStateOf(com.vidora.app.data.DurationFilter.ANY) }
     var dateF by rememberSaveable { mutableStateOf(com.vidora.app.data.DateFilter.ANY) }
@@ -78,8 +80,8 @@ fun SearchScreen(nav: NavHostController, actions: VideoActions, initialQuery: St
     val library by Graph.library.data.collectAsState()
     val settings by Graph.settings.flow.collectAsState(initial = null)
 
-    val paged = remember(submitted, filter) {
-        com.vidora.app.ui.UiCache.paged("search:${filter.name}:$submitted", ttlMs = 10 * 60_000L) { Graph.repository.search(submitted, filter) }
+    val paged = remember(submitted, filter, source) {
+        com.vidora.app.ui.UiCache.paged("search:${source.name}:${filter.name}:$submitted", ttlMs = 10 * 60_000L) { Graph.discovery.search(submitted, source, filter) }
     }
     LaunchedEffect(paged) { if (submitted.isNotBlank()) paged.ensureLoaded() }
     LaunchedEffect(Unit) { if (editing) focusRequester.requestFocus() }
@@ -147,6 +149,11 @@ fun SearchScreen(nav: NavHostController, actions: VideoActions, initialQuery: St
         }
         if (!editing) {
             LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(VideoSource.entries) { provider ->
+                    FilterChip(selected = provider == source, onClick = { source = provider }, label = { Text(provider.label) })
+                }
+            }
+            LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(SearchFilter.entries) { f ->
                     FilterChip(selected = f == filter, onClick = { filter = f }, label = { Text(f.label) })
                 }
@@ -175,6 +182,14 @@ fun SearchScreen(nav: NavHostController, actions: VideoActions, initialQuery: St
         } else {
             EntryGrid(
                 paged = paged, actions = actions,
+                header = {
+                    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                        Text("Search uses your exact query, not Home's country bias.", style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (paged.notices.isNotEmpty()) Text(paged.notices.joinToString("\n"), style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                },
                 filter = { e ->
                     !(settings?.hideShorts == true && e is Entry.Video && e.video.isShort) &&
                         (e !is Entry.Video || com.vidora.app.data.SearchRefine.matches(e.video, durationF, dateF, hideLive))

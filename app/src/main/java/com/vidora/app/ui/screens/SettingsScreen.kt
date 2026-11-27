@@ -99,9 +99,9 @@ import com.vidora.app.util.LauncherCatalog
 import kotlinx.coroutines.launch
 
 private val QualityOptions = listOf(144, 240, 360, 480, 720, 1080, 1440, 2160)
-private val Countries = listOf("" to "Automatic", "US" to "United States", "GB" to "United Kingdom", "IN" to "India",
-    "BD" to "Bangladesh", "CA" to "Canada", "AU" to "Australia", "DE" to "Germany", "FR" to "France", "JP" to "Japan",
-    "BR" to "Brazil", "PK" to "Pakistan", "AE" to "UAE", "SA" to "Saudi Arabia", "ID" to "Indonesia")
+private val Countries = listOf("" to "Automatic") + java.util.Locale.getISOCountries()
+    .map { it to java.util.Locale("", it).getDisplayCountry(java.util.Locale.ENGLISH) }.sortedBy { it.second }
+
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -509,6 +509,7 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
 
             // ------------------------------------------------------------ content & privacy
             section(Sec.CONTENT)
+            item { SwitchRow("Use IP country for Home", "Country-only lookup via country.is (sees your public IP). No GPS. Used only when Content country is Automatic; Search stays query-based.", s.autoRegionByIp) { v -> update { it.copy(autoRegionByIp = v) } } }
             item { ClickRow(stringResource(R.string.ui_content_country), Countries.firstOrNull { it.first == s.contentCountry }?.second ?: s.contentCountry) { dialog = "country" } }
             item { SwitchRow(stringResource(R.string.ui_hide_shorts), null, s.hideShorts) { v -> update { it.copy(hideShorts = v) } } }
             item { ClickRow(stringResource(R.string.ui_import_subscriptions), stringResource(R.string.ui_from_newpipe_libretube_freetube_json_goo)) { subsImportLauncher.launch(arrayOf("*/*")) } }
@@ -608,7 +609,7 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
         "audiofmt" -> ChoiceDialog("Preferred audio format", AudioPreference.entries.map { it to it.label }, s.downloadAudioPref, { dialog = null }) { v -> update { it.copy(downloadAudioPref = v) } }
         "country" -> ChoiceDialog("Content country", Countries, s.contentCountry, { dialog = null }) { v ->
             update { it.copy(contentCountry = v) }
-            Toast.makeText(context, "Restart the app to apply", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "Home region updated. Some YouTube category charts may need an app restart.", Toast.LENGTH_LONG).show()
         }
         "reset" -> GlassAlertDialog(
             onDismissRequest = { dialog = null },

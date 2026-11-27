@@ -34,7 +34,7 @@ object AccountSync {
     }
 
     fun subscribed(channelUrl: String, subscribed: Boolean) {
-        if (!active) return
+        if (!active || com.vidora.app.data.GuestSources.isPeerChannel(channelUrl)) return
         Graph.appScope.launch(Dispatchers.IO) {
             runCatching {
                 val id = RssFeed.channelIdFromUrl(channelUrl)

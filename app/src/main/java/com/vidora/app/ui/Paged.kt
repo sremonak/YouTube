@@ -19,6 +19,8 @@ class Paged(private val scope: CoroutineScope, private val first: suspend () -> 
         private set
     var error by mutableStateOf<String?>(null)
         private set
+    var notices by mutableStateOf<List<String>>(emptyList())
+        private set
     var endReached by mutableStateOf(false)
         private set
 
@@ -40,6 +42,7 @@ class Paged(private val scope: CoroutineScope, private val first: suspend () -> 
             try {
                 val result = first()
                 items = result.items.distinctBy { it.key }
+                notices = result.notices.distinct()
                 loadedOnce = true
                 next = result.next
                 endReached = result.next == null
@@ -60,6 +63,7 @@ class Paged(private val scope: CoroutineScope, private val first: suspend () -> 
         job = scope.launch {
             try {
                 val result = n()
+                notices = (notices + result.notices).distinct()
                 val known = items.map { it.key }.toHashSet()
                 items = items + result.items.filter { known.add(it.key) }
                 next = result.next

@@ -17,6 +17,7 @@ data class VideoItem(
     val isLive: Boolean = false,
     val isShort: Boolean = false,
     val verified: Boolean = false,
+    val platform: String = "YouTube",
     /** How much of it the signed-in account already watched (0–100, from YouTube); -1 = unknown. */
     @kotlinx.serialization.Transient val watchedPercent: Int = -1,
     /** YouTube's own menu actions for this item ("Not interested", "Remove from watch history"…). */
@@ -66,6 +67,7 @@ sealed interface Entry {
 class PageResult(
     val items: List<Entry>,
     val next: (suspend () -> PageResult)? = null,
+    val notices: List<String> = emptyList(),
 )
 
 data class VideoOption(

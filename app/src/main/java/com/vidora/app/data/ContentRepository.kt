@@ -51,7 +51,7 @@ enum class SearchFilter(val label: String, val id: String?) {
 /** Home feed sections. kioskId == null means "personalised mix". */
 enum class HomeSection(val label: String, val kioskId: String?) {
     ACCOUNT("Recommended", null),
-    FOR_YOU("For you", null),
+    FOR_YOU("Explore", null),
     LIVE("Live", "live"),
     MUSIC("Music", "trending_music"),
     GAMING("Gaming", "trending_gaming"),
@@ -154,6 +154,7 @@ class ContentRepository {
      * While the network is known to be blocked, signed-in users go straight to step 2.
      */
     private suspend fun loadStream(url: String): StreamDetails {
+        if (GuestSources.supported(url)) return Graph.openVideos.stream(url)
         val signed = Graph.account.isSignedIn && useAccountForRestricted
         try {
             if (signed && System.currentTimeMillis() < anonBlockedUntil) {
@@ -215,8 +216,8 @@ class ContentRepository {
                 "YouTube is blocking this network (very common with VPNs and public Wi-Fi). Vidora retried with your " +
                     "account, but YouTube answered: \"${lastReason ?: "blocked"}\". Switch VPN server or turn the VPN off, then tap Retry."
             bot ->
-                "YouTube is blocking anonymous playback on this network (very common with VPNs). Sign in from " +
-                    "Settings → Account, or switch VPN server / turn the VPN off, then tap Retry."
+                "YouTube refused anonymous playback on this network. Public access is not guaranteed on every IP. " +
+                    "Try another public video or use Find public alternatives; login is optional."
             anon is org.schabi.newpipe.extractor.exceptions.GeographicRestrictionException ||
                 (last as? PlayabilityException)?.reason?.contains("country", true) == true ->
                 "This video isn't available in the country your connection comes from (your VPN location). " +
@@ -400,6 +401,7 @@ class ContentRepository {
      * parser — which also uses the account when signed in.
      */
     suspend fun comments(url: String): CommentsPage = io {
+        if (GuestSources.supported(url)) return@io CommentsPage(emptyList(), null, disabled = true)
         // Signed in: YouTube's own comments API first, so like / reply / write work like the app.
         if (Graph.account.isSignedIn) {
             videoId(url)?.let { id ->
@@ -470,6 +472,7 @@ class ContentRepository {
     // ---------------------------------------------------------------- channel
 
     suspend fun channel(url: String): ChannelDetails = io {
+        if (GuestSources.isPeerChannel(url)) return@io Graph.openVideos.channel(url)
         val info = authFallback { ChannelInfo.getInfo(service, url) }
         val channel = ChannelItem(
             url = info.url,
@@ -509,6 +512,7 @@ class ContentRepository {
 
     /** Latest uploads of a channel — used by the subscriptions feed. */
     suspend fun latestUploads(channelUrl: String): List<VideoItem> = io {
+        if (GuestSources.isPeerChannel(channelUrl)) return@io Graph.openVideos.channelVideos(channelUrl).items.filterIsInstance<Entry.Video>().map { it.video }
         val info = ChannelInfo.getInfo(service, channelUrl)
         val handler = info.tabs.firstOrNull { it.contentFilters.contains(ChannelTabs.VIDEOS) }
             ?: return@io emptyList()
@@ -553,16 +557,16 @@ class ContentRepository {
 
     // ---------------------------------------------------------------- helpers
 
-    fun isStreamUrl(url: String): Boolean =
+    fun isStreamUrl(url: String): Boolean = GuestSources.supported(url) ||
         runCatching { service.streamLHFactory.acceptUrl(url) }.getOrDefault(false)
 
-    fun isChannelUrl(url: String): Boolean =
+    fun isChannelUrl(url: String): Boolean = GuestSources.isPeerChannel(url) ||
         runCatching { service.channelLHFactory.acceptUrl(url) }.getOrDefault(false)
 
     fun isPlaylistUrl(url: String): Boolean =
         runCatching { service.playlistLHFactory.acceptUrl(url) }.getOrDefault(false)
 
-    fun videoId(url: String): String? = runCatching { service.streamLHFactory.getId(url) }.getOrNull()
+    fun videoId(url: String): String? = if (GuestSources.supported(url)) null else runCatching { service.streamLHFactory.getId(url) }.getOrNull()
 
     private fun toEntry(item: InfoItem): Entry? = when (item) {
         is StreamInfoItem -> Entry.Video(

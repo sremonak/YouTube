@@ -21,7 +21,7 @@ class StreamInterceptor : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         val original = chain.request()
         val url = original.url
-        if (!url.encodedPath.startsWith("/videoplayback")) return chain.proceed(original)
+        if (!(url.host == "googlevideo.com" || url.host.endsWith(".googlevideo.com")) || !url.encodedPath.startsWith("/videoplayback")) return chain.proceed(original)
         // HLS/DASH segment URLs use path parameters (/videoplayback/id/...) and must not get `rn`
         val progressive = url.encodedPath == "/videoplayback"
 

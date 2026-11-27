@@ -494,6 +494,7 @@ fun EqualizerSheet(onDismiss: () -> Unit) {
 
 @Stable
 class CommentsState(private val url: String, private val scope: CoroutineScope) {
+    val publicSource = com.vidora.app.data.GuestSources.supported(url)
     val items = mutableStateListOf<CommentItem>()
     var total by mutableStateOf(-1)
         private set
@@ -612,7 +613,7 @@ fun CommentsPreview(state: CommentsState, onOpen: () -> Unit) {
             Spacer(Modifier.height(6.dp))
             val first = state.items.firstOrNull()
             when {
-                state.disabled -> Text(stringResource(R.string.ui_comments_are_turned_off), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                state.disabled -> Text(if (state.publicSource) "Comments are not supported for this source in Vidora; login is not needed to watch." else stringResource(R.string.ui_comments_are_turned_off), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 first != null -> Row(verticalAlignment = Alignment.CenterVertically) {
                     Avatar(first.authorAvatar, 24)
                     Spacer(Modifier.width(8.dp))
@@ -698,7 +699,7 @@ fun CommentsSheet(state: CommentsState, onSeek: (Long) -> Unit, onDismiss: () ->
             if (!state.loading && state.items.isEmpty()) {
                 item {
                     Text(
-                        if (state.disabled) "Comments are turned off" else state.error ?: "No comments yet",
+                        if (state.disabled) (if (state.publicSource) "Comments are not supported for this source in Vidora." else "Comments are turned off") else state.error ?: "No comments yet",
                         modifier = Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }

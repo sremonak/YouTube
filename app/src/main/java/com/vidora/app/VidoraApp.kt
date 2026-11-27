@@ -62,6 +62,9 @@ object Graph {
     val library by lazy { LibraryStore(app, appScope) }
     val downloads by lazy { DownloadsStore(app, appScope) }
     val repository by lazy { ContentRepository() }
+    val region by lazy { com.vidora.app.data.RegionRepository(app) }
+    val openVideos by lazy { com.vidora.app.data.OpenVideoRepository() }
+    val discovery by lazy { com.vidora.app.data.DiscoveryRepository() }
     val sponsorBlock by lazy { SponsorBlock(http) }
     val player by lazy { PlayerManager(app, appScope) }
     val account by lazy { AccountManager(app, appScope) }

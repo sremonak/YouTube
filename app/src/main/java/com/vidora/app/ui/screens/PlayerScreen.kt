@@ -182,12 +182,13 @@ fun PlayerScreen(
         return
     }
 
+    val publicSearch = { nav.navigate(Routes.publicSearch(state.current?.title.orEmpty())) }
     var sheet by remember { mutableStateOf(Sheet.NONE) }
     val comments = remember(state.current?.url) { state.current?.url?.let { com.vidora.app.ui.UiCache.comments(it) } }
 
     if (fullscreen) {
         Box(Modifier.fillMaxSize().background(Color.Black)) {
-            VideoSurface(Modifier.fillMaxSize(), state, showControls = true, onFullscreen = exitFullscreen, fullscreen = true, openSheet = { sheet = it })
+            VideoSurface(Modifier.fillMaxSize(), state, showControls = true, onFullscreen = exitFullscreen, fullscreen = true, onPublicSearch = publicSearch, openSheet = { sheet = it })
         }
         PlayerSheets(sheet, state, actions, comments) { sheet = Sheet.NONE }
         return
@@ -204,7 +205,7 @@ fun PlayerScreen(
                 item {
                     VideoSurface(
                         Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(16.dp)).background(Color.Black),
-                        state, true, onFullscreen, onSignIn = { nav.navigate(Routes.LOGIN) }, openSheet = { sheet = it }
+                        state, true, onFullscreen, onPublicSearch = publicSearch, onSignIn = { nav.navigate(Routes.LOGIN) }, openSheet = { sheet = it }
                     )
                 }
                 detailsSection(state, nav, actions, activity, onDownload, comments) { sheet = it }
@@ -229,7 +230,7 @@ fun PlayerScreen(
                     Modifier.fillMaxWidth().aspectRatio(16f / 9f)
                         .then(if (settings.ambientMode) Modifier.padding(horizontal = 0.dp) else Modifier)
                         .background(Color.Black),
-                    state, true, onFullscreen, onSignIn = { nav.navigate(Routes.LOGIN) },
+                    state, true, onFullscreen, onPublicSearch = publicSearch, onSignIn = { nav.navigate(Routes.LOGIN) },
                     openSheet = { sheet = it }, onMinimize = { nav.popBackStack() }
                 )
                 LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp)) {
@@ -293,7 +294,7 @@ private fun FullscreenEffect(activity: Activity, fullscreen: Boolean) {
 @Composable
 private fun VideoSurface(
     modifier: Modifier, state: PlayerUiState, showControls: Boolean, onFullscreen: () -> Unit, fullscreen: Boolean = false,
-    onSignIn: (() -> Unit)? = null, openSheet: (Sheet) -> Unit = {}, onMinimize: (() -> Unit)? = null,
+    onPublicSearch: (() -> Unit)? = null, onSignIn: (() -> Unit)? = null, openSheet: (Sheet) -> Unit = {}, onMinimize: (() -> Unit)? = null,
 ) {
     val settings by Graph.settingsState.collectAsState()
     var controlsVisible by remember { mutableStateOf(true) }
@@ -390,6 +391,9 @@ private fun VideoSurface(
                     if (onSignIn != null && !Graph.account.isSignedIn && (err.contains("Sign in", true) || err.contains("bot", true))) {
                         androidx.compose.material3.OutlinedButton(onClick = onSignIn) { Text(stringResource(R.string.ui_sign_in)) }
                     }
+                }
+                onPublicSearch?.let { search ->
+                    androidx.compose.material3.TextButton(onClick = search) { Text("Find public alternatives", color = Color.White) }
                 }
             }
         }

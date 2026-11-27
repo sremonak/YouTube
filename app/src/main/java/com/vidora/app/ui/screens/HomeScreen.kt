@@ -74,11 +74,17 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
     val context = LocalContext.current
     val updateAvailable by Updater.available.collectAsState()
     val checkingUpdate by Updater.checking.collectAsState()
+    val region by Graph.region.state.collectAsState()
+    var regionReady by remember { mutableStateOf(false) }
+    LaunchedEffect(settings.contentCountry, settings.autoRegionByIp) {
+        Graph.region.resolve(settings)
+        regionReady = true
+    }
     val session by Graph.account.session.collectAsState()
     val signedIn = session != null
     // Signed in: YouTube's own personalised chips (All, Music, Mixes, Gaming, Recently uploaded…) come first.
     var accountChips by remember(signedIn) { mutableStateOf(UiCache.get<List<FeedChip>>("home:chips") ?: emptyList()) }
-    val tabs = remember(signedIn, accountChips) {
+    val tabs = remember(signedIn, accountChips, region.code) {
         buildList {
             if (signedIn) {
                 add(HomeTab("acc", "All") {
@@ -95,17 +101,20 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
             HomeSection.entries
                 .filter { it != HomeSection.ACCOUNT && !(signedIn && it == HomeSection.FOR_YOU) }
                 .filter { it.label.lowercase() !in taken }
-                .forEach { sec -> add(HomeTab(sec.name, sec.label) { loadSection(sec) }) }
+                .forEach { sec -> add(HomeTab(sec.name, sec.label) { loadSection(sec, region.code) }) }
+            add(HomeTab("peertube", "PeerTube") { Graph.openVideos.peerSearch(null) })
+            add(HomeTab("commons", "Commons") { Graph.openVideos.commonsSearch(com.vidora.app.data.GuestSources.countryName(region.code)) })
         }
     }
     var tabKey by rememberSaveable(signedIn) { mutableStateOf(if (signedIn) "acc" else HomeSection.FOR_YOU.name) }
     val tab = tabs.firstOrNull { it.key == tabKey } ?: tabs.first()
     // Cached across navigation: coming back from Settings / the player shows the same feed instantly.
-    val paged = remember(tab.key, signedIn) { UiCache.paged("home:$signedIn:${tab.key}") { tab.load() } }
+    val paged = remember(tab.key, signedIn, region.code) { UiCache.paged("home:$signedIn:${region.code}:${tab.key}") { tab.load() } }
     val gridState = rememberLazyGridState()
 
     var shownTab by rememberSaveable { mutableStateOf(tab.key) }
-    LaunchedEffect(tab.key, signedIn) {
+    LaunchedEffect(tab.key, signedIn, region.code, regionReady) {
+        if (!regionReady) return@LaunchedEffect
         paged.ensureLoaded()
         // Only jump to the top when the user switched chips — not when returning to Home.
         if (shownTab != tab.key) { shownTab = tab.key; gridState.scrollToItem(0) }
@@ -126,13 +135,18 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
                         Icon(IosGlyphs.arrowDownCircleFill, if (updateAvailable != null) "Update available" else "Check for updates")
                     }
                 }
-                IconButton(onClick = { nav.navigate(if (signedIn) Routes.LIBRARY else Routes.LOGIN) }) {
+                IconButton(onClick = { nav.navigate(Routes.LIBRARY) }) {
                     val avatar = session?.avatar
                     if (avatar != null) Avatar(avatar, 28)
-                    else Icon(Icons.Rounded.AccountCircle, if (signedIn) "Account" else "Sign in")
+                    else Icon(Icons.Rounded.AccountCircle, if (signedIn) "Account" else "Your library · no login needed")
                 }
             },
             colors = com.vidora.app.ui.theme.glassBarColors()
+        )
+        Text(
+            "Home: ${com.vidora.app.data.GuestSources.countryName(region.code)} · ${region.method} · Guest-friendly",
+            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp), maxLines = 2,
         )
         LazyRow(
             contentPadding = PaddingValues(horizontal = 12.dp),
@@ -149,10 +163,18 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
         com.vidora.app.ui.theme.GlassRefreshBox(isRefreshing = paged.refreshing, onRefresh = { paged.load(refresh = true) }, modifier = Modifier.fillMaxSize()) {
             val library by Graph.library.data.collectAsState()
             val resume = remember(library.history) { com.vidora.app.data.ContinueWatching.pick(library.history) }
-            EntryGrid(
+            if (!regionReady) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            } else EntryGrid(
                 paged = paged, actions = actions, state = gridState,
                 filter = { e -> !(settings.hideShorts && e is Entry.Video && e.video.isShort) },
-                header = if (resume.isEmpty() || tab.key != tabs.first().key) null else ({ ContinueWatchingRow(resume, actions) })
+                header = {
+                    Column {
+                        if (paged.notices.isNotEmpty()) Text(paged.notices.joinToString("\n"), style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp))
+                        if (resume.isNotEmpty() && tab.key == tabs.first().key) ContinueWatchingRow(resume, actions)
+                    }
+                }
             )
         }
     }
@@ -161,18 +183,15 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
 /** One chip of the Home feed. */
 private class HomeTab(val key: String, val label: String, val load: suspend () -> PageResult)
 
-/** "For you" is built locally from the user's own history & searches — no account, no tracking. */
-private suspend fun loadSection(section: HomeSection): PageResult {
-    section.kioskId?.let { return Graph.repository.kiosk(it) }
-    if (section == HomeSection.ACCOUNT) return Graph.accountApi.feed(AccountFeed.RECOMMENDED)
-    val lib = Graph.library.data.value
-    val seeds = buildList {
-        addAll(lib.searchHistory.take(5))
-        addAll(lib.history.take(10).mapNotNull { it.video.uploader }.distinct().take(4))
-        addAll(lib.subscriptions.shuffled().take(3).map { it.name })
+/** Home is region-biased; typed search is kept separate and unmodified. */
+private suspend fun loadSection(section: HomeSection, country: String): PageResult {
+    if (section == HomeSection.FOR_YOU) return Graph.discovery.home(country)
+    section.kioskId?.let { kiosk ->
+        try { return Graph.repository.kiosk(kiosk) }
+        catch (e: kotlinx.coroutines.CancellationException) { throw e }
+        catch (_: Exception) { return Graph.discovery.search(com.vidora.app.data.GuestSources.regionalQuery(country, section.label)) }
     }
-    val query = seeds.randomOrNull() ?: listOf("trending today", "new music", "technology news", "best of the week", "documentary").random()
-    return runCatching { Graph.repository.search(query) }.getOrElse { Graph.repository.kiosk("trending_music") }
+    return Graph.discovery.home(country)
 }
 
 @Composable

@@ -73,6 +73,7 @@ data class AppSettings(
     val downloadWifiOnly: Boolean = false,
     // content / privacy
     val contentCountry: String = "",
+    val autoRegionByIp: Boolean = true,
     val saveHistory: Boolean = true,
     val saveSearchHistory: Boolean = true,
     val hideShorts: Boolean = false,
@@ -162,6 +163,7 @@ class SettingsRepository(private val context: Context) {
         val dlAudio = stringPreferencesKey("dl_audio")
         val dlWifi = booleanPreferencesKey("dl_wifi")
         val country = stringPreferencesKey("country")
+        val autoRegionIp = booleanPreferencesKey("auto_region_ip")
         val history = booleanPreferencesKey("history")
         val searchHistory = booleanPreferencesKey("search_history")
         val hideShorts = booleanPreferencesKey("hide_shorts")
@@ -240,6 +242,7 @@ class SettingsRepository(private val context: Context) {
             downloadAudioPref = this[K.dlAudio]?.let { runCatching { AudioPreference.valueOf(it) }.getOrNull() } ?: d.downloadAudioPref,
             downloadWifiOnly = this[K.dlWifi] ?: d.downloadWifiOnly,
             contentCountry = this[K.country] ?: d.contentCountry,
+            autoRegionByIp = this[K.autoRegionIp] ?: d.autoRegionByIp,
             saveHistory = this[K.history] ?: d.saveHistory,
             saveSearchHistory = this[K.searchHistory] ?: d.saveSearchHistory,
             hideShorts = this[K.hideShorts] ?: d.hideShorts,
@@ -317,6 +320,7 @@ class SettingsRepository(private val context: Context) {
             p[K.dlAudio] = s.downloadAudioPref.name
             p[K.dlWifi] = s.downloadWifiOnly
             p[K.country] = s.contentCountry
+            p[K.autoRegionIp] = s.autoRegionByIp
             p[K.history] = s.saveHistory
             p[K.searchHistory] = s.saveSearchHistory
             p[K.hideShorts] = s.hideShorts

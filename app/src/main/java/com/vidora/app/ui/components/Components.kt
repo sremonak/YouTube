@@ -208,6 +208,7 @@ private fun MetaLine(item: VideoItem) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
             listOfNotNull(
+                item.platform,
                 item.uploader,
                 Format.views(item.views).takeIf { it.isNotEmpty() },
                 item.uploadedText?.takeIf { it.isNotBlank() } ?: Format.relative(item.uploadedEpoch).takeIf { it.isNotEmpty() },
