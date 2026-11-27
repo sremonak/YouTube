@@ -276,20 +276,13 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 _state.value = _state.value.copy(isPlaying = isPlaying)
-                historyReportJob?.cancel()
-                val video = _state.value.current
-                if (isPlaying && video != null && historyReportedFor != video.url) {
-                    historyReportJob = scope.launch {
-                        kotlinx.coroutines.delay(com.vidora.app.account.WatchHistoryPolicy.MIN_PLAY_MS)
-                        if (_state.value.current?.url == video.url && exoPlayer.isPlaying &&
-                            settings.syncWatchHistory && !settings.incognito && Graph.account.isSignedIn && !video.isLive &&
-                            Graph.repository.videoId(video.url) != null) {
-                            historyReportedFor = video.url
-                            com.vidora.app.account.AccountSync.markWatched(video, com.vidora.app.account.WatchHistoryPolicy.MIN_PLAY_MS / 1000.0)
-                        }
-                    }
-                }
+                scheduleWatchHistory(isPlaying)
                 if (!isPlaying) persistPosition()
+            }
+
+            override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
+                // A seek must not be counted as watched time; start a fresh continuous interval.
+                scheduleWatchHistory(exoPlayer.isPlaying)
             }
 
             override fun onPlaybackStateChanged(playbackState: Int) {
@@ -344,6 +337,24 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
     }
 
     // ------------------------------------------------------------------ public API
+
+    private fun scheduleWatchHistory(isPlaying: Boolean) {
+        historyReportJob?.cancel()
+        val video = _state.value.current ?: return
+        if (!isPlaying || historyReportedFor == video.url) return
+        val startSeconds = exoPlayer.currentPosition.coerceAtLeast(0) / 1000.0
+        historyReportJob = scope.launch {
+            kotlinx.coroutines.delay(com.vidora.app.account.WatchHistoryPolicy.MIN_PLAY_MS)
+            if (_state.value.current?.url == video.url && exoPlayer.isPlaying && settings.syncWatchHistory &&
+                !settings.incognito && Graph.account.isSignedIn && !video.isLive && Graph.repository.videoId(video.url) != null) {
+                val seconds = (exoPlayer.currentPosition / 1000.0 - startSeconds).coerceAtLeast(0.0)
+                if (seconds > 0) {
+                    historyReportedFor = video.url
+                    com.vidora.app.account.AccountSync.markWatched(video, seconds, startSeconds)
+                }
+            }
+        }
+    }
 
     private var rateLimitedUrl: String? = null
     private var rateLimitUntil = 0L

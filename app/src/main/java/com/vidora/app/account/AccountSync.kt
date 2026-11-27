@@ -49,13 +49,13 @@ object AccountSync {
         private set
 
     /** Adds the video to the YouTube account's watch history (fire and forget). */
-    fun markWatched(video: com.vidora.app.data.VideoItem, watchedSeconds: Double) {
+    fun markWatched(video: com.vidora.app.data.VideoItem, watchedSeconds: Double, startSeconds: Double = 0.0) {
         val settings = Graph.settingsState.value
         if (!WatchHistoryPolicy.eligible(Graph.account.isSignedIn, settings.syncWatchHistory, settings.incognito,
                 Graph.repository.videoId(video.url) != null)) return
         val id = Graph.repository.videoId(video.url) ?: return
         Graph.appScope.launch(Dispatchers.IO) {
-            val ok = runCatching { Graph.accountApi.markWatched(id, watchedSeconds) }
+            val ok = runCatching { Graph.accountApi.markWatched(id, watchedSeconds, startSeconds) }
             if (ok.getOrDefault(false)) kotlinx.coroutines.withContext(Dispatchers.Main) {
                 com.vidora.app.ui.UiCache.invalidate("home:true:")
                 com.vidora.app.ui.UiCache.invalidate("acc:HISTORY:")

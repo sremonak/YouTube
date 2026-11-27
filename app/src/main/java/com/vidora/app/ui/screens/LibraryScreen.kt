@@ -105,7 +105,7 @@ fun LibraryScreen(nav: NavHostController, actions: VideoActions) {
             item {
                 val s = session
                 Row(
-                    Modifier.fillMaxWidth().clickable { nav.navigate(if (s != null) Routes.SETTINGS else Routes.LOGIN) }.padding(horizontal = 16.dp, vertical = 8.dp),
+                    Modifier.fillMaxWidth().clickable { nav.navigate(Routes.SETTINGS) }.padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (s?.avatar != null) com.vidora.app.ui.components.Avatar(s.avatar, 64)

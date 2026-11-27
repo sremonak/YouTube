@@ -456,7 +456,7 @@ class AccountApi {
      * recommendations — the same playback/watchtime stats pings the official player sends
      * (algorithm from yt-dlp's `--mark-watched`).
      */
-    suspend fun markWatched(videoId: String, watchedSeconds: Double = 0.0): Boolean = withContext(Dispatchers.IO) {
+    suspend fun markWatched(videoId: String, watchedSeconds: Double = 0.0, startSeconds: Double = 0.0): Boolean = withContext(Dispatchers.IO) {
         val account = Graph.account
         val seconds = WatchHistoryPolicy.seconds(watchedSeconds)
         val privacy = Graph.settings.flow.first()
@@ -473,11 +473,12 @@ class AccountApi {
             val currentSettings = Graph.settings.flow.first()
             if (!account.isSignedIn || currentSettings.incognito || !currentSettings.syncWatchHistory) return@withContext false
             val duration = url.queryParameter("len")?.toDoubleOrNull()?.takeIf { it.isFinite() && it > 0 } ?: seconds
-            val len = minOf(seconds, duration).toString()
+            val start = WatchHistoryPolicy.seconds(startSeconds).coerceAtMost(duration)
+            val len = minOf(start + seconds, duration).toString()
             val b = url.newBuilder()
                 .setQueryParameter("ver", "2").setQueryParameter("cpn", cpn)
                 .setQueryParameter("cmt", len).setQueryParameter("el", "detailpage")
-            if (i == 1) b.setQueryParameter("st", "0").setQueryParameter("et", len)
+            if (i == 1) b.setQueryParameter("st", start.toString()).setQueryParameter("et", len)
             val req = Request.Builder().url(b.build()).header("User-Agent", NetworkDownloader.USER_AGENT)
                 .header("Referer", "https://www.youtube.com/watch?v=$videoId")
             account.authHeaders().forEach { (k, v) -> req.header(k, v) }
