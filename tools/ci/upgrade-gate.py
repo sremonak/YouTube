@@ -19,9 +19,11 @@ REPORT.parent.mkdir(parents=True, exist_ok=True)
 
 
 def command(*args):
-    result = subprocess.run(args, check=True, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    result = subprocess.run(args, check=False, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=45)
     with REPORT.open("a") as out:
         out.write("$ " + " ".join(args) + "\n" + result.stdout + "\n")
+    if result.returncode:
+        raise RuntimeError("Command failed: " + " ".join(args) + ": " + result.stdout[-1500:])
     return result.stdout
 
 
@@ -30,14 +32,20 @@ def adb(*args):
 
 
 def snapshot():
-    adb("shell", "uiautomator", "dump", "/sdcard/vidora-upgrade.xml")
+    adb("shell", "rm", "-f", "/sdcard/vidora-upgrade.xml")
+    adb("shell", "uiautomator", "dump", "--compressed", "/sdcard/vidora-upgrade.xml")
     return ET.fromstring(adb("shell", "cat", "/sdcard/vidora-upgrade.xml"))
 
 
 def wait_for(predicate, description):
     deadline = time.monotonic() + 60
     while time.monotonic() < deadline:
-        root = snapshot()
+        try:
+            root = snapshot()
+        except (RuntimeError, ET.ParseError, subprocess.TimeoutExpired):
+            # UIAutomator can report no idle root during launch/window transitions.
+            time.sleep(1)
+            continue
         later = find(root, "text", "Later")
         if later is not None:
             tap(later)
@@ -73,6 +81,8 @@ def assert_existing_guest():
 try:
     old, new = sys.argv[1:]
     # Fresh API34 emulator; never run against a person's device/library.
+    adb("shell", "input", "keyevent", "224")
+    adb("shell", "input", "keyevent", "82")
     adb("install", "--no-streaming", old)
     adb("shell", "pm", "grant", PACKAGE, "android.permission.POST_NOTIFICATIONS")
     launch()
@@ -99,6 +109,7 @@ try:
     assert_existing_guest()
     REPORT.write_text(REPORT.read_text() + "PASS: signed upgrade + real process restart + guest preference retention\n")
 except Exception as error:
-    message = str(error).replace("%", "%25").replace("\n", "%0A").replace("\r", "")
+    detail = str(error) + "\n" + REPORT.read_text(errors="replace")[-6000:]
+    message = detail.replace("%", "%25").replace("\n", "%0A").replace("\r", "")
     print("::error title=Signed upgrade gate::" + message)
     raise
