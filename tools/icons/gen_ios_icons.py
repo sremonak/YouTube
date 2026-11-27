@@ -106,7 +106,10 @@ MAP = {
 EXTRA = ['info_circle_fill', 'arrow_2_circlepath', 'tv', 'antenna_radiowaves_left_right', 'speedometer',
          'leaf_arrow_circlepath', 'chevron_right', 'square_arrow_down', 'checkmark_seal', 'doc_text', 'link',
          'app_badge', 'star_fill', 'heart_circle_fill', 'gauge', 'wifi', 'bolt_fill', 'film_fill',
-         'logo_github', 'device_phone_portrait', 'hand_raised_fill', 'paintbrush_fill', 'sparkles']
+         'logo_github', 'device_phone_portrait', 'hand_raised_fill', 'paintbrush_fill', 'sparkles',
+         # iOS Settings tiles
+         'person_fill', 'square_grid_2x2_fill', 'play_rectangle_fill', 'shield_lefthalf_fill', 'hand_thumbsup_fill',
+         'arrow_down_to_line', 'gear_alt_fill', 'sun_max_fill', 'captions_bubble_fill', 'bell_fill']
 
 def num(s): return float(s)
 

@@ -184,7 +184,7 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
     }) {
         LazyColumn(state = listState, contentPadding = PaddingValues(top = com.vidora.app.ui.theme.topChromePadding(), bottom = com.vidora.app.ui.theme.bottomChromePadding()), modifier = Modifier.fillMaxWidth()) {
             if (open == null && q.isEmpty()) {
-                settingsHome(s, account?.name, labels, onOpen = { openName = it.name }) { block -> update(block) }
+                settingsHome(s, account?.name, account?.avatar, labels, onOpen = { openName = it.name }) { block -> update(block) }
             }
             if (q.isNotEmpty()) item {
                 Text("Results for \"$q\"", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -725,38 +725,53 @@ private enum class Sec(val title: Int, val group: Int, val summary: String) {
     ABOUT(R.string.h_about, 4, "Version, news, credits"),
 }
 
+/** The same glyphs iOS Settings uses (Framework7's SF-style set), always iOS regardless of the icon style. */
 private val Sec.icon: androidx.compose.ui.graphics.vector.ImageVector
     get() = when (this) {
-        Sec.ACCOUNT -> Icons.Rounded.AccountCircle
-        Sec.APPEARANCE -> Icons.Rounded.AutoAwesome
-        Sec.ICON -> Icons.Rounded.Edit
-        Sec.PLAYER -> Icons.Rounded.PlayArrow
-        Sec.CAPTIONS -> Icons.Rounded.ClosedCaption
-        Sec.SPONSORBLOCK -> Icons.Rounded.Shield
-        Sec.COMMUNITY -> Icons.Rounded.ThumbUp
-        Sec.DOWNLOADS -> Icons.Rounded.Download
-        Sec.NOTIFICATIONS -> Icons.Rounded.NotificationsActive
-        Sec.CONTENT -> Icons.Rounded.Lock
-        Sec.ADVANCED -> Icons.Rounded.Settings
-        Sec.ABOUT -> Icons.Rounded.Info
+        Sec.ACCOUNT -> com.vidora.app.ui.icons.IosGlyphs.personFill
+        Sec.APPEARANCE -> com.vidora.app.ui.icons.IosGlyphs.sunMaxFill            // Display & Brightness
+        Sec.ICON -> com.vidora.app.ui.icons.IosGlyphs.squareGrid2x2Fill           // Home Screen & App Library
+        Sec.PLAYER -> com.vidora.app.ui.icons.IosGlyphs.playRectangleFill
+        Sec.CAPTIONS -> com.vidora.app.ui.icons.IosGlyphs.captionsBubbleFill
+        Sec.SPONSORBLOCK -> com.vidora.app.ui.icons.IosGlyphs.shieldLefthalfFill
+        Sec.COMMUNITY -> com.vidora.app.ui.icons.IosGlyphs.handThumbsupFill
+        Sec.DOWNLOADS -> com.vidora.app.ui.icons.IosGlyphs.arrowDownToLine
+        Sec.NOTIFICATIONS -> com.vidora.app.ui.icons.IosGlyphs.bellFill            // Notifications
+        Sec.CONTENT -> com.vidora.app.ui.icons.IosGlyphs.handRaisedFill            // Privacy & Security
+        Sec.ADVANCED -> com.vidora.app.ui.icons.IosGlyphs.gearAltFill              // General
+        Sec.ABOUT -> com.vidora.app.ui.icons.IosGlyphs.infoCircleFill
     }
 
-/** iOS Settings-style coloured icon tiles. */
+/** iOS system colours, as on the iPhone Settings tiles. */
 private val Sec.tile: Color
     get() = when (this) {
-        Sec.ACCOUNT -> Color(0xFFFF3B30)
-        Sec.APPEARANCE -> Color(0xFF5856D6)
-        Sec.ICON -> Color(0xFFAF52DE)
+        Sec.ACCOUNT -> Color(0xFF8E8E93)
+        Sec.APPEARANCE -> Color(0xFF007AFF)
+        Sec.ICON -> Color(0xFF5856D6)
         Sec.PLAYER -> Color(0xFFFF2D55)
-        Sec.CAPTIONS -> Color(0xFF007AFF)
+        Sec.CAPTIONS -> Color(0xFF32ADE6)
         Sec.SPONSORBLOCK -> Color(0xFF34C759)
         Sec.COMMUNITY -> Color(0xFFFF9500)
         Sec.DOWNLOADS -> Color(0xFF30B0C7)
         Sec.NOTIFICATIONS -> Color(0xFFFF3B30)
-        Sec.CONTENT -> Color(0xFF8E8E93)
-        Sec.ADVANCED -> Color(0xFF636366)
-        Sec.ABOUT -> Color(0xFF007AFF)
+        Sec.CONTENT -> Color(0xFF007AFF)
+        Sec.ADVANCED -> Color(0xFF8E8E93)
+        Sec.ABOUT -> Color(0xFF8E8E93)
     }
+
+/** iOS-style app tile: rounded square with a white glyph (or the profile photo for the account). */
+@Composable
+private fun SecTile(sec: Sec, avatar: String?) {
+    if (sec == Sec.ACCOUNT && avatar != null) {
+        Avatar(avatar, 32)
+        return
+    }
+    Box(
+        Modifier.size(32.dp).clip(RoundedCornerShape(8.dp))
+            .background(Brush.verticalGradient(listOf(sec.tile.copy(alpha = 0.92f), sec.tile))),
+        contentAlignment = Alignment.Center,
+    ) { Icon(sec.icon, null, Modifier.size(21.dp), tint = Color.White) }
+}
 
 /** What the rows of the current list should show: everything (inside a category) or only search matches. */
 private data class SettingsSearch(val query: String = "", val section: String? = null, val keywords: String? = null) {
@@ -824,7 +839,7 @@ private fun SettingsSearchField(query: String, onChange: (String) -> Unit) {
     val shape = RoundedCornerShape(14.dp)
     Row(
         Modifier.padding(start = 16.dp, end = 16.dp, bottom = 10.dp).fillMaxWidth().height(44.dp)
-            .clip(shape).background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f)).padding(horizontal = 12.dp),
+            .clip(shape).background(MaterialTheme.colorScheme.surfaceContainerHighest).padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(Icons.Rounded.Search, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -850,6 +865,7 @@ private fun SettingsSearchField(query: String, onChange: (String) -> Unit) {
 private fun androidx.compose.foundation.lazy.LazyListScope.settingsHome(
     s: AppSettings,
     accountName: String?,
+    accountAvatar: String?,
     labels: Map<Sec, String>,
     onOpen: (Sec) -> Unit,
     update: ((AppSettings) -> AppSettings) -> Unit,
@@ -890,9 +906,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.settingsHome(
                         Modifier.fillMaxWidth().clickable { onOpen(sec) }.padding(horizontal = 14.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Box(Modifier.size(32.dp).clip(RoundedCornerShape(8.dp)).background(sec.tile), contentAlignment = Alignment.Center) {
-                            Icon(sec.icon, null, Modifier.size(19.dp), tint = Color.White)
-                        }
+                        SecTile(sec, accountAvatar)
                         Spacer(Modifier.width(14.dp))
                         Column(Modifier.weight(1f)) {
                             Text(labels[sec].orEmpty(), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
