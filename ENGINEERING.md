@@ -28,7 +28,10 @@ Existing APK signing and Update/Later flow remain unchanged.
 - Startup no longer blocks on a synchronous DataStore read. Low-RAM devices get the opaque UI fallback.
 - A dedicated release-target Macrobenchmark/ProfileGenerator module measures startup/frame timing and
   produces profile files. Emulator timings are diagnostic, not real-device speed claims. Generated
-  profiles require review/measurement before replacing the existing bundled profile.
+  profiles require review/measurement before replacing the existing bundled profile. Because the
+  measured target is the minified release APK, extracted profile descriptors must also be reconciled
+  with that build's R8 mapping before reuse as source-level build input; raw traces are not silently
+  copied into the shipping profile.
 - Build actions are pinned to commits; dependency updates are proposed, not auto-merged. SHA-256 APK
   inventory is published with releases. Dependency checksums were bootstrapped from CI resolution, component/configuration reviewed and
   committed for strict verification. Signatures are not verified; initial trust still relies on the repositories. A checksum authenticates bytes against a reviewed baseline, not

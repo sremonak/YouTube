@@ -68,7 +68,8 @@ jobs:
           files=list(pathlib.Path('benchmark/build').rglob('*baseline-prof*.txt'))
           summaries=list(pathlib.Path('benchmark/build').rglob('*benchmarkData*.json'))
           if not files: raise SystemExit('No generated baseline profile found: '+str([str(p) for p in pathlib.Path('benchmark/build').rglob('*.txt')]))
-          profile=files[0].read_bytes()
+          if not summaries: raise SystemExit('No measured benchmark JSON found')
+          profile=sorted(files, key=lambda p: (not p.name.endswith('-baseline-prof.txt'), str(p)))[0].read_bytes()
           payload={'profile_gzip_base64':base64.b64encode(gzip.compress(profile)).decode(),
                    'summaries':[json.loads(p.read_text()) for p in summaries]}
           encoded=base64.b64encode(gzip.compress(json.dumps(payload).encode())).decode()

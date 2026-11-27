@@ -63,7 +63,7 @@ class PerformanceBenchmarks {
 @LargeTest
 class ProfileGenerator {
     @get:Rule val rule = BaselineProfileRule()
-    @Test fun guestJourney() = rule.collect(packageName = "com.vidora.app", maxIterations = 5, stableIterations = 2, includeInStartupProfile = true) {
+    @Test fun guestJourney() = rule.collect(packageName = "com.vidora.app", maxIterations = 5, stableIterations = 2, includeInStartupProfile = false) {
         device.executeShellCommand("pm grant com.vidora.app android.permission.POST_NOTIFICATIONS")
         pressHome(); startActivityAndWait()
         device.enterGuestHome()
