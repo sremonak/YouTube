@@ -252,7 +252,13 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
                 if (settings.persistQueue && !s.localFile) sessionStore.save(PersistedSession(s.queue, s.queueIndex))
             }
         }
+        exoPlayer.addAnalyticsListener(androidx.media3.exoplayer.analytics.PlaybackStatsListener(false) { _, stats ->
+            if (!settings.incognito) com.vidora.app.data.Diagnostics.record("playback", "rebuffer", stats.totalRebufferTimeMs, stats.totalRebufferCount.toLong())
+        })
         exoPlayer.addAnalyticsListener(object : AnalyticsListener {
+            override fun onDroppedVideoFrames(eventTime: AnalyticsListener.EventTime, droppedFrames: Int, elapsedMs: Long) {
+                if (!settings.incognito) com.vidora.app.data.Diagnostics.record("playback", "dropped_frames", elapsedMs, droppedFrames.toLong())
+            }
             override fun onVideoInputFormatChanged(
                 eventTime: AnalyticsListener.EventTime, format: Format, decoderReuseEvaluation: DecoderReuseEvaluation?,
             ) {
@@ -350,11 +356,14 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
         )
         exoPlayer.stop()
         loadJob?.cancel()
+        recoveryJob?.cancel()
+        refreshing = false
         loadJob = scope.launch(Dispatchers.Main) {
             try {
                 val details = Graph.repository.stream(item.url)
                 val extractMs = android.os.SystemClock.elapsedRealtime() - tapAt
                 _state.value = _state.value.copy(extractMs = extractMs)
+                if (!settings.incognito) com.vidora.app.data.Diagnostics.record("playback", "extracted", extractMs)
                 // Never lose what the feed already knew (title, channel, views…) when a fallback
                 // player source returns blanks.
                 val d = details.item
@@ -569,6 +578,8 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
     fun stop() {
         persistPosition()
         loadJob?.cancel()
+        recoveryJob?.cancel()
+        refreshing = false
         tickerJob?.cancel()
         sleepJob?.cancel()
         exoPlayer.stop()
@@ -592,12 +603,12 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
             (item.isLive && (details.hlsUrl != null || details.dashUrl != null)) ||
                 (details.preferHls && details.hlsUrl != null && forced == null) -> {
                 source = if (details.hlsUrl != null) {
-                    HlsMediaSource.Factory(httpFactory).createMediaSource(
+                    HlsMediaSource.Factory(httpFactory).setLoadErrorHandlingPolicy(PlaybackLoadPolicy()).createMediaSource(
                         MediaItem.Builder().setUri(details.hlsUrl).setMimeType(MimeTypes.APPLICATION_M3U8)
                             .setMediaMetadata(meta).build()
                     )
                 } else {
-                    DashMediaSource.Factory(httpFactory).createMediaSource(
+                    DashMediaSource.Factory(httpFactory).setLoadErrorHandlingPolicy(PlaybackLoadPolicy()).createMediaSource(
                         MediaItem.Builder().setUri(details.dashUrl).setMediaMetadata(meta).build()
                     )
                 }
@@ -665,7 +676,7 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
     }
 
     private fun progressive(url: String, meta: MediaMetadata): MediaSource =
-        ProgressiveMediaSource.Factory(httpFactory).createMediaSource(
+        ProgressiveMediaSource.Factory(DefaultDataSource.Factory(context, httpFactory)).setLoadErrorHandlingPolicy(PlaybackLoadPolicy()).createMediaSource(
             MediaItem.Builder().setUri(url).setMediaMetadata(meta).build()
         )
 
@@ -790,7 +801,7 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
                 Uri.parse("https://www.youtube.com/vidora/${item.url.hashCode()}.mpd"),
                 plan.xml.byteInputStream(),
             )
-            DashMediaSource.Factory(httpFactory).createMediaSource(
+            DashMediaSource.Factory(httpFactory).setLoadErrorHandlingPolicy(PlaybackLoadPolicy()).createMediaSource(
                 manifest,
                 MediaItem.Builder().setMediaId(item.url).setMediaMetadata(meta).build(),
             )
@@ -873,47 +884,56 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
         if (!_state.value.loop) playNext()
     }
 
+    private var recoveryJob: Job? = null
     private fun handleError(error: PlaybackException) {
         val s = _state.value
         val details = s.details
-        // The generated DASH manifest didn't work for this video → same position, fixed streams.
-        if (adaptiveActive && details != null && error.errorCode != PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED &&
-            error.errorCode != PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT
-        ) {
-            android.util.Log.w("PlayerManager", "adaptive playback failed, using progressive", error)
-            adaptiveFailedFor = details.item.url
-            adaptiveActive = false
-            prepare(details, exoPlayer.currentPosition, true, forced = null)
+        val http = generateSequence(error as Throwable?) { it.cause }
+            .filterIsInstance<androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException>().firstOrNull()
+        val decoder = error.errorCode in listOf(PlaybackException.ERROR_CODE_DECODER_INIT_FAILED, PlaybackException.ERROR_CODE_DECODING_FAILED)
+        val action = PlaybackRecovery.decide(http?.responseCode, decoder, refreshAttempts)
+        if (!settings.incognito) com.vidora.app.data.Diagnostics.record("playback", action.name, count = refreshAttempts.toLong())
+        if (action == PlaybackRecovery.Action.PAUSE) {
+            val header = http?.headerFields?.entries?.firstOrNull { it.key.equals("Retry-After", true) }?.value?.firstOrNull()
+            val seconds = (com.vidora.app.data.ProviderHealth.retryAfter(header) / 1000).coerceAtLeast(30)
+            _state.value = s.copy(error = "Publisher rate limit. Wait $seconds seconds before retrying; other public videos may still work.")
             return
         }
-        // Stream URLs expire — refresh them once transparently.
-        if (details != null && !s.localFile && error.errorCode in listOf(
-                PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS,
-                PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
-                PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
-                PlaybackException.ERROR_CODE_IO_INVALID_HTTP_CONTENT_TYPE,
-            ) && !refreshing && refreshAttempts < 3
-        ) {
-            refreshing = true
-            refreshAttempts++
-            val position = exoPlayer.currentPosition
-            scope.launch(Dispatchers.Main) {
-                if (refreshAttempts > 1) delay(1_500L * refreshAttempts) // back off on repeated 403s
-                runCatching {
-                    val fresh = Graph.repository.stream(details.item.url, forceRefresh = true)
-                    detailsFetchedAt = System.currentTimeMillis()
-                    _state.value = _state.value.copy(details = fresh, error = null)
-                    // decoder failure → fall back to a muxed/H.264 stream
-                    val fallback = if (error.errorCode == PlaybackException.ERROR_CODE_DECODER_INIT_FAILED) {
-                        fresh.videoStreams.firstOrNull { it.codec?.startsWith("avc") == true && it.height <= (s.quality?.height ?: 720) }
-                    } else s.quality?.let { q -> fresh.videoStreams.firstOrNull { it.itag == q.itag } }
-                    prepare(fresh, position, true, fallback)
-                }.onFailure { _state.value = _state.value.copy(error = it.message) }
-                refreshing = false
-            }
+        if (action == PlaybackRecovery.Action.STOP || details == null || s.localFile) {
+            _state.value = s.copy(error = when (http?.responseCode) {
+                401, 403, 451 -> "Publisher denied access. This video may be restricted; try another public video."
+                404, 410 -> "This video or rendition was removed. Try another public video."
+                else -> "Playback could not recover. Try another quality or public video."
+            })
             return
         }
-        _state.value = s.copy(error = error.localizedMessage ?: "Playback error")
+        if (refreshing) return
+        if (adaptiveActive && !decoder && http == null) {
+            adaptiveFailedFor = details.item.url; adaptiveActive = false
+        }
+        val position = exoPlayer.currentPosition
+        refreshing = true
+        val attempt = refreshAttempts++
+        recoveryJob?.cancel()
+        recoveryJob = scope.launch(Dispatchers.Main) {
+            try {
+                if (action == PlaybackRecovery.Action.RETRY) delay(PlaybackRecovery.delayMs(attempt))
+                val fresh = if (action == PlaybackRecovery.Action.LOWER_QUALITY) details
+                    else Graph.repository.stream(details.item.url, forceRefresh = true)
+                if (_state.value.current?.url != s.current?.url) return@launch
+                val fallback = if (action == PlaybackRecovery.Action.LOWER_QUALITY) {
+                    fresh.videoStreams.filter { !it.videoOnly || fresh.audioStreams.isNotEmpty() }
+                        .filter { it.itag != s.quality?.itag }
+                        .sortedWith(compareBy<VideoOption> { if (it.suffix == "mp4" && it.codec?.startsWith("avc") != false) 0 else 1 }.thenBy { it.height })
+                        .firstOrNull() ?: throw IllegalStateException("No compatible alternative rendition. Try another public video.")
+                } else s.quality?.let { q -> fresh.videoStreams.firstOrNull { it.itag == q.itag } }
+                detailsFetchedAt = System.currentTimeMillis()
+                _state.value = _state.value.copy(details = fresh, error = null)
+                prepare(fresh, position, true, fallback)
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+            catch (e: Exception) { _state.value = _state.value.copy(error = e.message ?: "Playback recovery failed") }
+            finally { refreshing = false }
+        }
     }
 
     private fun routeBrowserItems(items: List<MediaItem>, startIndex: Int): Boolean {

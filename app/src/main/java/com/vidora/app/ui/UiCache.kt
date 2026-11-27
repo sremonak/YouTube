@@ -39,6 +39,14 @@ object UiCache {
     }
 
     @Synchronized
+    fun progressive(key: String, persist: Boolean = true, load: () -> kotlinx.coroutines.flow.Flow<PageResult>): Paged {
+        val now = System.currentTimeMillis()
+        pages[key]?.let { if (now - it.createdAt < FEED_TTL_MS && it.value.error == null) return it.value }
+        return Paged(scope) { error("Progressive feed has no one-shot loader") }
+            .progressive(if (persist) key else null, load).also { pages[key] = Slot(it, now) }
+    }
+
+    @Synchronized
     fun comments(url: String): CommentsState {
         val now = System.currentTimeMillis()
         comments[url]?.let { if (now - it.createdAt < FEED_TTL_MS && it.value.error == null) return it.value }
@@ -64,13 +72,13 @@ object UiCache {
 
     @Synchronized
     fun invalidate(prefix: String) {
-        pages.keys.filter { it.startsWith(prefix) }.forEach(pages::remove)
+        pages.keys.filter { it.startsWith(prefix) }.forEach { pages.remove(it)?.value?.cancelPending() }
         values.keys.filter { it.startsWith(prefix) }.forEach(values::remove)
     }
 
     /** Called on sign-in / sign-out: personalised content must not leak between accounts. */
     @Synchronized
-    fun clearAll() { pages.clear(); comments.clear(); values.clear() }
+    fun clearAll() { pages.values.forEach { it.value.cancelPending() }; pages.clear(); comments.clear(); values.clear() }
 }
 
 /** A [Paged] list that survives navigation (see [UiCache]). */

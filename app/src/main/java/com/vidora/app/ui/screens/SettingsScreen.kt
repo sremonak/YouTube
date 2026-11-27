@@ -1,5 +1,7 @@
 package com.vidora.app.ui.screens
 
+import androidx.compose.foundation.layout.heightIn
+
 import com.vidora.app.ui.theme.GlassAlertDialog
 import androidx.compose.ui.res.stringResource
 import com.vidora.app.R
@@ -511,6 +513,18 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
             section(Sec.CONTENT)
             item { SwitchRow("Use IP country for Home", "Country-only lookup via country.is (sees your public IP). No GPS. Used only when Content country is Automatic; Search stays query-based.", s.autoRegionByIp) { v -> update { it.copy(autoRegionByIp = v) } } }
             item { ClickRow(stringResource(R.string.ui_content_country), Countries.firstOrNull { it.first == s.contentCountry }?.second ?: s.contentCountry) { dialog = "country" } }
+            item { ClickRow("Home language", com.vidora.app.data.HomeRanking.languages.firstOrNull { it.first == s.homeLanguage }?.second ?: "Any language") { dialog = "homelang" } }
+            item { ClickRow("Home interests", s.homeInterests.sorted().joinToString().ifBlank { "None · general discovery" }) { dialog = "interests" } }
+            item { ClickRow("Reset Home interests", "Clears local interests and hidden Explore videos; keeps your library") {
+                update { it.copy(homeLanguage = "", homeInterests = emptySet(), lessLikeVideos = emptySet()) }
+                com.vidora.app.ui.UiCache.invalidate("home:public:")
+            } }
+            item { ClickRow("Clear saved feeds", "Public Home/search snapshots only · bounded to 4 MiB payload; keeps downloads and library") {
+                scope.launch { Graph.feedStore.clear(); com.vidora.app.ui.UiCache.invalidate("home:"); com.vidora.app.ui.UiCache.invalidate("search:")
+                    Toast.makeText(context, "Saved feeds cleared", Toast.LENGTH_SHORT).show() }
+            } }
+            item { ClickRow("Local playback diagnostics", "Review before sharing · no URLs, searches, IPs, cookies or automatic uploads") { dialog = "diagnostics" } }
+            item { ClickRow("Clear local diagnostics", "In-memory events only") { com.vidora.app.data.Diagnostics.clear() } }
             item { SwitchRow(stringResource(R.string.ui_hide_shorts), null, s.hideShorts) { v -> update { it.copy(hideShorts = v) } } }
             item { ClickRow(stringResource(R.string.ui_import_subscriptions), stringResource(R.string.ui_from_newpipe_libretube_freetube_json_goo)) { subsImportLauncher.launch(arrayOf("*/*")) } }
             item { ClickRow(stringResource(R.string.ui_export_subscriptions), stringResource(R.string.ui_newpipe_compatible_json)) { subsExportLauncher.launch("vidora-subscriptions.json") } }
@@ -607,6 +621,26 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
             update { it.copy(defaultSpeed = v) }; Graph.player.setSpeed(v)
         }
         "audiofmt" -> ChoiceDialog("Preferred audio format", AudioPreference.entries.map { it to it.label }, s.downloadAudioPref, { dialog = null }) { v -> update { it.copy(downloadAudioPref = v) } }
+        "homelang" -> ChoiceDialog("Home query language", com.vidora.app.data.HomeRanking.languages, s.homeLanguage, { dialog = null }) { v -> update { it.copy(homeLanguage = v) } }
+        "interests" -> GlassAlertDialog(
+            onDismissRequest = { dialog = null }, title = { Text("Local Home interests") },
+            text = { Column { com.vidora.app.data.HomeRanking.interests.forEach { topic ->
+                androidx.compose.material3.FilterChip(selected = topic in s.homeInterests, label = { Text(topic) }, onClick = {
+                    update { it.copy(homeInterests = if (topic in it.homeInterests) it.homeInterests - topic else it.homeInterests + topic) }
+                })
+            } } },
+            confirmButton = { TextButton(onClick = { dialog = null }) { Text("Done") } },
+        )
+        "diagnostics" -> GlassAlertDialog(
+            onDismissRequest = { dialog = null }, title = { Text("Local diagnostics · review") },
+            text = { androidx.compose.foundation.lazy.LazyColumn(Modifier.heightIn(max = 360.dp)) { item { Text(com.vidora.app.data.Diagnostics.report(), style = MaterialTheme.typography.bodySmall) } } },
+            confirmButton = { TextButton(onClick = {
+                val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain")
+                    .putExtra(android.content.Intent.EXTRA_TEXT, com.vidora.app.data.Diagnostics.report())
+                context.startActivity(android.content.Intent.createChooser(send, "Share reviewed diagnostics"))
+            }) { Text("Share report") } },
+            dismissButton = { TextButton(onClick = { dialog = null }) { Text("Close") } },
+        )
         "country" -> ChoiceDialog("Content country", Countries, s.contentCountry, { dialog = null }) { v ->
             update { it.copy(contentCountry = v) }
             Toast.makeText(context, "Home region updated. Some YouTube category charts may need an app restart.", Toast.LENGTH_LONG).show()

@@ -120,6 +120,8 @@ class ContentRepository {
                 if (now - time < 90 * 60_000) return@io details
             }
         }
+        // A forced refresh must not reuse an older prefetch's signed URL.
+        if (forceRefresh) return@io loadStream(url).also { streamCache.put(url, System.currentTimeMillis() to it) }
         // Share one extraction between a touch-prefetch / next-video prefetch and the real tap.
         val job = synchronized(inFlight) {
             inFlight[url] ?: Graph.appScope.async(Dispatchers.IO) {
@@ -154,6 +156,7 @@ class ContentRepository {
      * While the network is known to be blocked, signed-in users go straight to step 2.
      */
     private suspend fun loadStream(url: String): StreamDetails {
+        if (com.vidora.app.BuildConfig.DEBUG) Graph.streamOverride?.let { return it(url) }
         if (GuestSources.supported(url)) return Graph.openVideos.stream(url)
         val signed = Graph.account.isSignedIn && useAccountForRestricted
         try {

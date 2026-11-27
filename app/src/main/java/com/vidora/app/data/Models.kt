@@ -47,17 +47,21 @@ data class PlaylistItem(
 )
 
 /** A single row of any list returned by the content repository. */
+@Serializable
 sealed interface Entry {
     val key: String
 
+    @Serializable
     data class Video(val video: VideoItem) : Entry {
         override val key get() = "v:" + video.url
     }
 
+    @Serializable
     data class Channel(val channel: ChannelItem) : Entry {
         override val key get() = "c:" + channel.url
     }
 
+    @Serializable
     data class Playlist(val playlist: PlaylistItem) : Entry {
         override val key get() = "p:" + playlist.url
     }
@@ -68,7 +72,11 @@ class PageResult(
     val items: List<Entry>,
     val next: (suspend () -> PageResult)? = null,
     val notices: List<String> = emptyList(),
+    val pending: Boolean = false,
+    val retries: List<ProviderRetry> = emptyList(),
 )
+
+data class ProviderRetry(val label: String, val load: suspend () -> PageResult)
 
 data class VideoOption(
     val url: String,

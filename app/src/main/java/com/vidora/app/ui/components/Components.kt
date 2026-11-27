@@ -151,7 +151,7 @@ fun Avatar(url: String?, size: Int, modifier: Modifier = Modifier) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun VideoCard(original: VideoItem, actions: VideoActions, modifier: Modifier = Modifier, compact: Boolean = LocalDesign.current.compact) {
+fun VideoCard(original: VideoItem, actions: VideoActions, modifier: Modifier = Modifier, compact: Boolean = LocalDesign.current.compact, explainHome: Boolean = false) {
     val item = rememberDeArrow(original)
     var menu by remember { mutableStateOf(false) }
     val history by Graph.library.data.collectAsStateCompat()
@@ -180,7 +180,7 @@ fun VideoCard(original: VideoItem, actions: VideoActions, modifier: Modifier = M
                 Spacer(Modifier.height(4.dp))
                 MetaLine(item)
             }
-            Box { MoreButton(original, actions, menu) { menu = it } }
+            Box { MoreButton(original, actions, menu, explainHome) { menu = it } }
         }
     } else {
         // Phones: edge-to-edge thumbnails like the YouTube app; tablets keep rounded grid cards.
@@ -197,7 +197,7 @@ fun VideoCard(original: VideoItem, actions: VideoActions, modifier: Modifier = M
                     Spacer(Modifier.height(3.dp))
                     MetaLine(item)
                 }
-                Box { MoreButton(original, actions, menu) { menu = it } }
+                Box { MoreButton(original, actions, menu, explainHome) { menu = it } }
             }
         }
     }
@@ -238,15 +238,29 @@ fun rememberDeArrow(item: VideoItem): VideoItem {
 }
 
 @Composable
-private fun MoreButton(item: VideoItem, actions: VideoActions, expanded: Boolean, onExpanded: (Boolean) -> Unit) {
+private fun MoreButton(item: VideoItem, actions: VideoActions, expanded: Boolean, explainHome: Boolean, onExpanded: (Boolean) -> Unit) {
     val library by Graph.library.data.collectAsStateCompat()
     var playlistSheet by remember { mutableStateOf(false) }
+    var explanation by remember { mutableStateOf(false) }
+    val homeSettings by Graph.settingsState.collectAsState()
+    if (explanation) com.vidora.app.ui.theme.GlassAlertDialog(
+        onDismissRequest = { explanation = false }, title = { Text("Why this video?") },
+        text = { Text(com.vidora.app.data.HomeRanking.why(Graph.region.state.value.code, homeSettings, item)) },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = { explanation = false }) { Text("Close") } },
+    )
     val scope = rememberCoroutineScope()
     if (playlistSheet) AddToPlaylistSheet(item) { playlistSheet = false }
     IconButton(onClick = { onExpanded(true) }, modifier = Modifier.size(32.dp)) {
         Icon(Icons.Rounded.MoreVert, contentDescription = "More", modifier = Modifier.size(18.dp))
     }
     DropdownMenu(expanded = expanded, onDismissRequest = { onExpanded(false) }) {
+        if (explainHome) {
+            DropdownMenuItem(text = { Text("Why this video?") }, onClick = { onExpanded(false); explanation = true })
+            DropdownMenuItem(text = { Text("Less like this · hide from Explore") }, onClick = {
+                onExpanded(false)
+                scope.launch { Graph.settings.update { it.copy(lessLikeVideos = (it.lessLikeVideos + item.url).toList().takeLast(300).toSet()) } }
+            })
+        }
         DropdownMenuItem(text = { Text(stringResource(R.string.ui_play_next)) }, onClick = { Graph.player.enqueue(item, playNextUp = true); onExpanded(false) })
         DropdownMenuItem(text = { Text(stringResource(R.string.ui_add_to_queue)) }, onClick = { Graph.player.enqueue(item); onExpanded(false) })
         DropdownMenuItem(
@@ -330,6 +344,7 @@ fun EntryGrid(
     contentPadding: PaddingValues = PaddingValues(top = com.vidora.app.ui.theme.topChromePadding(), bottom = com.vidora.app.ui.theme.bottomChromePadding()),
     header: (@Composable () -> Unit)? = null,
     filter: (Entry) -> Boolean = { true },
+    explainHome: Boolean = false,
 ) {
     val compact = LocalDesign.current.compact
     val settings by Graph.settingsState.collectAsState()
@@ -377,7 +392,7 @@ fun EntryGrid(
             if (e is Entry.Channel) GridItemSpan(maxLineSpan) else GridItemSpan(1)
         }) { entry ->
             when (entry) {
-                is Entry.Video -> VideoCard(entry.video, actions)
+                is Entry.Video -> VideoCard(entry.video, actions, explainHome = explainHome)
                 is Entry.Channel -> ChannelRow(entry.channel, onClick = { actions.openChannel(entry.channel.url) })
                 is Entry.Playlist -> PlaylistCard(entry.playlist, onClick = { actions.openPlaylist(entry.playlist.url) })
             }

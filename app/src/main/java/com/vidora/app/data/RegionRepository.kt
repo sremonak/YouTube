@@ -21,12 +21,24 @@ data class HomeRegion(val code: String, val method: String)
 class RegionRepository(context: Context) {
     private val prefs = context.getSharedPreferences("home_region", Context.MODE_PRIVATE)
     private val mutex = Mutex()
-    private val _state = MutableStateFlow(HomeRegion(deviceCountry(), "Device fallback"))
+    private val _state = MutableStateFlow(initialRegion())
     val state = _state.asStateFlow()
     private var retryAfter = 0L
     private val client by lazy { Graph.http.newBuilder().callTimeout(5, TimeUnit.SECONDS).build() }
 
+    private fun initialRegion(): HomeRegion {
+        val cached = GuestSources.country(prefs.getString("country", null))
+        // Do not expose an IP-derived region when the user last disabled automatic resolution.
+        val code = GuestSources.country(prefs.getString("manual", null))
+        return when {
+            code != null -> HomeRegion(code, "Manual")
+            prefs.getBoolean("enabled", true) && cached != null -> HomeRegion(cached, "IP country · saved")
+            else -> HomeRegion(deviceCountry(), "Device fallback")
+        }
+    }
+
     suspend fun resolve(settings: AppSettings): HomeRegion = mutex.withLock {
+        prefs.edit().putBoolean("enabled", settings.autoRegionByIp).putString("manual", settings.contentCountry).apply()
         GuestSources.country(settings.contentCountry)?.let { return@withLock HomeRegion(it, "Manual").also { _state.value = it } }
         if (!settings.autoRegionByIp) return@withLock HomeRegion(deviceCountry(), "Device").also { _state.value = it }
         val cached = GuestSources.country(prefs.getString("country", null))
@@ -38,7 +50,7 @@ class RegionRepository(context: Context) {
         if (now < retryAfter) return@withLock _state.value
         try {
             val code = withContext(Dispatchers.IO) {
-                client.newCall(Request.Builder().url("https://api.country.is/").header("User-Agent", "Vidora/1.0").build()).execute().use { r ->
+                client.newCall(Request.Builder().url("https://api.country.is/").header("User-Agent", "Vidora/1.0").build()).awaitResponse().use { r ->
                     check(r.isSuccessful)
                     GuestSources.country(Json.parseToJsonElement(r.body.string()).jsonObject["country"]?.jsonPrimitive?.content)
                         ?: error("Country unavailable")

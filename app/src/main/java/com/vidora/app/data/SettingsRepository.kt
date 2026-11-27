@@ -74,6 +74,9 @@ data class AppSettings(
     // content / privacy
     val contentCountry: String = "",
     val autoRegionByIp: Boolean = true,
+    val homeLanguage: String = "",
+    val homeInterests: Set<String> = emptySet(),
+    val lessLikeVideos: Set<String> = emptySet(),
     val saveHistory: Boolean = true,
     val saveSearchHistory: Boolean = true,
     val hideShorts: Boolean = false,
@@ -164,6 +167,9 @@ class SettingsRepository(private val context: Context) {
         val dlWifi = booleanPreferencesKey("dl_wifi")
         val country = stringPreferencesKey("country")
         val autoRegionIp = booleanPreferencesKey("auto_region_ip")
+        val homeLanguage = stringPreferencesKey("home_language")
+        val homeInterests = stringSetPreferencesKey("home_interests")
+        val lessLike = stringSetPreferencesKey("less_like_videos")
         val history = booleanPreferencesKey("history")
         val searchHistory = booleanPreferencesKey("search_history")
         val hideShorts = booleanPreferencesKey("hide_shorts")
@@ -243,6 +249,9 @@ class SettingsRepository(private val context: Context) {
             downloadWifiOnly = this[K.dlWifi] ?: d.downloadWifiOnly,
             contentCountry = this[K.country] ?: d.contentCountry,
             autoRegionByIp = this[K.autoRegionIp] ?: d.autoRegionByIp,
+            homeLanguage = this[K.homeLanguage] ?: d.homeLanguage,
+            homeInterests = this[K.homeInterests] ?: d.homeInterests,
+            lessLikeVideos = this[K.lessLike] ?: d.lessLikeVideos,
             saveHistory = this[K.history] ?: d.saveHistory,
             saveSearchHistory = this[K.searchHistory] ?: d.saveSearchHistory,
             hideShorts = this[K.hideShorts] ?: d.hideShorts,
@@ -321,6 +330,9 @@ class SettingsRepository(private val context: Context) {
             p[K.dlWifi] = s.downloadWifiOnly
             p[K.country] = s.contentCountry
             p[K.autoRegionIp] = s.autoRegionByIp
+            p[K.homeLanguage] = s.homeLanguage
+            p[K.homeInterests] = s.homeInterests
+            p[K.lessLike] = s.lessLikeVideos
             p[K.history] = s.saveHistory
             p[K.searchHistory] = s.saveSearchHistory
             p[K.hideShorts] = s.hideShorts

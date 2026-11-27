@@ -80,9 +80,14 @@ fun SearchScreen(nav: NavHostController, actions: VideoActions, initialQuery: St
     val library by Graph.library.data.collectAsState()
     val settings by Graph.settings.flow.collectAsState(initial = null)
 
-    val paged = remember(submitted, filter, source) {
-        com.vidora.app.ui.UiCache.paged("search:${source.name}:${filter.name}:$submitted", ttlMs = 10 * 60_000L) { Graph.discovery.search(submitted, source, filter) }
+    val privateMode = settings?.incognito != false
+    val keepSearch = settings?.saveSearchHistory == true
+    val paged = remember(submitted, filter, source, privateMode, keepSearch) {
+        com.vidora.app.ui.UiCache.progressive("search:$privateMode:$keepSearch:${source.name}:${filter.name}:$submitted", persist = !privateMode && keepSearch) {
+            Graph.discovery.searchUpdates(submitted, source, filter)
+        }
     }
+    androidx.compose.runtime.DisposableEffect(paged) { onDispose { paged.cancelPending() } }
     LaunchedEffect(paged) { if (submitted.isNotBlank()) paged.ensureLoaded() }
     LaunchedEffect(Unit) { if (editing) focusRequester.requestFocus() }
     LaunchedEffect(text, editing) {
@@ -186,8 +191,7 @@ fun SearchScreen(nav: NavHostController, actions: VideoActions, initialQuery: St
                     Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                         Text("Search uses your exact query, not Home's country bias.", style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        if (paged.notices.isNotEmpty()) Text(paged.notices.joinToString("\n"), style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        com.vidora.app.ui.components.ProviderStatus(paged)
                     }
                 },
                 filter = { e ->

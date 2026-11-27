@@ -6,6 +6,7 @@ import com.vidora.app.data.OpenVideoParser.o
 import com.vidora.app.data.OpenVideoParser.rows
 import com.vidora.app.data.OpenVideoParser.s
 import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.*
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
@@ -15,15 +16,47 @@ import java.util.concurrent.TimeUnit
 class OpenVideoRepository {
     private val client by lazy { Graph.http.newBuilder().callTimeout(12, TimeUnit.SECONDS).build() }
     private val json = Json { ignoreUnknownKeys = true }
+    private val hostLocks = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.sync.Mutex>()
+    private val responses = object : LinkedHashMap<String, Pair<Long, JsonObject>>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Pair<Long, JsonObject>>?) = size > 64
+    }
     private suspend fun get(url: String): JsonObject = withContext(Dispatchers.IO) {
-        client.newCall(Request.Builder().url(url).header("Accept", "application/json")
-            .header("User-Agent", "Vidora/1.0 (Android public video browser)").build()).execute().use { r ->
-            check(r.isSuccessful) { "Public video service unavailable (${r.code})" }
-            val result = json.parseToJsonElement(r.body.string()).jsonObject
-            check(result["error"] == null) { "Public video service could not complete this request" }
-            result
+        val host = URI(url).host
+        hostLocks.getOrPut(host) { kotlinx.coroutines.sync.Mutex() }.withLock {
+            synchronized(responses) { responses[url]?.takeIf { System.currentTimeMillis() - it.first < 15_000 }?.second }?.let { return@withLock it }
+            val pause = Graph.providerHealth.remaining(host)
+            check(pause == 0L) { "$host is cooling down; retry in ${(pause / 1000).coerceAtLeast(1)} seconds." }
+            val started = System.currentTimeMillis()
+            try {
+                val result = client.newCall(Request.Builder().url(url).header("Accept", "application/json")
+                    .header("User-Agent", "Vidora/${com.vidora.app.BuildConfig.VERSION_NAME} (https://github.com/sremonak/YouTube/issues)").build()).awaitResponse().use { r ->
+                    if (r.code == 429 || r.code >= 500) {
+                        Graph.providerHealth.failure(host, ProviderHealth.retryAfter(r.header("Retry-After")))
+                        throw PublicServiceException("$host is busy (${r.code}). Please retry later.", counted = true)
+                    }
+                    check(r.isSuccessful) { "Public content unavailable (${r.code}). It may be removed or restricted." }
+                    val body = json.parseToJsonElement(r.body.string()).jsonObject
+                    val code = body.o("error").s("code")
+                    if (code in listOf("ratelimited", "maxlag")) {
+                        Graph.providerHealth.failure(host, ProviderHealth.retryAfter(r.header("Retry-After")).coerceAtLeast(5_000))
+                        throw PublicServiceException("$host requested a pause. Please retry later.", counted = true)
+                    }
+                    check(body["error"] == null) { "Public video service could not complete this request" }
+                    body
+                }
+                Graph.providerHealth.success(host)
+                synchronized(responses) { responses[url] = System.currentTimeMillis() to result }
+                Diagnostics.record("provider", "success", System.currentTimeMillis() - started)
+                result
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                if (e is java.io.IOException && (e !is PublicServiceException || !e.counted)) Graph.providerHealth.failure(host)
+                Diagnostics.record("provider", "failure", System.currentTimeMillis() - started)
+                throw e
+            }
         }
     }
+    private class PublicServiceException(message: String, val counted: Boolean) : java.io.IOException(message)
 
     suspend fun peerSearch(query: String?, start: Int = 0, count: Int = 12): PageResult = supervisorScope {
         val pages = GuestSources.peerBases.map { base -> async {

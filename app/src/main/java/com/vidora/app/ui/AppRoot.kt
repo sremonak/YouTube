@@ -182,7 +182,10 @@ fun AppRoot(activity: MainActivity, settings: AppSettings) {
     val showNav = route != Routes.PLAYER && route != Routes.LOGIN
 
     val glassState = com.vidora.app.ui.theme.rememberGlassState()
-    val glassOn = settings.glassUi
+    val lowRam = androidx.compose.runtime.remember {
+        (activity.getSystemService(android.content.Context.ACTIVITY_SERVICE) as android.app.ActivityManager).isLowRamDevice
+    }
+    val glassOn = settings.glassUi && !lowRam
     androidx.compose.runtime.SideEffect { com.vidora.app.ui.icons.IconStyle.ios = settings.iosIcons }
     val density = androidx.compose.ui.platform.LocalDensity.current
     var chromePx by remember { mutableStateOf(0) }

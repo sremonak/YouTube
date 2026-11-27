@@ -33,6 +33,8 @@ import com.vidora.app.potoken.PoTokenProviderImpl
 import com.vidora.app.util.CrashReporter
 import com.vidora.app.notify.NewVideosWorker
 import org.schabi.newpipe.extractor.services.youtube.extractors.YoutubeStreamExtractor
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import org.schabi.newpipe.extractor.NewPipe
@@ -64,7 +66,12 @@ object Graph {
     val repository by lazy { ContentRepository() }
     val region by lazy { com.vidora.app.data.RegionRepository(app) }
     val openVideos by lazy { com.vidora.app.data.OpenVideoRepository() }
-    val discovery by lazy { com.vidora.app.data.DiscoveryRepository() }
+    val feedStore by lazy { com.vidora.app.data.FeedStore(app) }
+    val providerHealth = com.vidora.app.data.ProviderHealth()
+    private val defaultDiscovery by lazy { com.vidora.app.data.DiscoveryRepository() }
+    @Volatile var discoveryOverride: com.vidora.app.data.DiscoveryRepository? = null
+    @Volatile var streamOverride: (suspend (String) -> com.vidora.app.data.StreamDetails)? = null
+    val discovery get() = if (BuildConfig.DEBUG) discoveryOverride ?: defaultDiscovery else defaultDiscovery
     val sponsorBlock by lazy { SponsorBlock(http) }
     val player by lazy { PlayerManager(app, appScope) }
     val account by lazy { AccountManager(app, appScope) }
@@ -89,9 +96,8 @@ class VidoraApp : Application(), SingletonImageLoader.Factory {
         Graph.init(this)
         CrashReporter.install(this)
 
-        val country = runCatching {
-            runBlocking { Graph.settings.flow.first().contentCountry }
-        }.getOrDefault("")
+        // No synchronous DataStore/disk wait during Application startup.
+        val country = ""
         val locale = Locale.getDefault()
         NewPipe.init(
             NetworkDownloader.create(Graph.http),
@@ -102,7 +108,19 @@ class VidoraApp : Application(), SingletonImageLoader.Factory {
         // No-op in NPE 0.27.x (visionOS client needs no token); our own InnerTube fallbacks (TvPlayer) need no token.
         YoutubeStreamExtractor.setPoTokenProvider(PoTokenProviderImpl)
         Graph.appScope.launch {
-            Graph.settingsState.collect { PoTokenProviderImpl.enabled = it.poToken }
+            Graph.settings.flow.collect {
+                PoTokenProviderImpl.enabled = it.poToken
+                NewPipe.setPreferredContentCountry(ContentCountry(it.contentCountry.ifBlank { locale.country.ifBlank { "US" } }))
+            }
+        }
+        Graph.appScope.launch {
+            Graph.settings.flow.map { it.incognito to it.saveSearchHistory }.distinctUntilChanged().collect { (incognito, saveSearch) ->
+                if (incognito || !saveSearch) {
+                    com.vidora.app.ui.UiCache.invalidate("search:")
+                    Graph.feedStore.clear()
+                    com.vidora.app.data.Diagnostics.clear()
+                }
+            }
         }
         Graph.appScope.launch { runCatching { Graph.settings.migrateDesign() } }
         NewVideosWorker.schedule(this)

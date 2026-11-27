@@ -75,10 +75,8 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
     val updateAvailable by Updater.available.collectAsState()
     val checkingUpdate by Updater.checking.collectAsState()
     val region by Graph.region.state.collectAsState()
-    var regionReady by remember { mutableStateOf(false) }
     LaunchedEffect(settings.contentCountry, settings.autoRegionByIp) {
         Graph.region.resolve(settings)
-        regionReady = true
     }
     val session by Graph.account.session.collectAsState()
     val signedIn = session != null
@@ -110,12 +108,17 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
     var tabKey by rememberSaveable(signedIn) { mutableStateOf(HomeSection.FOR_YOU.name) }
     val tab = tabs.firstOrNull { it.key == tabKey } ?: tabs.first()
     // Cached across navigation: coming back from Settings / the player shows the same feed instantly.
-    val paged = remember(tab.key, signedIn, region.code) { UiCache.paged("home:$signedIn:${region.code}:${tab.key}") { tab.load() } }
+    val rankingKey = "${settings.homeLanguage}:${settings.homeInterests.sorted()}:${settings.lessLikeVideos.hashCode()}:${settings.incognito}"
+    val paged = remember(tab.key, signedIn, region.code, rankingKey) {
+        if (tab.key == HomeSection.FOR_YOU.name) UiCache.progressive("home:public:${region.code}:$rankingKey", persist = !settings.incognito) {
+            Graph.discovery.homeUpdates(region.code, settings, if (settings.incognito) emptySet() else Graph.library.data.value.history.map { it.video.url }.toSet())
+        } else UiCache.paged("home:$signedIn:${region.code}:${tab.key}") { tab.load() }
+    }
+    androidx.compose.runtime.DisposableEffect(paged) { onDispose { paged.cancelPending() } }
     val gridState = rememberLazyGridState()
 
     var shownTab by rememberSaveable { mutableStateOf(tab.key) }
-    LaunchedEffect(tab.key, signedIn, region.code, regionReady) {
-        if (!regionReady) return@LaunchedEffect
+    LaunchedEffect(tab.key, signedIn, region.code, paged) {
         paged.ensureLoaded()
         // Only jump to the top when the user switched chips — not when returning to Home.
         if (shownTab != tab.key) { shownTab = tab.key; gridState.scrollToItem(0) }
@@ -164,15 +167,13 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
         com.vidora.app.ui.theme.GlassRefreshBox(isRefreshing = paged.refreshing, onRefresh = { paged.load(refresh = true) }, modifier = Modifier.fillMaxSize()) {
             val library by Graph.library.data.collectAsState()
             val resume = remember(library.history) { com.vidora.app.data.ContinueWatching.pick(library.history) }
-            if (!regionReady) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            } else EntryGrid(
+            EntryGrid(
                 paged = paged, actions = actions, state = gridState,
-                filter = { e -> !(settings.hideShorts && e is Entry.Video && e.video.isShort) },
+                explainHome = tab.key == HomeSection.FOR_YOU.name,
+                filter = { e -> !(e is Entry.Video && ((settings.hideShorts && e.video.isShort) || (tab.key == HomeSection.FOR_YOU.name && e.video.url in settings.lessLikeVideos))) },
                 header = {
                     Column {
-                        if (paged.notices.isNotEmpty()) Text(paged.notices.joinToString("\n"), style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp))
+                        com.vidora.app.ui.components.ProviderStatus(paged)
                         if (resume.isNotEmpty() && tab.key == HomeSection.FOR_YOU.name) ContinueWatchingRow(resume, actions)
                     }
                 }

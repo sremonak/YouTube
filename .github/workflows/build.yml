@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 concurrency:
   group: build-${{ github.ref }}
@@ -60,7 +61,9 @@ jobs:
         run: |
           chmod +x gradlew
           set -o pipefail
-          ./gradlew --no-daemon assembleRelease testDebugUnitTest 2>&1 | tee build.log
+          args=()
+          if [ ! -f gradle/verification-metadata.xml ]; then args+=(--write-verification-metadata sha256); fi
+          ./gradlew --no-daemon "${args[@]}" assembleRelease testDebugUnitTest assembleDebugAndroidTest lintDebug 2>&1 | tee build.log
 
       - name: Report build errors
         if: failure()
@@ -75,10 +78,54 @@ jobs:
               print("::error title=Build error::" + c.replace("%", "%25").replace("\r", "").replace("\n", "%0A"))
           PY
 
+      - name: Enable KVM for deterministic release gate
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Guest emulator release gate
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: ./gradlew connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.vidora.app.GuestReleaseGateTest --no-daemon
+
+      - name: Test reports and dependency inventory
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verification-${{ github.run_id }}
+          path: |
+            app/build/reports/
+            app/build/outputs/androidTest-results/
+            gradle/verification-metadata.xml
+          retention-days: 7
+
+      # One-time bootstrap: return the resolved checksums through the authenticated GitHub API.
+      # Maintainer reviews and commits these before strict verification is enabled on following runs.
+      - name: Return dependency verification bootstrap
+        if: github.event_name == 'push' && hashFiles('gradle/verification-metadata.xml') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! git ls-files --error-unmatch gradle/verification-metadata.xml >/dev/null 2>&1; then
+            python3 - <<'PYBOOT'
+          import gzip,base64
+          blob=base64.b64encode(gzip.compress(open('gradle/verification-metadata.xml','rb').read())).decode()
+          open('/tmp/verification-comment.txt','w').write('VIDORA_VERIFICATION_BOOTSTRAP\n'+blob)
+          PYBOOT
+            gh pr comment 1 --body-file /tmp/verification-comment.txt
+          fi
+
       - name: Rename APK
         run: |
           mkdir -p dist
           cp app/build/outputs/apk/release/*.apk "dist/Vidora-${VIDORA_VERSION_NAME}.apk"
+          (cd dist && sha256sum *.apk > SHA256SUMS.txt)
           ls -la dist
 
       - name: Upload APK artifact
@@ -101,7 +148,7 @@ jobs:
           # Source access belongs on the binary download page, not in the app UI.
           printf '\nCorresponding source (GPLv3) for this APK: https://github.com/%s/archive/refs/tags/%s.zip\n' "$GITHUB_REPOSITORY" "$tag" >> notes.txt
           printf 'Build instructions and licence: https://github.com/%s/tree/%s\n' "$GITHUB_REPOSITORY" "$tag" >> notes.txt
-          gh release create "$tag" dist/*.apk --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+          gh release create "$tag" dist/*.apk dist/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
             --title "Vidora ${VIDORA_VERSION_NAME}" --notes-file notes.txt --latest
           # keep the 5 newest releases
           gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName,createdAt \
