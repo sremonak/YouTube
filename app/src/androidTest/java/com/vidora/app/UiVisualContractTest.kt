@@ -27,6 +27,11 @@ import kotlin.math.abs
 class UiVisualContractTest {
     @get:Rule val compose = createComposeRule()
     private data class Case(val name: String, val width: Int, val height: Int, val scale: Float, val theme: ThemeMode, val list: Boolean = false, val glass: Boolean = false)
+    private fun shell(command: String): String =
+        InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(command).use { descriptor ->
+            java.io.FileInputStream(descriptor.fileDescriptor).bufferedReader().readText()
+        }
+
     @Test fun reviewedThemeFontAndWindowSnapshots() {
         val cases = listOf(
             Case("light-phone", 360, 720, 1f, ThemeMode.LIGHT),
@@ -70,12 +75,11 @@ class UiVisualContractTest {
             candidate.outputStream().use { actual.compress(Bitmap.CompressFormat.PNG, 100, it) }
             // AGP uninstalls the fixture APK (and its external files) after instrumentation.
             // Export while it is still installed; only the test shell can write this directory.
-            InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(
-                "mkdir -p /sdcard/Download/vidora-ui-snapshots && cp '${candidate.absolutePath}' /sdcard/Download/vidora-ui-snapshots/ && echo exported"
-            ).use { descriptor ->
-                val message = java.io.FileInputStream(descriptor.fileDescriptor).bufferedReader().readText()
-                assertTrue("Could not preserve ${c.name}: $message", message.contains("exported"))
-            }
+            // executeShellCommand executes argv directly; shell operators are not interpreted.
+            shell("mkdir -p /sdcard/Download/vidora-ui-snapshots")
+            shell("cp ${candidate.absolutePath} /sdcard/Download/vidora-ui-snapshots/${c.name}.png")
+            val exported = shell("ls /sdcard/Download/vidora-ui-snapshots/${c.name}.png")
+            assertTrue("Could not preserve ${c.name}: $exported", exported.trim().endsWith("/${c.name}.png"))
             val baseline = runCatching { InstrumentationRegistry.getInstrumentation().context.assets.open("ui-goldens/${c.name}.png").use { BitmapFactory.decodeStream(it) } }.getOrNull()
             if (baseline == null) { missing += c.name; continue }
             assertEquals("${c.name} width", baseline.width, actual.width)

@@ -117,6 +117,7 @@ import com.vidora.app.player.qualityLabel
 import com.vidora.app.ui.theme.glass
 import com.vidora.app.ui.theme.glassOverlay
 import com.vidora.app.util.Format
+import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
@@ -140,13 +141,16 @@ private fun rememberPlaybackClock(key: Any?, fast: Boolean): Triple<Long, Long, 
     var dur by remember { mutableLongStateOf(0L) }
     var buf by remember { mutableLongStateOf(0L) }
     val isFast by rememberUpdatedState(fast)
-    LaunchedEffect(key) {
-        while (true) {
-            val p = Graph.player.exoPlayer
-            pos = p.currentPosition.coerceAtLeast(0)
-            dur = p.duration.takeIf { it > 0 } ?: 0
-            buf = p.bufferedPosition.coerceAtLeast(0)
-            delay(if (isFast) 200 else 600)
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(key, lifecycle) {
+        lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+            while (true) {
+                val p = Graph.player.exoPlayer
+                pos = p.currentPosition.coerceAtLeast(0)
+                dur = p.duration.takeIf { it > 0 } ?: 0
+                buf = p.bufferedPosition.coerceAtLeast(0)
+                delay(if (isFast) 200 else 600)
+            }
         }
     }
     return Triple(pos, dur, buf)
