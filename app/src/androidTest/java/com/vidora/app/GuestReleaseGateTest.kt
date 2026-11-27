@@ -105,15 +105,15 @@ class GuestReleaseGateTest {
         compose.onNodeWithContentDescription("Refresh feed").assertDoesNotExist()
         compose.waitUntil(20_000) { compose.onAllNodesWithText(peer.title).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() }
         compose.waitForIdle()
-        val screenshot = requireNotNull(instrumentation.uiAutomation.takeScreenshot())
-        val candidate = File(context.getExternalFilesDir(null), "home-clean.png")
-        candidate.outputStream().use { screenshot.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
         fun shell(command: String) = instrumentation.uiAutomation.executeShellCommand(command).use {
             java.io.FileInputStream(it.fileDescriptor).bufferedReader().readText()
         }
-        shell("mkdir -p /sdcard/Download/vidora-ui-snapshots")
-        shell("cp ${candidate.absolutePath} /sdcard/Download/vidora-ui-snapshots/home-clean.png")
-        assertTrue(shell("ls /sdcard/Download/vidora-ui-snapshots/home-clean.png").trim().endsWith("/home-clean.png"))
+        val directory = shell("mkdir -p /sdcard/Download/vidora-ui-snapshots")
+        // Capture as shell directly to its export folder: scoped storage on API 30
+        // prevents shell from copying the target app's Android/data external file.
+        val capture = shell("screencap -p /sdcard/Download/vidora-ui-snapshots/home-clean.png")
+        val exported = shell("ls /sdcard/Download/vidora-ui-snapshots/home-clean.png").trim()
+        assertTrue("Home capture/export failed: $directory $capture $exported", exported.endsWith("/home-clean.png"))
         compose.onNodeWithText("Downloads").performClick()
         compose.waitUntil(10_000) { compose.onAllNodesWithText("Downloads").fetchSemanticsNodes(atLeastOneRootRequired = false).size >= 2 }
         compose.onNodeWithText("You").performClick()
