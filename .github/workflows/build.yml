@@ -10,7 +10,7 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
+  actions: read
 
 concurrency:
   group: build-${{ github.ref }}
@@ -22,6 +22,27 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Inspect previous fixture gate report
+        if: github.event_name == 'push'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download 45957006356 --name verification-45957006356 --dir /tmp/previous-gate
+          python3 - <<'PYPRIOR'
+          import pathlib,xml.etree.ElementTree as ET
+          for path in pathlib.Path('/tmp/previous-gate').rglob('*.xml'):
+              try: root=ET.parse(path).getroot()
+              except ET.ParseError: continue
+              for case in root.iter('testcase'):
+                  err=case.find('failure')
+                  if err is None: err=case.find('error')
+                  if err is not None:
+                      msg=((err.get('message') or '')+' '+(err.text or ''))[:10000]
+                      msg=msg.replace('%','%25').replace('\n','%0A').replace('\r','')
+                      print('::notice title=Previous '+case.get('name','test')+'::'+msg)
+          PYPRIOR
 
       - name: Set up JDK 17
         uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
@@ -61,9 +82,7 @@ jobs:
         run: |
           chmod +x gradlew
           set -o pipefail
-          args=()
-          if [ ! -f gradle/verification-metadata.xml ]; then args+=(--write-verification-metadata sha256); fi
-          ./gradlew --no-daemon "${args[@]}" assembleRelease testDebugUnitTest assembleDebugAndroidTest :benchmark:assembleBenchmark lintDebug 2>&1 | tee build.log
+          ./gradlew --no-daemon --dependency-verification strict assembleRelease testDebugUnitTest assembleDebugAndroidTest :benchmark:assembleBenchmark lintDebug 2>&1 | tee build.log
 
       - name: Report build errors
         if: failure()
@@ -94,6 +113,23 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: ./gradlew connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.vidora.app.GuestReleaseGateTest --no-daemon
 
+      - name: Report emulator assertions
+        if: failure()
+        run: |
+          python3 - <<'PYASSERT'
+          import pathlib,xml.etree.ElementTree as ET
+          for path in pathlib.Path('app/build/outputs/androidTest-results').rglob('*.xml'):
+              try: root=ET.parse(path).getroot()
+              except ET.ParseError: continue
+              for case in root.iter('testcase'):
+                  for tag in ('failure','error'):
+                      err=case.find(tag)
+                      if err is not None:
+                          msg=((err.get('message') or '')+' '+(err.text or ''))[:5000]
+                          msg=msg.replace('%','%25').replace('\n','%0A').replace('\r','')
+                          print('::error title='+case.get('name','emulator')+'::'+msg)
+          PYASSERT
+
       - name: Dependency inventory
         run: ./gradlew :app:dependencies --configuration releaseRuntimeClasspath > dependency-inventory.txt
 
@@ -108,22 +144,6 @@ jobs:
             gradle/verification-metadata.xml
             dependency-inventory.txt
           retention-days: 7
-
-      # One-time bootstrap: return the resolved checksums through the authenticated GitHub API.
-      # Maintainer reviews and commits these before strict verification is enabled on following runs.
-      - name: Return dependency verification bootstrap
-        if: always() && github.event_name == 'push' && hashFiles('gradle/verification-metadata.xml') != ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          if ! git ls-files --error-unmatch gradle/verification-metadata.xml >/dev/null 2>&1; then
-            python3 - <<'PYBOOT'
-          import gzip,base64
-          blob=base64.b64encode(gzip.compress(open('gradle/verification-metadata.xml','rb').read())).decode()
-          open('/tmp/verification-comment.txt','w').write('VIDORA_VERIFICATION_BOOTSTRAP\n'+blob)
-          PYBOOT
-            gh pr comment 1 --body-file /tmp/verification-comment.txt
-          fi
 
       - name: Rename APK
         run: |

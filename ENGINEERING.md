@@ -30,8 +30,8 @@ Existing APK signing and Update/Later flow remain unchanged.
   produces profile files. Emulator timings are diagnostic, not real-device speed claims. Generated
   profiles require review/measurement before replacing the existing bundled profile.
 - Build actions are pinned to commits; dependency updates are proposed, not auto-merged. SHA-256 APK
-  inventory is published with releases. Dependency checksums are bootstrapped in CI, reviewed and then
-  committed for strict verification. A checksum authenticates bytes against a reviewed baseline, not
+  inventory is published with releases. Dependency checksums were bootstrapped from CI resolution, component/configuration reviewed and
+  committed for strict verification. Signatures are not verified; initial trust still relies on the repositories. A checksum authenticates bytes against a reviewed baseline, not
   a publisher's identity. No keystore rotation or anti-modification guarantee is implied.
 
 ## Release verification

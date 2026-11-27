@@ -7,6 +7,7 @@ on:
       - ".github/workflows/performance.yml"
 permissions:
   contents: read
+  pull-requests: write
 jobs:
   measure:
     runs-on: ubuntu-latest
@@ -31,6 +32,23 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: ./gradlew :benchmark:connectedBenchmarkAndroidTest --no-daemon
+      - name: Report emulator assertions
+        if: failure()
+        run: |
+          python3 - <<'PYASSERT'
+          import pathlib,xml.etree.ElementTree as ET
+          for path in pathlib.Path('benchmark/build/outputs').rglob('*.xml'):
+              try: root=ET.parse(path).getroot()
+              except ET.ParseError: continue
+              for case in root.iter('testcase'):
+                  for tag in ('failure','error'):
+                      err=case.find(tag)
+                      if err is not None:
+                          msg=((err.get('message') or '')+' '+(err.text or ''))[:5000]
+                          msg=msg.replace('%','%25').replace('\n','%0A').replace('\r','')
+                          print('::error title='+case.get('name','emulator')+'::'+msg)
+          PYASSERT
+
       - name: Measured output and generated profiles
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -40,3 +58,20 @@ jobs:
             benchmark/build/outputs/
             benchmark/build/reports/
           retention-days: 14
+      - name: Return generated profile and measured summary for review
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PYPROFILE'
+          import pathlib,gzip,base64,json
+          files=list(pathlib.Path('benchmark/build/outputs').rglob('*baseline-prof.txt'))
+          summaries=list(pathlib.Path('benchmark/build/outputs').rglob('*benchmarkData.json'))
+          if not files: raise SystemExit('No generated baseline profile found')
+          profile=files[0].read_bytes()
+          payload={'profile_gzip_base64':base64.b64encode(gzip.compress(profile)).decode(),
+                   'summaries':[json.loads(p.read_text()) for p in summaries]}
+          encoded=base64.b64encode(gzip.compress(json.dumps(payload).encode())).decode()
+          pathlib.Path('/tmp/profile-comment.txt').write_text('VIDORA_MEASURED_PROFILE\n'+encoded)
+          PYPROFILE
+          gh pr comment 1 --body-file /tmp/profile-comment.txt

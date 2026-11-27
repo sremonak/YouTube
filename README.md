@@ -42,6 +42,22 @@ design — no ad SDKs, with a local library. Signing in with a YouTube account i
 | **Live About page** | The in-app About page is loaded from [`about/ABOUT.md`](about/ABOUT.md) — edit it on GitHub and every installed app shows the change. |
 | **Auto-updates** | New GitHub releases download in the background and install automatically (Android 12+ silently after the first in-app update). |
 
+## ⚙️ Engineering reliability layer
+
+See [ENGINEERING.md](ENGINEERING.md) for architecture and exact verification boundaries.
+
+- Fast-first source updates, stable appended batches and per-provider retry controls.
+- Bounded provider health cooldowns, cancellation-aware HTTP, rate-limit handling and request coalescing.
+- Room-backed public feed snapshots: show cached rows first, refresh in the background, retain them
+  offline. Snapshots exclude signed playback URLs/account feeds and are disabled for incognito searches.
+- Home language query hints, local interests, creator diversity, freshness/watched ranking,
+  **Why this video?**, **Less like this**, and reset controls. Search remains query-only.
+- Error-aware playback recovery, limited URL refresh/codec fallback, retained position and rate-limit pauses.
+- Local review-before-share diagnostics; no automatic uploads, URLs, cookies, query or IP data.
+- Non-blocking settings startup, low-RAM opaque UI fallback, release-target benchmarks/profile generation.
+- Pinned CI actions, dependency verification, wrapper distribution checksum and published APK SHA-256.
+- Deterministic emulator release gate, separate from upstream-dependent real-network tests.
+
 ## 🌍 Guest multi-platform discovery
 
 - **Explore** is the default Home tab, including when signed in. It interleaves country-topic

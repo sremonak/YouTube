@@ -115,6 +115,7 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
         } else UiCache.paged("home:$signedIn:${region.code}:${tab.key}") { tab.load() }
     }
     androidx.compose.runtime.DisposableEffect(paged) { onDispose { paged.cancelPending() } }
+    androidx.activity.compose.ReportDrawnWhen { paged.items.isNotEmpty() || paged.error != null }
     val gridState = rememberLazyGridState()
 
     var shownTab by rememberSaveable { mutableStateOf(tab.key) }
