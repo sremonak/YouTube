@@ -104,7 +104,7 @@ class GuestReleaseGateTest {
         compose.onNodeWithText("Refresh feed").performClick()
         compose.waitUntil(20_000) { compose.onAllNodesWithText(fresh.title).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() }
         assertTrue(calls.get() >= 2)
-        compose.onNodeWithText("Feed updated · fresh results loaded").assertIsDisplayed()
+        compose.waitUntil(5000) { compose.onAllNodesWithText("Feed updated · fresh results loaded").fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() }
         compose.onNodeWithContentDescription("Home options").performClick()
         compose.onNodeWithText("Refresh feed").performClick()
         compose.waitUntil(20_000) { compose.onAllNodesWithText("Checked just now · providers returned the same videos").fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() }
@@ -133,15 +133,15 @@ class GuestReleaseGateTest {
     }
     @Test fun invalidatingAnActiveAccountPageMakesItReloadOnReturn() {
         lateinit var page: com.vidora.app.ui.Paged
-        var calls = 0
+        val calls = java.util.concurrent.atomic.AtomicInteger()
         instrumentation.runOnMainSync {
-            page = UiCache.paged("home:true:fixture:acc") { calls++; PageResult(listOf(Entry.Video(peer))) }
+            page = UiCache.paged("home:true:fixture:acc") { calls.incrementAndGet(); PageResult(listOf(Entry.Video(peer))) }
             page.ensureLoaded()
         }
         compose.waitUntil(5000) { page.items.isNotEmpty() && !page.loading }
         instrumentation.runOnMainSync { UiCache.invalidate("home:true:"); page.ensureLoaded() }
-        compose.waitUntil(5000) { calls == 2 && !page.refreshing }
-        assertEquals(2, calls)
+        compose.waitUntil(5000) { calls.get() == 2 && !page.refreshing }
+        assertEquals(2, calls.get())
     }
 
     @Test fun publicSnapshotsSurviveDatabaseReopenAndClear() = runBlocking {
