@@ -72,6 +72,7 @@ object AccountSync {
         if (!WatchHistoryPolicy.eligible(Graph.account.isSignedIn, settings.syncWatchHistory, settings.incognito, id != null)) {
             _watchStatus.value = when {
                 settings.incognito -> "Incognito · history is not sent"
+                id == null -> "${video.platform} playback stays in device history; only YouTube videos can sync to YouTube"
                 !Graph.account.isSignedIn -> "Sign in to YouTube to send history · device history is saved separately"
                 else -> "YouTube history sync is off"
             }
@@ -106,7 +107,9 @@ object AccountSync {
             val owner = Graph.account.session.value?.signedInAt ?: run { _watchStatus.value = "Sign in to YouTube first"; return@launch }
             val privacy = Graph.settings.flow.first()
             if (privacy.incognito || !privacy.syncWatchHistory) { _watchStatus.value = "History sync is off or incognito is active"; return@launch }
-            val rows = Graph.library.data.value.history.filter { it.actualWatchSeconds > 0 && it.youtubeSyncedAt < it.watchedAt }.take(50)
+            val rows = Graph.library.data.value.history.filter {
+                it.actualWatchSeconds > 0 && it.youtubeSyncedAt < it.watchedAt && Graph.repository.videoId(it.video.url) != null
+            }.take(50)
             if (rows.isEmpty()) { _watchStatus.value = "No measured playback pending. Older resume positions cannot be treated as watched time."; return@launch }
             for (row in rows) {
                 if (Graph.account.session.value?.signedInAt != owner) break
