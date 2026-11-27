@@ -315,7 +315,7 @@ fun AppRoot(activity: MainActivity, settings: AppSettings) {
     }
 
     downloadTarget?.let { video -> DownloadSheet(video = video, onDismiss = { downloadTarget = null }) }
-    com.vidora.app.ui.components.StartupDialogs(onSignIn = { nav.navigate(Routes.LOGIN) { launchSingleTop = true } })
+    com.vidora.app.ui.components.StartupDialogs(onSignIn = { nav.navigate(Routes.LOGIN) { launchSingleTop = true } }, showUpdates = route != Routes.LOGIN)
 }
 
 @Composable

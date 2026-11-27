@@ -40,44 +40,74 @@ import com.vidora.app.util.UpdateInfo
 import com.vidora.app.util.Updater
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.isActive
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.vidora.app.util.UpdatePromptPolicy
 
 /**
  * Shown on launch: the first-run welcome, a crash report from the previous session, then a
  * floating "update available" card (Update / Later).
  */
 @Composable
-fun StartupDialogs(onSignIn: () -> Unit = {}) {
+fun StartupDialogs(onSignIn: () -> Unit = {}, showUpdates: Boolean = true) {
     val context = LocalContext.current
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val settings by Graph.settings.flow.collectAsState(initial = null)
+    val available by Updater.available.collectAsState()
+    val requested by Updater.promptRequest.collectAsState()
+    val prefs = remember(context) { context.getSharedPreferences("updater", Context.MODE_PRIVATE) }
     var welcome by rememberSaveable { mutableStateOf(shouldShowWelcome(context)) }
     var crash by remember { mutableStateOf(CrashReporter.pending(context)) }
     var update by remember { mutableStateOf<UpdateInfo?>(null) }
-    var checked by rememberSaveable { mutableStateOf(false) }
+    var lastSuccess by remember { mutableStateOf<Long?>(null) }
+    var lastAttempt by remember { mutableStateOf<Long?>(null) }
 
-    LaunchedEffect(Unit) {
-        if (checked) return@LaunchedEffect
-        checked = true
-        delay(2500) // let the first feed load first
-        if (!Graph.settingsState.value.autoUpdateCheck) return@LaunchedEffect
-        val prefs = context.getSharedPreferences("updater", Context.MODE_PRIVATE)
-        val last = prefs.getLong("last_check", 0)
-        if (System.currentTimeMillis() - last < 30 * 60_000L) return@LaunchedEffect
-        val info = runCatching { Updater.check() }.getOrNull()
-        prefs.edit().putLong("last_check", System.currentTimeMillis()).apply()
-        if (info == null || prefs.getString("skipped", null) == info.version) return@LaunchedEffect
-        Updater.state.value = com.vidora.app.util.UpdateState.Available(info)
-        val s = Graph.settingsState.value
-        if (s.autoInstallUpdates && info.apkUrl != null && Updater.canInstall(context)) {
-            // The user opted into silent updates → download in the background and install.
-            Toast.makeText(context, "Downloading Vidora ${info.version}…", Toast.LENGTH_SHORT).show()
-            Graph.appScope.launch { Updater.downloadAndInstall(context.applicationContext, info) }
-            return@LaunchedEffect
+    fun offerAutomatic(info: UpdateInfo?) {
+        if (info == null || settings?.autoUpdateCheck != true) return
+        if (Updater.state.value is com.vidora.app.util.UpdateState.Installing) return
+        if (UpdatePromptPolicy.shouldPrompt(
+                info.version, prefs.getString("later_version", null), prefs.getLong("later_until", 0), System.currentTimeMillis(),
+            )) update = info
+    }
+
+    // Result discovery is shared with the worker and manual checks. Never throw away a known
+    // update merely because the last network check was recent (the old 30-minute early return).
+    LaunchedEffect(available, settings?.autoUpdateCheck) { offerAutomatic(available) }
+    LaunchedEffect(requested) {
+        requested?.let {
+            update = it // Explicit user requests bypass Later and auto-check being off.
+            Updater.consumePromptRequest()
         }
-        // "Later" hides the card for a few hours, then it comes back on the next launch.
-        val laterVersion = prefs.getString("later_version", null)
-        val laterUntil = prefs.getLong("later_until", 0)
-        if (laterVersion == info.version && System.currentTimeMillis() < laterUntil) return@LaunchedEffect
-        while (welcome) delay(500) // never stack on top of the welcome card
-        update = info
+    }
+
+    // Check again after returning to the app, and while it stays open. Offline failures retry
+    // after 30 seconds; only SUCCESSFUL checks consume the five-minute throttle. No old
+    // persisted `last_check` / `skipped` flags can silently hide a new release anymore.
+    LaunchedEffect(lifecycle, settings?.autoUpdateCheck) {
+        if (settings?.autoUpdateCheck != true) return@LaunchedEffect
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            delay(1500)
+            while (isActive) {
+                val now = android.os.SystemClock.elapsedRealtime()
+                val busy = Updater.state.value is com.vidora.app.util.UpdateState.Downloading ||
+                    Updater.state.value is com.vidora.app.util.UpdateState.Installing
+                if (!busy && UpdatePromptPolicy.shouldCheck(now, lastSuccess, lastAttempt)) {
+                    lastAttempt = now
+                    try {
+                        Updater.check()
+                        lastSuccess = android.os.SystemClock.elapsedRealtime()
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        // Offline / rate limit: preserve discovery and retry instead of marking success.
+                    }
+                }
+                offerAutomatic(Updater.available.value)
+                delay(UpdatePromptPolicy.RETRY_INTERVAL_MS)
+            }
+        }
     }
 
     if (welcome) {
@@ -88,10 +118,10 @@ fun StartupDialogs(onSignIn: () -> Unit = {}) {
         CrashDialog(report) { CrashReporter.clear(context); crash = null }
         return
     }
-    update?.let { info ->
+    if (showUpdates) update?.let { info ->
         UpdateCardNotice(info) {
-            context.getSharedPreferences("updater", Context.MODE_PRIVATE).edit()
-                .putString("later_version", info.version).putLong("later_until", System.currentTimeMillis() + 6 * 3600_000L).apply()
+            prefs.edit().putString("later_version", info.version)
+                .putLong("later_until", System.currentTimeMillis() + UpdatePromptPolicy.SNOOZE_MS).apply()
             update = null
         }
     }

@@ -118,8 +118,7 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
         runCatching { context.contentResolver.openOutputStream(uri)?.use { it.write(Graph.library.exportJson().toByteArray()) } }
             .onSuccess { Toast.makeText(context, "Library exported", Toast.LENGTH_SHORT).show() }
     }
-    var updateInfo by remember { mutableStateOf<com.vidora.app.util.UpdateInfo?>(null) }
-    var checkingUpdate by remember { mutableStateOf(false) }
+    val checkingUpdate by com.vidora.app.util.Updater.checking.collectAsState()
     var showEq by remember { mutableStateOf(false) }
     val subsImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri ?: return@rememberLauncherForActivityResult
@@ -536,14 +535,7 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
             item {
                 ClickRow(if (checkingUpdate) "Checking…" else "Check for updates now", "Current version ${BuildConfig.VERSION_NAME}") {
                     if (checkingUpdate) return@ClickRow
-                    checkingUpdate = true
-                    scope.launch {
-                        val r = runCatching { com.vidora.app.util.Updater.check() }
-                        checkingUpdate = false
-                        r.onSuccess { info ->
-                            if (info == null) Toast.makeText(context, "You're on the latest version", Toast.LENGTH_SHORT).show() else updateInfo = info
-                        }.onFailure { Toast.makeText(context, "Could not check for updates. Please try again.", Toast.LENGTH_LONG).show() }
-                    }
+                    scope.launch { com.vidora.app.util.Updater.checkForUser(context.applicationContext) }
                 }
             }
             item {
@@ -583,7 +575,6 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
         }
     }
 
-    updateInfo?.let { info -> com.vidora.app.ui.components.UpdateDialog(info) { updateInfo = null } }
     if (showEq) EqualizerSheet { showEq = false }
 
     when (dialog) {

@@ -113,7 +113,14 @@ class UpdateWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         if (!s.autoUpdateCheck) return Result.success()
         val info = runCatching { Updater.check() }.getOrNull() ?: return Result.success()
         val prefs = applicationContext.getSharedPreferences("updater", Context.MODE_PRIVATE)
-        if (prefs.getString("skipped", null) == info.version) return Result.success()
+        if (!UpdatePromptPolicy.shouldPrompt(info.version, prefs.getString("later_version", null),
+                prefs.getLong("later_until", 0), System.currentTimeMillis())) return Result.success()
+        // Foreground discovery is shown by StartupDialogs. Don't race the floating card
+        // with a silent install, even on older installs where auto-install was enabled.
+        val foreground = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+            ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+        }
+        if (foreground) return Result.success()
         val metered = runCatching {
             applicationContext.getSystemService(android.net.ConnectivityManager::class.java).isActiveNetworkMetered
         }.getOrDefault(true)

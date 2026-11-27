@@ -10,6 +10,11 @@ import com.vidora.app.BuildConfig
 import com.vidora.app.Graph
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import android.widget.Toast
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -32,10 +37,54 @@ object Updater {
     const val REPO = "sremonak/YouTube"
     private val json = Json { ignoreUnknownKeys = true }
 
-    suspend fun check(): UpdateInfo? = withContext(Dispatchers.IO) {
+    private val checkMutex = Mutex()
+    private val _available = MutableStateFlow<UpdateInfo?>(null)
+    val available = _available.asStateFlow()
+    private val _checking = MutableStateFlow(false)
+    val checking = _checking.asStateFlow()
+    private val _promptRequest = MutableStateFlow<UpdateInfo?>(null)
+    val promptRequest = _promptRequest.asStateFlow()
+
+    fun consumePromptRequest() { _promptRequest.value = null }
+
+    /** Shared discovery: workers, Home, About and foreground checks publish the same result. */
+    suspend fun check(): UpdateInfo? = checkMutex.withLock {
+        _checking.value = true
+        try {
+            checkRemote().also { _available.value = it }
+        } finally {
+            _checking.value = false
+        }
+    }
+
+    /** Explicit checks bypass auto-check settings, startup throttling and the Later snooze. */
+    suspend fun checkForUser(context: Context) {
+        val active = state.value
+        if (active is UpdateState.Downloading || active is UpdateState.Installing) {
+            _promptRequest.value = if (active is UpdateState.Downloading) active.info else (active as UpdateState.Installing).info
+            return
+        }
+        try {
+            val info = check()
+            if (info != null) {
+                state.value = UpdateState.Available(info)
+                _promptRequest.value = info
+            } else {
+                state.value = UpdateState.UpToDate(System.currentTimeMillis())
+                withContext(Dispatchers.Main) { Toast.makeText(context, "You're on the latest version", Toast.LENGTH_SHORT).show() }
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            withContext(Dispatchers.Main) { Toast.makeText(context, "Could not check for updates. Check your connection and try again.", Toast.LENGTH_LONG).show() }
+        }
+    }
+
+    private suspend fun checkRemote(): UpdateInfo? = withContext(Dispatchers.IO) {
         val req = Request.Builder()
             .url("https://api.github.com/repos/$REPO/releases/latest")
             .header("Accept", "application/vnd.github+json")
+            .header("Cache-Control", "no-cache")
             .build()
         Graph.http.newCall(req).execute().use { r ->
             if (r.code == 404) return@withContext null // no releases published yet

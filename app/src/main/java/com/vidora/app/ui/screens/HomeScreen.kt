@@ -27,6 +27,13 @@ import com.vidora.app.ui.icons.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.ui.platform.LocalContext
+import com.vidora.app.util.Updater
+import com.vidora.app.ui.icons.IosGlyphs
+import kotlinx.coroutines.launch
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -64,6 +71,9 @@ import com.vidora.app.ui.theme.BrandTitle
 @Composable
 fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSettings) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val updateAvailable by Updater.available.collectAsState()
+    val checkingUpdate by Updater.checking.collectAsState()
     val session by Graph.account.session.collectAsState()
     val signedIn = session != null
     // Signed in: YouTube's own personalised chips (All, Music, Mixes, Gaming, Recently uploaded…) come first.
@@ -107,6 +117,15 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
             actions = {
                 IconButton(onClick = { nav.navigate(Routes.DOWNLOADS) }) { Icon(Icons.Outlined.FileDownload, "Downloads") }
                 IconButton(onClick = { nav.navigate(Routes.search()) }) { Icon(Icons.Rounded.Search, "Search") }
+                IconButton(
+                    enabled = !checkingUpdate,
+                    onClick = { scope.launch { Updater.checkForUser(context.applicationContext) } },
+                ) {
+                    if (checkingUpdate) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                    else BadgedBox(badge = { if (updateAvailable != null) Badge() }) {
+                        Icon(IosGlyphs.arrowDownCircleFill, if (updateAvailable != null) "Update available" else "Check for updates")
+                    }
+                }
                 IconButton(onClick = { nav.navigate(if (signedIn) Routes.LIBRARY else Routes.LOGIN) }) {
                     val avatar = session?.avatar
                     if (avatar != null) Avatar(avatar, 28)
