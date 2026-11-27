@@ -1,3 +1,6 @@
+import java.security.KeyStore
+import java.security.MessageDigest
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -12,13 +15,13 @@ val hasReleaseKey = !releaseKeystore.isNullOrBlank() && file(releaseKeystore).ex
 // Derive the runtime pin from the actual signing certificate, never from an installed APK.
 // The public fallback key preserves upgrades but is NOT a private anti-clone identity.
 val signingCertificateSha256 = run {
-    val store = java.security.KeyStore.getInstance("PKCS12")
+    val store = KeyStore.getInstance("PKCS12")
     val path = if (hasReleaseKey) file(releaseKeystore!!) else file("debug.keystore")
     val password = if (hasReleaseKey) System.getenv("VIDORA_KEYSTORE_PASSWORD") else "android"
     val alias = if (hasReleaseKey) System.getenv("VIDORA_KEY_ALIAS") else "androiddebugkey"
     path.inputStream().use { store.load(it, requireNotNull(password).toCharArray()) }
     val certificate = requireNotNull(store.getCertificate(requireNotNull(alias))) { "Signing certificate missing" }
-    java.security.MessageDigest.getInstance("SHA-256").digest(certificate.encoded)
+    MessageDigest.getInstance("SHA-256").digest(certificate.encoded)
         .joinToString("") { "%02x".format(it) }
 }
 
