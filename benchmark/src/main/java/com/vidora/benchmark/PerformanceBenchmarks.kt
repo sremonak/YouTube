@@ -12,10 +12,20 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 private fun UiDevice.enterGuestHome() {
-    // Match the shipping welcome copy; no account or test-only release backdoor.
-    wait(Until.hasObject(By.text("Continue without signing in")), 2_000)
-    findObject(By.text("Continue without signing in"))?.click()
-    check(wait(Until.hasObject(By.desc("Search")), 10_000)) { "Guest Home search control missing" }
+    // Resolve real optional welcome/update dialogs, including asynchronous first draw.
+    val deadline = android.os.SystemClock.uptimeMillis() + 30_000
+    while (android.os.SystemClock.uptimeMillis() < deadline) {
+        val welcome = findObject(By.text("Continue without signing in"))
+        val later = findObject(By.text("Later"))
+        when {
+            welcome != null -> welcome.click()
+            later != null -> later.click()
+            hasObject(By.desc("Search")) -> return
+        }
+        android.os.SystemClock.sleep(200)
+    }
+    val xml = java.io.ByteArrayOutputStream().also { dumpWindowHierarchy(it) }.toString()
+    error("Guest Home search control missing: ${xml.take(6000)}")
 }
 
 /** Release-target measurements, not debug timings. Network variability must be reported separately. */
