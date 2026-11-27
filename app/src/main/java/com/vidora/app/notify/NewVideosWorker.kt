@@ -54,8 +54,9 @@ class NewVideosWorker(context: Context, params: WorkerParameters) : CoroutineWor
             async {
                 gate.withPermit {
                     runCatching {
-                        val id = resolveChannelId(ch, prefs) ?: return@runCatching emptyList<VideoItem>()
-                        val videos = RssFeed.fetch(id)
+                        val peer = com.vidora.app.data.GuestSources.isPeerChannel(ch)
+                        val id = if (peer) ch else resolveChannelId(ch, prefs) ?: return@runCatching emptyList<VideoItem>()
+                        val videos = if (peer) Graph.repository.latestUploads(ch) else RssFeed.fetch(id)
                         val newest = videos.maxOfOrNull { it.uploadedEpoch } ?: return@runCatching emptyList<VideoItem>()
                         val lastSeen = prefs.getLong("seen_$id", 0L)
                         prefs.edit().putLong("seen_$id", maxOf(newest, lastSeen)).apply()

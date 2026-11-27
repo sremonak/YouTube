@@ -55,6 +55,20 @@
                 <data android:host="music.youtube.com" />
                 <data android:host="youtu.be" />
             </intent-filter>
+            <intent-filter android:autoVerify="false">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:host="tilvids.com" />
+                <data android:host="framatube.org" />
+                <data android:host="video.blender.org" />
+                <data android:host="commons.wikimedia.org" />
+                <data android:pathPrefix="/w/" />
+                <data android:pathPrefix="/videos/watch/" />
+                <data android:pathPrefix="/video-channels/" />
+                <data android:pathPrefix="/wiki/File:" />
+            </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />

@@ -29,7 +29,7 @@ class DiscoveryRepository(
     }
 
     suspend fun home(country: String): PageResult = combine(listOf(
-        Feed("Regional YouTube") { youtubeSearch(GuestSources.regionalQuery(country, "music news culture"), SearchFilter.VIDEOS) },
+        Feed("Regional YouTube") { youtubeSearch(GuestSources.countryName(country), SearchFilter.VIDEOS) },
         Feed("Regional Commons") { commonsSearch(GuestSources.countryName(country)) },
         Feed("PeerTube") { peerHome() },
     ))

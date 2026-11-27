@@ -82,12 +82,13 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
     }
     val session by Graph.account.session.collectAsState()
     val signedIn = session != null
-    // Signed in: YouTube's own personalised chips (All, Music, Mixes, Gaming, Recently uploaded…) come first.
+    // Account recommendations remain optional; Explore stays the default for every user.
     var accountChips by remember(signedIn) { mutableStateOf(UiCache.get<List<FeedChip>>("home:chips") ?: emptyList()) }
     val tabs = remember(signedIn, accountChips, region.code) {
         buildList {
+            add(HomeTab(HomeSection.FOR_YOU.name, HomeSection.FOR_YOU.label) { loadSection(HomeSection.FOR_YOU, region.code) })
             if (signedIn) {
-                add(HomeTab("acc", "All") {
+                add(HomeTab("acc", "YouTube account") {
                     val first = Graph.accountApi.feedWithChips(AccountFeed.RECOMMENDED)
                     if (first.chips.isNotEmpty()) { accountChips = first.chips; UiCache.put("home:chips", first.chips) }
                     first.page
@@ -99,14 +100,14 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
             }
             val taken = map { it.label.lowercase() }.toSet()
             HomeSection.entries
-                .filter { it != HomeSection.ACCOUNT && !(signedIn && it == HomeSection.FOR_YOU) }
+                .filter { it != HomeSection.ACCOUNT && it != HomeSection.FOR_YOU }
                 .filter { it.label.lowercase() !in taken }
                 .forEach { sec -> add(HomeTab(sec.name, sec.label) { loadSection(sec, region.code) }) }
             add(HomeTab("peertube", "PeerTube") { Graph.openVideos.peerSearch(null) })
             add(HomeTab("commons", "Commons") { Graph.openVideos.commonsSearch(com.vidora.app.data.GuestSources.countryName(region.code)) })
         }
     }
-    var tabKey by rememberSaveable(signedIn) { mutableStateOf(if (signedIn) "acc" else HomeSection.FOR_YOU.name) }
+    var tabKey by rememberSaveable(signedIn) { mutableStateOf(HomeSection.FOR_YOU.name) }
     val tab = tabs.firstOrNull { it.key == tabKey } ?: tabs.first()
     // Cached across navigation: coming back from Settings / the player shows the same feed instantly.
     val paged = remember(tab.key, signedIn, region.code) { UiCache.paged("home:$signedIn:${region.code}:${tab.key}") { tab.load() } }
@@ -172,7 +173,7 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
                     Column {
                         if (paged.notices.isNotEmpty()) Text(paged.notices.joinToString("\n"), style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp))
-                        if (resume.isNotEmpty() && tab.key == tabs.first().key) ContinueWatchingRow(resume, actions)
+                        if (resume.isNotEmpty() && tab.key == HomeSection.FOR_YOU.name) ContinueWatchingRow(resume, actions)
                     }
                 }
             )

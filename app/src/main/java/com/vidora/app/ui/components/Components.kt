@@ -347,8 +347,9 @@ fun EntryGrid(
         }
     }
     LaunchedEffect(state) { com.vidora.app.ui.TabReselect.events.collect { state.animateScrollToItem(0) } }
-    LaunchedEffect(shouldLoadMore, paged.items.size) {
-        if (shouldLoadMore && !paged.endReached && paged.items.isNotEmpty()) paged.loadMore()
+    LaunchedEffect(shouldLoadMore, paged.items.size, paged.loading, paged.endReached) {
+        // A provider page can contain only filtered / unsupported entries but still have a next page.
+        if (shouldLoadMore && !paged.loading && !paged.endReached && paged.error == null) paged.loadMore()
     }
 
     LazyVerticalGrid(

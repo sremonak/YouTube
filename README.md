@@ -1,10 +1,10 @@
 # Vidora — ad-free video client for Android
 
 Vidora is a modern, fully native Android app (Kotlin + Jetpack Compose + Media3) for watching
-YouTube content **without ads**, with **background playback**, **picture-in-picture**,
+public YouTube, PeerTube and Wikimedia Commons videos, with **background playback**, **picture-in-picture**,
 **video/audio downloads in the quality you choose**, SponsorBlock and a fully customisable
-design — no tracking, everything stored on your device. Signing in with a YouTube account is
-**optional** and only unlocks extra content (see [Sign in](#-optional-youtube-sign-in)).
+design — no ad SDKs, with a local library. Signing in with a YouTube account is
+**optional**; supported account features depend on the upstream platform (see [Sign in](#-optional-youtube-sign-in)).
 
 > বাংলা সারসংক্ষেপ নিচে দেওয়া আছে ⬇️
 
@@ -26,21 +26,74 @@ design — no tracking, everything stored on your device. Signing in with a YouT
 | **Community** | **Return YouTube Dislike** counts, **DeArrow** clickbait-free titles & thumbnails (opt-in). |
 | **Filters** | Block channels ("Don't recommend channel") and keywords, hide watched videos, hide Shorts — applied to every feed. |
 | **SponsorBlock** | Automatically skips sponsors, intros, self-promo, etc. — choose which categories. |
-| **Discover** | Home feed (personal "For you" mix built locally from your history, Live, Music, Gaming, Podcasts, Movies), **Continue watching** row, search with suggestions, history and **voice search**, filters (videos/channels/playlists/music + length, upload date, hide live), channels with tabs, playlists with Play-all/Shuffle. |
+| **Discover** | Country-biased Explore (IP/manual/device country), PeerTube and Commons tabs, plus YouTube category feeds, **Continue watching** row, search with suggestions, history and **voice search**, filters (videos/channels/playlists/music + length, upload date, hide live), channels with tabs, playlists with Play-all/Shuffle. |
 | **Library (local)** | Subscriptions + subscription feed, **subscription groups**, history, liked videos, watch later, **your own playlists** (create, rename, reorder, share, download all) — all private, no login. **Incognito mode** (one tap in Library). Export/Import backup as JSON. **Import subscriptions** from NewPipe / LibreTube / FreeTube / Google Takeout CSV / OPML, export as NewPipe JSON. |
 | **Notifications** | Optional new-video notifications for your subscriptions (checked every 1–24 h through fast channel RSS feeds, no login needed). |
 | **Platform** | Home-screen **now-playing widget**, **Quick Settings tile**, **Android Auto** browsing (Continue watching, Liked, Watch later, Playlists, Trending music), **Android TV** launcher entry with D-pad focus highlighting. English + **বাংলা** (per-app language on Android 13+). |
 | **Reliability** | Local **PoToken (BotGuard)** generation like NewPipe, so fewer "not a bot" / HTTP 403 errors; expired stream links are refreshed automatically after long pauses; **in-app updater** from GitHub Releases; crash reporter that opens a pre-filled GitHub issue (no telemetry). |
-| **YouTube sign-in (optional)** | Sign in on Google's own page inside the app to unlock age-restricted videos, get past "confirm you're not a bot" blocks, and see your **Recommended**, **Subscriptions feed**, **Liked**, **Watch later** and **History** — still with no ads. One-tap import of your YouTube subscriptions. Likes, dislikes and subscriptions made in Vidora can be **synced to your account** (toggle), and videos can be **saved to your YouTube playlists** (or a new one). |
+| **YouTube sign-in (optional)** | Optional session support for eligible account content (not guaranteed to resolve platform blocks), plus your **Recommended**, **Subscriptions feed**, **Liked**, **Watch later** and **History** — still with no ads. One-tap import of your YouTube subscriptions. Likes, dislikes and subscriptions made in Vidora can be **synced to your account** (toggle), and videos can be **saved to your YouTube playlists** (or a new one). |
 | **Customisation** | Theme (System/Light/Dark/AMOLED black), Material You dynamic colour, 8 accent colours, corner roundness slider, card or compact-list layout, avatars on/off, custom in-app display name, **6 launcher icons × 4 launcher names** switchable from Settings. |
 | **Responsive** | Phones, foldables and tablets: bottom bar on phones, navigation rail + side-by-side player on large screens, adaptive grids, edge-to-edge. |
-| **Open links** | Share any YouTube link to Vidora, or open `youtube.com` / `youtu.be` links with it. |
+| **Open links** | Share supported YouTube, curated PeerTube watch/channel links, or Commons `File:` links to Vidora. |
 | **Glass UI + iPhone icons** | Frosted-glass top bars, bottom bar, mini player, sheets, dialogs and cards (real blur on Android 12+), **iPhone-style icons** everywhere (Framework7 Icons, toggle in Settings → Appearance). |
 | **Fast start** | Touch-prefetch (streams resolve while your finger is still on the card), next-video prefetch, adaptive DASH, a 512 MB **disk cache** of watched segments, **AV1/VP9** when the phone decodes them in hardware, start-time in *Stats for nerds*. |
 | **Data saver** | On mobile data: 360p cap, small thumbnails, low-bitrate audio, no preloading. |
 | **Cast** | Chromecast / Google TV casting with remote controls (needs Google Play services). |
 | **Live About page** | The in-app About page is loaded from [`about/ABOUT.md`](about/ABOUT.md) — edit it on GitHub and every installed app shows the change. |
 | **Auto-updates** | New GitHub releases download in the background and install automatically (Android 12+ silently after the first in-app update). |
+
+## 🌍 Guest multi-platform discovery
+
+- **Explore** is the default Home tab, including when signed in. It interleaves country-topic
+  YouTube and Commons results with a smaller global PeerTube sample. This is country-level
+  relevance, not GPS, guaranteed local-language content, or a claim about where creators live.
+- **Search** sends the submitted query unchanged to each selected provider; it never appends
+  Home's country. Source chips: All sources, Public alternatives, YouTube, PeerTube, Commons.
+  Channels/playlists/music filters currently use YouTube; other providers support video search.
+- **PeerTube** uses public APIs on `tilvids.com`, `framatube.org`, and `video.blender.org`, with
+  creator pages, local follows and latest uploads. Only these curated origins are routed.
+- **Commons** uses `prop=videoinfo` with current API-supplied WebM/MP4 derivatives. Creator,
+  credit, attribution, licence and original file page are retained in the description. Files
+  without licence metadata are not listed. Public availability is not unrestricted reuse.
+- Local likes, watch later, history, playlists, queue and supported follows need no login.
+  PeerTube/Commons comments and account actions are not implemented; they are not login gates.
+  Audio-only file downloads require a separately supplied audio rendition; HLS-only videos may
+  play without offering a downloadable file. Codec support depends on the phone.
+- Requests run independently with bounded timeouts. A failed source produces a notice while
+  other results remain. **Find public alternatives** searches *different* public videos when
+  playback fails; it does not unlock a restricted video. No guarantee of avoiding IP/platform
+  blocks; private, paid, age-gated or other restricted media are not bypassed.
+
+**Home country privacy:** Automatic mode uses `https://api.country.is/`, which sees the device's
+public IP. Vidora reads only the ISO country, stores country + lookup time (not the IP), caches
+for six hours, and falls back to the device locale on failure. Settings → Content → **Use IP
+country for Home** disables lookups; **Content country** offers a manual country and skips the
+IP request. Search does not trigger the lookup. Video/API providers also see normal connection
+metadata, queries and playback requests. No GPS permission is used. The API's observed country
+reflects a VPN/proxy egress when one is active.
+
+**Downloads and rights:** public-source downloads include a `.attribution.txt` companion in
+`Download/Vidora` (or the chosen folder), even for WebM. Keep it with the video and consult the
+original page before reuse or redistribution. Software licences remain in Settings → Licences;
+corresponding GPL source is linked on every APK release page.
+
+Provider references: [PeerTube REST API](https://docs.joinpeertube.org/api-rest-reference.html),
+[TimedMediaHandler API](https://www.mediawiki.org/wiki/Extension:TimedMediaHandler/API),
+[country.is](https://country.is/).
+
+### Multi-source verification
+
+`./gradlew assembleRelease testDebugUnitTest` includes `GuestSourcesTest`: safe origins and file
+URL round trips, public/sensitive/password filtering, HLS-only playback metadata, Commons
+rendition safety and attribution, unchanged typed queries, Home country terms, independent
+failure handling, continuations, all-provider failure, and coroutine cancellation.
+
+On a phone: continue as guest → Explore → play PeerTube/Commons → save/like/queue → return from
+Settings (feed retained) → change manual country (Home changes) → search the same query (no
+country injected) → use Public alternatives after a blocked YouTube video → download a public
+file and verify its attribution companion. Also check offline errors, unsupported comments,
+rotation/PiP, and upgrading the existing installation. CI is not a substitute for these device
+and network-dependent checks.
 
 ## 🔐 Optional YouTube sign-in
 
@@ -68,7 +121,7 @@ request to `www.youtube.com` and paste its `Cookie` header. It must contain `SAP
   Keystore**, and the encrypted file sits in `noBackupFilesDir`, so it is excluded from cloud
   backups.
 - Cookies are only ever sent to `youtube.com` hosts, never to Vidora servers (there are none),
-  SponsorBlock or googlevideo.
+  PeerTube, Commons, country.is, SponsorBlock or googlevideo.
 - Google doesn't officially support third-party clients. To be extra safe, you can use a
   secondary Google account.
 

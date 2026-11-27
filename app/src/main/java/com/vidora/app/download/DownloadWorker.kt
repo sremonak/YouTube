@@ -144,6 +144,12 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
             }
             if (settings.downloadSubtitles) runCatching { saveSubtitles(details, record) }
 
+            // Preserve creator/licence/source metadata even for WebM, which our MP4 tagger cannot tag.
+            if (com.vidora.app.data.GuestSources.supported(record.video.url)) {
+                val attribution = "${details.item.title}\n${details.item.url}\n\n${details.description}\n\nPublic viewing does not grant unrestricted reuse. Check the original page's rights and licence.\n"
+                Storage.publishSidecar(applicationContext, attribution.toByteArray(Charsets.UTF_8),
+                    record.fileName + ".attribution.txt", "text/plain")
+            }
             val uri = Storage.publish(applicationContext, output, record)
             Graph.downloads.update(recordId, persist = true) {
                 it.copy(status = DownloadStatus.COMPLETED, progress = 1f, uri = uri.toString(), speedBps = 0,

@@ -98,6 +98,13 @@ class GuestSourcesTest {
         assertNull(OpenVideoParser.commonsItem(withInfo(JsonObject(info + ("mime" to JsonPrimitive("audio/ogg"))))))
     }
 
+    @Test fun oldBackupsDefaultToYoutubeAndNewSourceSurvivesRoundTrip() {
+        val old = Json.decodeFromString<VideoItem>("""{"url":"https://youtube.com/watch?v=demo","title":"Old saved video"}""")
+        assertEquals("YouTube", old.platform)
+        val commons = old.copy(url = GuestSources.commonsUrl("File:Demo.webm"), platform = "Commons")
+        assertEquals(commons, Json.decodeFromString<VideoItem>(Json.encodeToString(VideoItem.serializer(), commons)))
+    }
+
     @Test fun typedSearchIsUnmodifiedAndSurvivesProviderFailure() = runBlocking {
         val received = mutableListOf<String>()
         val repo = DiscoveryRepository(
@@ -130,7 +137,7 @@ class GuestSourcesTest {
             peerHome = { calls += "global"; PageResult(emptyList()) },
         )
         repo.home("BD")
-        assertEquals(listOf("Bangladesh music news culture", "Bangladesh", "global"), calls)
+        assertEquals(listOf("Bangladesh", "Bangladesh", "global"), calls)
     }
 
     @Test fun continuationKeepsOtherProviderResultsOnFailure() = runBlocking {

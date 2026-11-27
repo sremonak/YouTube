@@ -101,6 +101,11 @@ fun DownloadSheet(video: VideoItem, onDismiss: () -> Unit) {
             }
             Spacer(Modifier.height(16.dp))
             val d = details
+            if (com.vidora.app.data.GuestSources.supported(video.url)) {
+                Text("Public viewing does not mean unrestricted reuse. Check creator/licence in the video description. Downloads retain an attribution text file in Download/Vidora or your chosen folder.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 12.dp))
+            }
             when {
                 error != null -> Text(error ?: "", color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(vertical = 24.dp))
                 d == null -> Box(Modifier.fillMaxWidth().height(160.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }

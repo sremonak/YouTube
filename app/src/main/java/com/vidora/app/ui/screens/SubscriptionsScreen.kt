@@ -84,7 +84,7 @@ fun SubscriptionsScreen(nav: NavHostController, actions: VideoActions) {
     val signedIn = session != null
     var groupId by rememberSaveable { mutableStateOf<String?>(null) }
     // Signed in + no group: YouTube's own subscriptions feed (FEsubscriptions), like the official app.
-    val useAccountFeed = signedIn && groupId == null
+    val useAccountFeed = signedIn && groupId == null && subs.none { com.vidora.app.data.GuestSources.isPeerChannel(it.url) }
     val subsKey = if (useAccountFeed) "account" else subs.joinToString(",") { it.url }.hashCode().toString()
     val paged = remember(subsKey) {
         com.vidora.app.ui.UiCache.paged("subs:$subsKey") { if (useAccountFeed) Graph.accountApi.feed(AccountFeed.SUBSCRIPTIONS) else loadFeed() }

@@ -15,6 +15,8 @@ import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -381,7 +383,7 @@ private fun VideoSurface(
             ) { Icon(Icons.Rounded.PlayArrow, "Play", tint = Color.White, modifier = Modifier.size(40.dp)) }
         }
         state.error?.let { err ->
-            Column(Modifier.background(Color.Black.copy(alpha = 0.7f)).padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(Modifier.background(Color.Black.copy(alpha = 0.7f)).verticalScroll(rememberScrollState()).padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(stringResource(R.string.ui_playback_failed), color = Color.White, fontWeight = FontWeight.Bold)
                 Text(err, color = Color.White.copy(alpha = 0.85f), maxLines = 6, style = MaterialTheme.typography.bodySmall,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center)
