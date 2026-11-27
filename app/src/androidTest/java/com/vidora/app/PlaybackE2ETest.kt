@@ -95,6 +95,20 @@ class PlaybackE2ETest {
         assertTrue(d.videoStreams.isNotEmpty() || d.hlsUrl != null)
     }
 
+    @Test fun publicShortsFeed() = runBlocking {
+        val page = com.vidora.app.data.ShortsRepository().load()
+        val videos = page.items.filterIsInstance<com.vidora.app.data.Entry.Video>()
+        log("shorts candidates=${videos.size} continuation=${page.next != null}")
+        assertTrue("YouTube returned no playable Shorts candidates", videos.isNotEmpty())
+    }
+
+    @Test fun publicSubscriptionUploads() = runBlocking {
+        val channel = com.vidora.app.data.ChannelItem("https://www.youtube.com/channel/UCuAXFkgsw1L7xaCfnd5JJOw", "Public fixture channel")
+        val page = com.vidora.app.data.SubscriptionFeed().load(listOf(channel))
+        log("subscription uploads=${page.items.size} notices=${page.notices.size}")
+        assertTrue("Public subscribed-channel uploads were empty", page.items.isNotEmpty())
+    }
+
     private fun <T : Any> assertNotNullAnd(v: T?, msg: String): T {
         assertNotNull(msg, v)
         return v!!
