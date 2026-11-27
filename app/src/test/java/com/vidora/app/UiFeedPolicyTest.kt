@@ -57,6 +57,10 @@ class UiFeedPolicyTest {
             val fg = accentForeground(bg)
             val ratio = (maxOf(fg.luminance(), bg.luminance()) + 0.05f) / (minOf(fg.luminance(), bg.luminance()) + 0.05f)
             assertTrue("Contrast for $bg was $ratio", ratio >= 4.5f)
+            for (dark in listOf(false, true)) {
+                val accent = com.vidora.app.ui.theme.readableAccent(bg, dark)
+                assertTrue(com.vidora.app.ui.theme.contrastRatio(accent, if (dark) Color(0xFF0F0F0F) else Color.White) >= 4.5f)
+            }
         }
     }
 }

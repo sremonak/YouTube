@@ -120,7 +120,7 @@ fun VidoraTheme(settings: AppSettings, content: @Composable () -> Unit) {
     var scheme = if (settings.dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
     } else {
-        schemeFromSeed(Color(AccentPalette.getOrElse(settings.accentIndex) { AccentPalette[0] }), dark, amoled)
+        schemeFromSeed(readableAccent(Color(AccentPalette.getOrElse(settings.accentIndex) { AccentPalette[0] }), dark), dark, amoled)
     }
     if (amoled) {
         scheme = scheme.copy(

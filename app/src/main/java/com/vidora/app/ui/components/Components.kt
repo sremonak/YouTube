@@ -367,7 +367,7 @@ fun EntryGrid(
     LaunchedEffect(state) { com.vidora.app.ui.TabReselect.events.collect { state.animateScrollToItem(0) } }
     LaunchedEffect(shouldLoadMore, paged.items.size, paged.loading, paged.endReached) {
         // A provider page can contain only filtered / unsupported entries but still have a next page.
-        if (shouldLoadMore && !paged.loading && !paged.endReached && paged.error == null) paged.loadMore()
+        if (shouldLoadMore && visible.isNotEmpty() && !paged.loading && !paged.endReached && paged.error == null) paged.loadMore()
     }
 
     LazyVerticalGrid(
@@ -386,9 +386,12 @@ fun EntryGrid(
                 EmptyState(stringResource(R.string.ui_nothing_here_yet), stringResource(R.string.ui_try_another_search_or_category))
             }
         }
-        if (paged.items.isNotEmpty() && visible.isEmpty() && !paged.loading && paged.endReached) {
+        if (paged.items.isNotEmpty() && visible.isEmpty() && !paged.loading) {
             item(span = { GridItemSpan(maxLineSpan) }) {
-                EmptyState("No results match your filters", "Try a different length, date or turn off some content filters.")
+                Column {
+                    EmptyState("No results match your filters", "Try a different length, date or turn off some content filters.")
+                    if (!paged.endReached) androidx.compose.material3.TextButton(onClick = { paged.loadMore() }) { Text("Check more results") }
+                }
             }
         }
         items(visible, key = { it.key }, span = { e ->

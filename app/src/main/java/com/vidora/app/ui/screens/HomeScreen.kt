@@ -260,7 +260,8 @@ fun BrandLogo(name: String) {
             Icon(Icons.Rounded.PlayArrow, null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(18.dp))
         }
         Spacer(Modifier.width(4.dp))
-        Text(name, style = BrandTitle.copy(fontSize = 20.sp, letterSpacing = (-0.8).sp), color = MaterialTheme.colorScheme.onBackground)
+        Text(name, style = BrandTitle.copy(fontSize = 20.sp, letterSpacing = (-0.8).sp), color = MaterialTheme.colorScheme.onBackground,
+            maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
     }
 }
 

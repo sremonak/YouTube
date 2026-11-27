@@ -129,15 +129,16 @@ class GuestSourcesTest {
         assertTrue(unsupported.notices.isNotEmpty())
     }
 
-    @Test fun homeAddsCountryTermsButNotToGeneralPeerFeed() = runBlocking {
+    @Test fun homeAppliesRecencyAndCountryOnlyToRegionalSources() = runBlocking {
         val calls = mutableListOf<String>()
         val repo = DiscoveryRepository(
             youtubeSearch = { q, _ -> calls += q; PageResult(emptyList()) },
             commonsSearch = { q -> calls += q; PageResult(emptyList()) },
             peerHome = { calls += "global"; PageResult(emptyList()) },
+            freshness = FeedFreshness { 0L },
         )
         repo.home("BD")
-        assertEquals(listOf("Bangladesh", "Bangladesh", "global"), calls)
+        assertEquals(listOf("Bangladesh after:1969-12-02", "Bangladesh", "global"), calls)
     }
 
     @Test fun continuationKeepsOtherProviderResultsOnFailure() = runBlocking {

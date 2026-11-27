@@ -472,7 +472,7 @@ class AccountApi {
             if (!WatchHistoryPolicy.allowedTrackingUrl(url.scheme, url.host, url.encodedPath)) return@withContext false
             val currentSettings = Graph.settings.flow.first()
             if (!account.isSignedIn || currentSettings.incognito || !currentSettings.syncWatchHistory) return@withContext false
-            val duration = url.queryParameter("len")?.toDoubleOrNull()?.takeIf { it.isFinite() && it > 0 } ?: seconds
+            val duration = url.queryParameter("len")?.toDoubleOrNull()?.takeIf { it.isFinite() && it > 0 } ?: (WatchHistoryPolicy.seconds(startSeconds) + seconds)
             val start = WatchHistoryPolicy.seconds(startSeconds).coerceAtMost(duration)
             val len = minOf(start + seconds, duration).toString()
             val b = url.newBuilder()

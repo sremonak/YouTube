@@ -7,6 +7,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -28,6 +29,20 @@ fun accentForeground(background: Color): Color {
     val light = 1.05f / (background.luminance() + 0.05f)
     val dark = (background.luminance() + 0.05f) / 0.05f
     return if (light >= dark) Color.White else Color.Black
+}
+
+fun contrastRatio(first: Color, second: Color): Float =
+    (maxOf(first.luminance(), second.luminance()) + 0.05f) / (minOf(first.luminance(), second.luminance()) + 0.05f)
+
+/** Primary is also used for text buttons/links, so keep it readable on the page background. */
+fun readableAccent(seed: Color, dark: Boolean): Color {
+    val page = if (dark) Color(0xFF0F0F0F) else Color.White
+    val target = if (dark) Color.White else Color.Black
+    for (step in 0..20) {
+        val candidate = lerp(seed, target, step / 20f)
+        if (contrastRatio(candidate, page) >= 4.5f) return candidate
+    }
+    return target
 }
 
 @Composable

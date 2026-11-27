@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
@@ -298,9 +299,9 @@ fun AppRoot(activity: MainActivity, settings: AppSettings) {
                             else -> MaterialTheme.colorScheme.background
                         },
                         tonalElevation = 0.dp,
-                        modifier = if (glassNav) Modifier.glass(
+                        modifier = if (glassNav) Modifier.heightIn(min = if (window.fontScale > 1.3f) 104.dp else 80.dp).glass(
                             androidx.compose.foundation.shape.RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)
-                        ) else Modifier,
+                        ) else Modifier.heightIn(min = if (window.fontScale > 1.3f) 104.dp else 80.dp),
                     ) {
                         val fg = if (onShorts) Color.White else MaterialTheme.colorScheme.onSurface
                         topDestinations.forEach { d ->
@@ -309,7 +310,7 @@ fun AppRoot(activity: MainActivity, settings: AppSettings) {
                                 selected = selected,
                                 onClick = { if (route == d.route) TabReselect.events.tryEmit(d.route) else nav.navigateTop(d.route) },
                                 icon = { NavIcon(d, selected, if (d.route == Routes.LIBRARY) activeDownloads else 0) },
-                                label = { Text(androidx.compose.ui.res.stringResource(d.label), maxLines = 1, style = MaterialTheme.typography.labelSmall, fontWeight = if (selected) androidx.compose.ui.text.font.FontWeight.Bold else null) },
+                                label = { Text(androidx.compose.ui.res.stringResource(d.label), maxLines = if (window.fontScale > 1.3f) 2 else 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall, fontWeight = if (selected) androidx.compose.ui.text.font.FontWeight.Bold else null) },
                                 colors = androidx.compose.material3.NavigationBarItemDefaults.colors(
                                     selectedIconColor = fg, selectedTextColor = fg,
                                     unselectedIconColor = fg.copy(alpha = if (glassNav) 0.75f else 1f), unselectedTextColor = fg.copy(alpha = if (glassNav) 0.75f else 1f),

@@ -69,6 +69,7 @@ import kotlinx.coroutines.flow.first
 fun SearchScreen(nav: NavHostController, actions: VideoActions, initialQuery: String, initialSource: VideoSource = VideoSource.ALL) {
     val scope = rememberCoroutineScope()
     val focus = LocalFocusManager.current
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     val focusRequester = remember { FocusRequester() }
     var text by rememberSaveable { mutableStateOf(initialQuery) }
     var submitted by rememberSaveable { mutableStateOf(initialQuery) }
@@ -106,6 +107,7 @@ fun SearchScreen(nav: NavHostController, actions: VideoActions, initialQuery: St
         submitted = q
         editing = false
         focus.clearFocus()
+        keyboard?.hide()
         scope.launchSafe {
             Graph.settings.flow.first().let { if (it.saveSearchHistory && !it.incognito) Graph.library.addSearch(q) }
         }
