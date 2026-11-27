@@ -47,6 +47,6 @@ class ProfileGenerator {
         device.swipe(x, device.displayHeight * 3 / 4, x, device.displayHeight / 3, 20)
         device.findObject(By.desc("Search"))?.click()
         device.waitForIdle()
-        pressBack()
+        device.pressBack()
     }
 }

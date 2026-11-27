@@ -4,10 +4,8 @@ name: Playback E2E (emulator)
 # clients, comments) on an Android emulator. Manual, or when the E2E test itself changes.
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - "app/src/androidTest/**"
-      - ".github/workflows/e2e.yml"
+  schedule:
+    - cron: "20 4 * * 1"
 
 concurrency:
   group: e2e-${{ github.ref }}

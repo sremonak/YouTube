@@ -7,8 +7,8 @@ object Diagnostics {
     @Synchronized fun record(component: String, outcome: String, elapsedMs: Long = 0, count: Long = 0) {
         if (!enabled) return
         // Callers pass enum-like constants, never an exception's message.
-        val c = component.takeIf { it.matches(Regex("[A-Za-z_]{1,24}")) } ?: "other"
-        val o = outcome.takeIf { it.matches(Regex("[A-Za-z_]{1,32}")) } ?: "redacted"
+        val c = component.takeIf { it in setOf("provider", "cache", "playback", "test") } ?: "other"
+        val o = outcome.takeIf { it in setOf("success", "failure", "write_failed", "clear_failed", "extracted", "rebuffer", "dropped_frames", "STOP", "REFRESH", "LOWER_QUALITY", "RETRY", "PAUSE", "ok") } ?: "redacted"
         if (events.size == 80) events.removeFirst()
         events.addLast("$c $o elapsed_ms=${elapsedMs.coerceAtLeast(0)} count=${count.coerceAtLeast(0)}")
     }

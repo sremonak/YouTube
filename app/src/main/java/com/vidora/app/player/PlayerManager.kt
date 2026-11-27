@@ -330,7 +330,16 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
 
     // ------------------------------------------------------------------ public API
 
+    private var rateLimitedUrl: String? = null
+    private var rateLimitUntil = 0L
+    private var userRetryPosition: Pair<String, Long>? = null
+    private fun pausedByPublisher(url: String?): Boolean {
+        if (url != rateLimitedUrl || System.currentTimeMillis() >= rateLimitUntil) return false
+        _state.value = _state.value.copy(error = "Publisher rate limit. Retry in ${((rateLimitUntil - System.currentTimeMillis()) / 1000).coerceAtLeast(1)} seconds.")
+        return true
+    }
     fun play(item: VideoItem, queue: List<VideoItem>? = null) {
+        if (pausedByPublisher(item.url)) return
         val newQueue = (queue ?: _state.value.queue.takeIf { q -> q.any { it.url == item.url } } ?: listOf(item))
             .distinctBy { it.url }
         val index = newQueue.indexOfFirst { it.url == item.url }.coerceAtLeast(0)
@@ -360,7 +369,7 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
         refreshing = false
         loadJob = scope.launch(Dispatchers.Main) {
             try {
-                val details = Graph.repository.stream(item.url)
+                val details = Graph.repository.stream(item.url, forceRefresh = userRetryPosition?.first == item.url)
                 val extractMs = android.os.SystemClock.elapsedRealtime() - tapAt
                 _state.value = _state.value.copy(extractMs = extractMs)
                 if (!settings.incognito) com.vidora.app.data.Diagnostics.record("playback", "extracted", extractMs)
@@ -390,7 +399,9 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
                 if (settings.syncWatchHistory && !settings.incognito && Graph.account.isSignedIn && !merged.isLive) {
                     com.vidora.app.account.AccountSync.markWatched(merged)
                 }
-                val resumeAt = if (settings.resumePlayback && !merged.isLive) {
+                val requestedResume = userRetryPosition?.takeIf { it.first == item.url }?.second
+                userRetryPosition = null
+                val resumeAt = requestedResume ?: if (settings.resumePlayback && !merged.isLive) {
                     Graph.library.positionOf(merged.url).takeIf { it > 5_000 && (merged.duration == 0L || it < merged.duration * 1000 - 10_000) } ?: 0
                 } else 0
                 prepare(details, resumeAt, autoPlay = true)
@@ -422,11 +433,14 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
 
     fun retry() {
         val current = _state.value.current ?: return
+        if (pausedByPublisher(current.url)) return
+        userRetryPosition = current.url to exoPlayer.currentPosition
         _state.value = _state.value.copy(details = null)
         play(current, _state.value.queue)
     }
 
     fun setQuality(option: VideoOption) {
+        if (pausedByPublisher(_state.value.current?.url)) return
         val details = _state.value.details ?: return
         manualQuality = true
         _state.value = _state.value.copy(quality = option, audioOnly = false, slowNetworkAudio = false)
@@ -435,6 +449,7 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
 
     /** Back to automatic quality (adaptive DASH when possible, otherwise bandwidth-based pick). */
     fun setAutoQuality() {
+        if (pausedByPublisher(_state.value.current?.url)) return
         val details = _state.value.details ?: return
         manualQuality = false
         downshifts = 0
@@ -896,6 +911,8 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
         if (action == PlaybackRecovery.Action.PAUSE) {
             val header = http?.headerFields?.entries?.firstOrNull { it.key.equals("Retry-After", true) }?.value?.firstOrNull()
             val seconds = (com.vidora.app.data.ProviderHealth.retryAfter(header) / 1000).coerceAtLeast(30)
+            rateLimitedUrl = s.current?.url
+            rateLimitUntil = System.currentTimeMillis() + seconds * 1000
             _state.value = s.copy(error = "Publisher rate limit. Wait $seconds seconds before retrying; other public videos may still work.")
             return
         }
@@ -932,7 +949,7 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
                 prepare(fresh, position, true, fallback)
             } catch (e: kotlinx.coroutines.CancellationException) { throw e }
             catch (e: Exception) { _state.value = _state.value.copy(error = e.message ?: "Playback recovery failed") }
-            finally { refreshing = false }
+            finally { if (recoveryJob == coroutineContext[Job]) refreshing = false }
         }
     }
 

@@ -116,9 +116,9 @@ class VidoraApp : Application(), SingletonImageLoader.Factory {
         Graph.appScope.launch {
             Graph.settings.flow.map { it.incognito to it.saveSearchHistory }.distinctUntilChanged().collect { (incognito, saveSearch) ->
                 com.vidora.app.data.Diagnostics.enabled = !incognito
+                kotlinx.coroutines.withContext(Dispatchers.Main) { com.vidora.app.ui.UiCache.invalidate("search:") }
                 if (incognito || !saveSearch) {
-                    com.vidora.app.ui.UiCache.invalidate("search:")
-                    Graph.feedStore.clear()
+                    runCatching { Graph.feedStore.clear() }.onFailure { com.vidora.app.data.Diagnostics.record("cache", "clear_failed") }
                     com.vidora.app.data.Diagnostics.clear()
                 }
             }

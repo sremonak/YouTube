@@ -1,6 +1,10 @@
 name: Performance and profile generation
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - "benchmark/**"
+      - ".github/workflows/performance.yml"
 permissions:
   contents: read
 jobs:
