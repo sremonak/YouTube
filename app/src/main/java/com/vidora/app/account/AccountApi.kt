@@ -663,7 +663,7 @@ class AccountApi {
         val id = str(v["videoId"]) ?: return null
         return VideoItem(
             url = "https://www.youtube.com/shorts/$id",
-            title = text(v["headline"]) ?: text(v["accessibility"]) ?: return null,
+            title = text(v["headline"]) ?: text(v["accessibility"]) ?: "Short",
             thumbnail = thumb(v["thumbnail"]) ?: "https://i.ytimg.com/vi/$id/hqdefault.jpg",
             views = parseCount(text(v["viewCountText"])),
             isShort = true,
@@ -713,6 +713,7 @@ class AccountApi {
                             avatar = thumb(v["thumbnail"]),
                         )
                     }
+                    k == "lockupViewModel" && v is JsonObject -> (parseLockup(v) as? Entry.Channel)?.let { out += it.channel }
                     k == "continuationCommand" && v is JsonObject -> str(v["token"])?.let(tokens::add)
                     else -> collectChannels(v, out, tokens)
                 }
@@ -750,6 +751,14 @@ class AccountApi {
     private fun parseLockup(v: JsonObject): Entry? {
         val type = str(v["contentType"]).orEmpty()
         if (type.contains("VIDEO")) return parseLockupVideo(v)?.let { Entry.Video(it) }
+        if (type.contains("CHANNEL")) {
+            val id = str(v["contentId"])?.takeIf { it.startsWith("UC") }
+                ?: findFirst(v, "browseEndpoint")?.let { str(it["browseId"]) }?.takeIf { it.startsWith("UC") } ?: return null
+            val name = findFirst(v, "lockupMetadataViewModel")?.let { text(it["title"]) } ?: id
+            val sources = findArray(v["contentImage"], "sources")
+            return Entry.Channel(ChannelItem("https://www.youtube.com/channel/$id", name,
+                sources?.lastOrNull()?.let { str((it as? JsonObject)?.get("url")) }))
+        }
         if (!(type.contains("PLAYLIST") || type.contains("ALBUM") || type.contains("PODCAST"))) return null
         val id = str(v["contentId"]) ?: return null
         val meta = findFirst(v, "lockupMetadataViewModel") ?: return null

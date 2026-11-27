@@ -452,6 +452,9 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
     /** Plays a downloaded file from local storage (works fully offline). */
     fun playLocal(item: VideoItem, uri: Uri, audioOnly: Boolean) {
         persistPosition()
+        historyReportedFor = null
+        historyAttempts = 0
+        if (settings.saveHistory && !settings.incognito) Graph.library.addHistory(item)
         loadJob?.cancel()
         _state.value = PlayerUiState(
             current = item, localFile = true, audioOnly = audioOnly, speed = _state.value.speed,
@@ -1059,7 +1062,7 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
     private fun persistPosition(reset: Boolean = false) {
         val s = _state.value
         val current = s.current ?: return
-        if (current.isLive || s.localFile || !settings.saveHistory || settings.incognito) return
+        if (current.isLive || !settings.saveHistory || settings.incognito) return
         val position = if (reset) 0 else exoPlayer.currentPosition
         if (reset || position > 0) Graph.library.savePosition(current.url, position)
     }

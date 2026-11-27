@@ -84,15 +84,16 @@ fun SubscriptionsScreen(nav: NavHostController, actions: VideoActions) {
     val settings by Graph.settingsState.collectAsState()
     val signedIn = session != null && !settings.incognito
     var groupId by rememberSaveable { mutableStateOf<String?>(null) }
+    var localOnly by rememberSaveable { mutableStateOf(false) }
     // Signed in + no group: YouTube's own subscriptions feed (FEsubscriptions), like the official app.
-    val useAccountFeed = signedIn && groupId == null
+    val useAccountFeed = signedIn && !localOnly && groupId == null
     var editing by remember { mutableStateOf<SubscriptionGroup?>(null) }
     var creating by remember { mutableStateOf(false) }
     val group = library.groups.firstOrNull { it.id == groupId }
     val groupSet = remember(group) { group?.channels?.toHashSet() }
     val shownSubs = if (groupSet == null) subs else subs.filter { it.url in groupSet }
     val revision by AccountSync.revision.collectAsState()
-    val subsKey = "$signedIn:$groupId:" + shownSubs.joinToString(",") { it.url }
+    val subsKey = "$signedIn:$useAccountFeed:$groupId:" + shownSubs.joinToString(",") { it.url }
     val paged = remember(subsKey) {
         com.vidora.app.ui.UiCache.paged("subs:$subsKey") {
             if (useAccountFeed) Graph.accountApi.feed(AccountFeed.SUBSCRIPTIONS)
@@ -110,7 +111,8 @@ fun SubscriptionsScreen(nav: NavHostController, actions: VideoActions) {
         )
         if (!(subs.isEmpty() && !signedIn)) {
             LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                item { FilterChip(selected = group == null, onClick = { groupId = null }, label = { Text(stringResource(R.string.ui_all)) }) }
+                item { FilterChip(selected = group == null && !localOnly, onClick = { groupId = null; localOnly = false }, label = { Text(if (signedIn) "YouTube" else "All") }) }
+                if (signedIn) item { FilterChip(selected = group == null && localOnly, onClick = { groupId = null; localOnly = true }, label = { Text("On device") }) }
                 items(library.groups, key = { "g:" + it.id }) { g ->
                     FilterChip(
                         selected = g.id == groupId,
