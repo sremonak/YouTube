@@ -21,6 +21,12 @@ class GuestReleaseGateTest {
     private val peer = VideoItem("https://tilvids.com/videos/watch/3620cd16-97f4-488c-a018-a6897baddbc4", "Peer fixture video", uploader = "Fixture creator", duration = 2, platform = "PeerTube")
     private val commons = VideoItem(GuestSources.commonsUrl("File:Fixture.webm"), "Commons fixture video", duration = 2, platform = "Commons")
     @Before fun prepare() = runBlocking {
+        // Keep the platform permission dialog out of the Compose-only fixture journey.
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            instrumentation.uiAutomation.executeShellCommand(
+                "pm grant ${context.packageName} android.permission.POST_NOTIFICATIONS"
+            ).close()
+        }
         context.getSharedPreferences("vidora_onboarding", 0).edit().putBoolean("welcome_done", true).commit()
         Graph.settings.update { it.copy(autoUpdateCheck = false, autoRegionByIp = false, contentCountry = "US", glassUi = false,
             sponsorBlock = false, prefetchNext = false, persistQueue = false, onboardingDone = true, homeInterests = emptySet(), homeLanguage = "", lessLikeVideos = emptySet()) }
@@ -44,11 +50,11 @@ class GuestReleaseGateTest {
     }
     @Test fun guestHomeSearchSaveAndBothSourcePlayback() {
         scenario = ActivityScenario.launch(MainActivity::class.java)
-        compose.waitUntil(20_000) { compose.onAllNodesWithText(peer.title).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(20_000) { compose.onAllNodesWithText(peer.title).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() }
         compose.onNodeWithContentDescription("Search").performClick()
         compose.onAllNodes(hasSetTextAction()).onFirst().performTextReplacement("fixture exact query")
         compose.onAllNodes(hasSetTextAction()).onFirst().performImeAction()
-        compose.waitUntil(15_000) { compose.onAllNodesWithText(peer.title).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(15_000) { compose.onAllNodesWithText(peer.title).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() }
         compose.onNodeWithText(peer.title).performTouchInput { longClick() }
         compose.onNodeWithText("Save to Watch later").performClick()
         compose.waitUntil(5000) { Graph.library.data.value.watchLater.any { it.url == peer.url } }
