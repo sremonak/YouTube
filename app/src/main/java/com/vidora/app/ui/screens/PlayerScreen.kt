@@ -103,6 +103,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
@@ -406,42 +407,25 @@ private fun LazyListScope.detailsSection(
     val item = state.current ?: return
     val details = state.details
     item(key = "title") {
-        var expanded by rememberSaveable(item.url) { mutableStateOf(false) }
+        var titleExpanded by rememberSaveable(item.url) { mutableStateOf(false) }
         Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp).animateContentSize()) {
             Text(
                 item.title,
                 style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp, lineHeight = 24.sp, fontWeight = FontWeight.Bold),
-                maxLines = if (expanded) 6 else 2, overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded }
+                color = MaterialTheme.colorScheme.onBackground,
+                maxLines = if (titleExpanded) 10 else 2, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth().clickable { titleExpanded = !titleExpanded }
             )
             Spacer(Modifier.height(4.dp))
-            Row(Modifier.clickable { expanded = !expanded }, verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.clickable { DescriptionUi.toggle(item.url) }, verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     listOfNotNull(
                         Format.views(item.views).takeIf { it.isNotEmpty() },
                         item.uploadedText?.takeIf { it.isNotBlank() } ?: Format.relative(item.uploadedEpoch).takeIf { it.isNotEmpty() },
-                        details?.category,
-                    ).joinToString("  "),
+                    ).joinToString("  ·  "),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false)
                 )
-                Text(
-                    if (expanded) "  Show less" else "  ...more",
-                    style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold
-                )
-            }
-            if (expanded && details != null) {
-                Spacer(Modifier.height(12.dp))
-                Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = MaterialTheme.shapes.medium) {
-                    Column(Modifier.padding(12.dp)) {
-                        Text(htmlToText(details.description), style = MaterialTheme.typography.bodyMedium)
-                        if (details.tags.isNotEmpty()) {
-                            Spacer(Modifier.height(8.dp))
-                            Text(details.tags.take(12).joinToString("  ") { "#" + it.replace(" ", "") },
-                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-                        }
-                    }
-                }
             }
         }
     }
@@ -555,6 +539,7 @@ private fun LazyListScope.detailsSection(
             item { ActionChip("Stats", Icons.Rounded.Info) { openSheet(Sheet.STATS) } }
         }
     }
+    item(key = "description") { DescriptionCard(item, details) }
     if (details != null && details.chapters.isNotEmpty()) {
         item(key = "chapters") {
             Column {
@@ -803,3 +788,90 @@ private fun trimSpeed(s: Float) = if (s % 1f == 0f) s.toInt().toString() else s.
 
 private fun htmlToText(html: String): String =
     androidx.core.text.HtmlCompat.fromHtml(html, androidx.core.text.HtmlCompat.FROM_HTML_MODE_COMPACT).toString().trim()
+
+
+/** Which videos have their description opened (shared by the meta line and the card). */
+private object DescriptionUi {
+    val open = androidx.compose.runtime.mutableStateMapOf<String, Boolean>()
+    fun toggle(url: String) { open[url] = open[url] != true }
+}
+
+/**
+ * YouTube-style description box under the actions: views · date · category, then the
+ * description (3 lines, tap for everything) with clickable links and timestamps, and tags.
+ */
+@Composable
+private fun DescriptionCard(item: VideoItem, details: StreamDetails?) {
+    val expanded = DescriptionUi.open[item.url] == true
+    val text = remember(details?.description) { details?.description?.let(::htmlToText).orEmpty() }
+    val primary = MaterialTheme.colorScheme.primary
+    val linked = remember(text, primary) { linkify(text, primary) }
+    com.vidora.app.ui.theme.GlassCard(
+        Modifier.padding(horizontal = 12.dp, vertical = 6.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp))
+            .clickable { DescriptionUi.toggle(item.url) }.animateContentSize(),
+        shape = RoundedCornerShape(16.dp),
+        tint = MaterialTheme.colorScheme.surfaceContainerHigh,
+    ) {
+        Column(Modifier.padding(12.dp)) {
+            Text(
+                listOfNotNull(
+                    Format.views(item.views).takeIf { it.isNotEmpty() },
+                    item.uploadedText?.takeIf { it.isNotBlank() } ?: Format.relative(item.uploadedEpoch).takeIf { it.isNotEmpty() },
+                    details?.category?.takeIf { it.isNotBlank() },
+                ).joinToString("  ·  ").ifEmpty { "Description" },
+                style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(Modifier.height(4.dp))
+            when {
+                details == null -> Text("Loading description…", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                text.isBlank() -> Text("No description", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                else -> Text(
+                    linked, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = if (expanded) Int.MAX_VALUE else 3, overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (expanded && details != null) {
+                if (details.tags.isNotEmpty()) {
+                    Spacer(Modifier.height(10.dp))
+                    Text(details.tags.take(15).joinToString("  ") { "#" + it.replace(" ", "") },
+                        style = MaterialTheme.typography.bodySmall, color = primary)
+                }
+                if (details.likes >= 0) {
+                    Spacer(Modifier.height(8.dp))
+                    Text("${Format.count(details.likes)} likes", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            if (details != null && text.isNotBlank()) {
+                Text(
+                    if (expanded) "Show less" else "...more",
+                    style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(top = 6.dp),
+                )
+            }
+        }
+    }
+}
+
+private val LINK_OR_TIME = Regex("""(https?://[^\s)]+)|(?<![\d:])((?:\d{1,2}:)?\d{1,2}:\d{2})(?![\d:])""")
+
+/** Makes URLs open in the browser and timestamps (1:23, 1:02:03) seek the video. */
+private fun linkify(text: String, color: Color): androidx.compose.ui.text.AnnotatedString =
+    androidx.compose.ui.text.buildAnnotatedString {
+        val styles = androidx.compose.ui.text.TextLinkStyles(androidx.compose.ui.text.SpanStyle(color = color))
+        var i = 0
+        for (m in LINK_OR_TIME.findAll(text)) {
+            append(text.substring(i, m.range.first))
+            val url = m.groups[1]?.value
+            if (url != null) {
+                withLink(androidx.compose.ui.text.LinkAnnotation.Url(url, styles)) { append(url) }
+            } else {
+                val ts = m.value
+                val parts = ts.split(':').map { it.toLongOrNull() ?: 0L }
+                val sec = parts.fold(0L) { acc, p -> acc * 60 + p }
+                withLink(androidx.compose.ui.text.LinkAnnotation.Clickable("t$sec", styles) { Graph.player.seekTo(sec * 1000) }) { append(ts) }
+            }
+            i = m.range.last + 1
+        }
+        append(text.substring(i))
+    }

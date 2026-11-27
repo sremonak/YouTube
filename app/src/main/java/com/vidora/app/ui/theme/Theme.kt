@@ -140,6 +140,10 @@ fun VidoraTheme(settings: AppSettings, content: @Composable () -> Unit) {
     CompositionLocalProvider(
         LocalDesign provides DesignPrefs(r, settings.showChannelAvatars, settings.feedLayout.name == "LIST")
     ) {
-        MaterialTheme(colorScheme = scheme, typography = AppTypography, shapes = shapes, content = content)
+        MaterialTheme(colorScheme = scheme, typography = AppTypography, shapes = shapes) {
+            // Text outside a Surface/Scaffold falls back to LocalContentColor (black by default),
+            // which made the title/description under the video invisible in dark mode.
+            CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides scheme.onBackground, content = content)
+        }
     }
 }
