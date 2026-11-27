@@ -25,8 +25,8 @@ class Paged(private val scope: CoroutineScope, private val first: suspend () -> 
 
     fun progressive(key: String?, stream: () -> Flow<PageResult>): Paged = apply { diskKey = key; updates = stream }
     fun ensureLoaded() { if (!loadedOnce && job?.isActive != true) load() }
-    private fun mayPersist(): Boolean {
-        val s = Graph.settingsState.value
+    private suspend fun mayPersist(): Boolean {
+        val s = Graph.settings.flow.first()
         return !s.incognito && (diskKey?.startsWith("search:") != true || s.saveSearchHistory)
     }
     fun cancelPending() { generation++; job?.cancel(); loading = false; refreshing = false }

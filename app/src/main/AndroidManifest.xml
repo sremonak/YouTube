@@ -33,6 +33,7 @@
         android:theme="@style/Theme.Vidora"
         tools:targetApi="36">
 
+        <profileable android:shell="true" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

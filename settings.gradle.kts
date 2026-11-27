@@ -16,4 +16,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "Vidora"
-include(":app")
+include(":app", ":benchmark")

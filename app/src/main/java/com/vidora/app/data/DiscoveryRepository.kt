@@ -62,7 +62,7 @@ class DiscoveryRepository(
         val mutex = Mutex()
         val results = mutableListOf<Result>()
         val visible = LinkedHashMap<String, Entry>()
-        feeds.forEach { feed -> launch {
+        feeds.map { feed -> launch {
             val result = try { run(feed) } catch (e: CancellationException) {
                 this@channelFlow.cancel("Provider request cancelled", e); throw e
             }

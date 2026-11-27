@@ -115,6 +115,7 @@ class VidoraApp : Application(), SingletonImageLoader.Factory {
         }
         Graph.appScope.launch {
             Graph.settings.flow.map { it.incognito to it.saveSearchHistory }.distinctUntilChanged().collect { (incognito, saveSearch) ->
+                com.vidora.app.data.Diagnostics.enabled = !incognito
                 if (incognito || !saveSearch) {
                     com.vidora.app.ui.UiCache.invalidate("search:")
                     Graph.feedStore.clear()

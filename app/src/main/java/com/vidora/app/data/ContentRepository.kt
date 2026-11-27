@@ -121,12 +121,20 @@ class ContentRepository {
             }
         }
         // A forced refresh must not reuse an older prefetch's signed URL.
-        if (forceRefresh) return@io loadStream(url).also { streamCache.put(url, System.currentTimeMillis() to it) }
+        if (forceRefresh) {
+            val version = synchronized(streamVersions) { ((streamVersions[url] ?: 0L) + 1).also { streamVersions[url] = it } }
+            return@io loadStream(url).also { fresh ->
+                synchronized(streamVersions) { if (streamVersions[url] == version) streamCache.put(url, System.currentTimeMillis() to fresh) }
+            }
+        }
+        val version = synchronized(streamVersions) { streamVersions[url] ?: 0L }
         // Share one extraction between a touch-prefetch / next-video prefetch and the real tap.
         val job = synchronized(inFlight) {
             inFlight[url] ?: Graph.appScope.async(Dispatchers.IO) {
                 try {
-                    loadStream(url).also { streamCache.put(url, System.currentTimeMillis() to it) }
+                    loadStream(url).also { fresh ->
+                        synchronized(streamVersions) { if ((streamVersions[url] ?: 0L) == version) streamCache.put(url, System.currentTimeMillis() to fresh) }
+                    }
                 } finally {
                     synchronized(inFlight) { inFlight.remove(url) }
                 }
@@ -135,6 +143,9 @@ class ContentRepository {
         job.await()
     }
 
+    private val streamVersions = object : LinkedHashMap<String, Long>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Long>?) = size > 64
+    }
     private val inFlight = HashMap<String, kotlinx.coroutines.Deferred<StreamDetails>>()
 
     /** True when [url]'s streams are already resolved (used by the start-time metric). */
