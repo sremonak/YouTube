@@ -38,7 +38,7 @@ class PerformanceBenchmarks {
 @LargeTest
 class ProfileGenerator {
     @get:Rule val rule = BaselineProfileRule()
-    @Test fun guestJourney() = rule.collect(packageName = "com.vidora.app", includeInStartupProfile = true) {
+    @Test fun guestJourney() = rule.collect(packageName = "com.vidora.app", maxIterations = 5, stableIterations = 2, includeInStartupProfile = true) {
         pressHome(); startActivityAndWait()
         // Dismiss optional first-install welcome, if shown. Never authenticates an account.
         device.findObject(By.textContains("Continue as guest"))?.click()
@@ -46,7 +46,7 @@ class ProfileGenerator {
         val x = device.displayWidth / 2
         device.swipe(x, device.displayHeight * 3 / 4, x, device.displayHeight / 3, 20)
         device.findObject(By.desc("Search"))?.click()
-        device.waitForIdle()
+        device.waitForIdle(2_000)
         device.pressBack()
     }
 }

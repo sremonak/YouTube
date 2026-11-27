@@ -71,5 +71,6 @@ class GuestReleaseGateTest {
         assertEquals(rows, store.read("home:public:US"))
         store.clear(); assertTrue(store.read("home:public:US").isEmpty())
         store.close(); context.deleteDatabase(name)
+        Unit
     }
 }
