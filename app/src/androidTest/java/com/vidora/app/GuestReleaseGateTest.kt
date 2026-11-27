@@ -8,6 +8,9 @@ import androidx.media3.common.Player
 import com.vidora.app.data.*
 import com.vidora.app.ui.UiCache
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.joinAll
 import org.junit.*
 import org.junit.Assert.*
 import java.io.File
@@ -76,6 +79,15 @@ class GuestReleaseGateTest {
         store = FeedStore(context, name)
         assertEquals(rows, store.read("home:public:US"))
         store.clear(); assertTrue(store.read("home:public:US").isEmpty())
+        // Deterministically queue an old write behind the store lock, then request privacy clear.
+        val field = FeedStore::class.java.getDeclaredField("operations").apply { isAccessible = true }
+        val gate = field.get(store) as kotlinx.coroutines.sync.Mutex
+        gate.lock()
+        val staleWrite = launch(start = CoroutineStart.UNDISPATCHED) { store.write("search:old", rows) }
+        val privacyClear = launch(start = CoroutineStart.UNDISPATCHED) { store.clear() }
+        gate.unlock()
+        joinAll(staleWrite, privacyClear)
+        assertTrue(store.read("search:old").isEmpty())
         store.close(); context.deleteDatabase(name)
         Unit
     }

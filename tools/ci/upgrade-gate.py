@@ -91,7 +91,7 @@ try:
     wait_for(lambda root: find(root, "content-desc", "Search"), "old release Home")
     # A synchronous UI observation ensures the skip event has run before force-stop.
     time.sleep(1)
-    uid_before = re.search(r"userId=(\d+)", adb("shell", "dumpsys", "package", PACKAGE)).group(1)
+    uid_before = re.search(r"(?:userId|appId)=(\d+)", adb("shell", "dumpsys", "package", PACKAGE)).group(1)
     adb("shell", "am", "force-stop", PACKAGE)
     if adb("shell", "pidof " + PACKAGE + " || true").strip():
         raise AssertionError("Old release process did not stop")
@@ -100,7 +100,7 @@ try:
     adb("shell", "am", "force-stop", PACKAGE)
     # No uninstall/clear/downgrade: Android verifies signer and version continuity.
     adb("install", "--no-streaming", "-r", new)
-    uid_after = re.search(r"userId=(\d+)", adb("shell", "dumpsys", "package", PACKAGE)).group(1)
+    uid_after = re.search(r"(?:userId|appId)=(\d+)", adb("shell", "dumpsys", "package", PACKAGE)).group(1)
     assert uid_before == uid_after, "Package UID changed across upgrade"
     launch()
     assert_existing_guest()

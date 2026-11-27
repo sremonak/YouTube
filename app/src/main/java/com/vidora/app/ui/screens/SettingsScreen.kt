@@ -520,7 +520,7 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
                 com.vidora.app.ui.UiCache.invalidate("home:public:")
             } }
             item { ClickRow("Clear saved feeds", "Public Home/search snapshots only · bounded to 4 MiB payload; keeps downloads and library") {
-                scope.launch { Graph.feedStore.clear(); com.vidora.app.ui.UiCache.invalidate("home:"); com.vidora.app.ui.UiCache.invalidate("search:")
+                scope.launch { com.vidora.app.ui.UiCache.invalidate("home:"); com.vidora.app.ui.UiCache.invalidate("search:"); Graph.feedStore.clear()
                     Toast.makeText(context, "Saved feeds cleared", Toast.LENGTH_SHORT).show() }
             } }
             item { ClickRow("Local playback diagnostics", "Review before sharing · no URLs, searches, IPs, cookies or automatic uploads") { dialog = "diagnostics" } }
