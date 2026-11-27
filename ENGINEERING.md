@@ -60,3 +60,43 @@ startup and scroll metrics. Emulator output is not a claim of physical-phone imp
 that depend on network-fed content can vary and must not be treated as deterministic rendering
 comparisons without a controlled dataset. The release fixture gate, not these timing tests, gates
 APK publication. Gradle wrapper distribution bytes are also pinned to the Gradle release's SHA-256.
+
+## Verification ledger for the combined engineering update
+
+- Release build + strict dependency verification + unit tests + lint task + deterministic guest/Room
+  tests + actual force-stop/relaunch + signed in-place upgrade: **passed** in
+  [run 45969602680](https://github.com/sremonak/YouTube/actions/runs/45969602680), code `ffab188`.
+  Upgrade continuity covers the retained v1.0.108 signer's package UID and guest-welcome preference;
+  it does not prove every possible library/download migration or physical-device behavior.
+- Separate live-network smoke: **8 tests passed, 0 skipped** in
+  [run 45963782289](https://github.com/sremonak/YouTube/actions/runs/45963782289), earlier engineering
+  code `d1037c5`. Sample media responses/comments/JS solving succeeded at that time and CI origin;
+  this is not a guarantee for other videos, networks, IPs or restricted content.
+- Release-target Macrobenchmark + guest startup/scroll/search profile generation + output export:
+  **3 tests passed** in [run 45969522928](https://github.com/sremonak/YouTube/actions/runs/45969522928),
+  code `d9bfafe`. The later `ffab188` change only preserves GPL source tags during release pruning.
+  JSON, traces and raw profile are in that run's artifact; compact raw output is also preserved in
+  [PR review comment 7214313590](https://github.com/sremonak/YouTube/pull/1#issuecomment-7214313590).
+
+### Observed emulator measurements (not before/after improvements)
+
+API 34 `sdk_gphone64_x86_64`, 2 vCPUs, approximately 2.42 GiB RAM, software-rendered CI emulator,
+5 cold startup iterations and 3 Home scroll iterations. Home used network-fed/cached public content,
+not a controlled rendering corpus. CPU was not locked; emulator/low-battery warnings were suppressed
+for diagnostic execution. No physical-phone performance percentage is supported by these numbers.
+
+| Metric | Observed value |
+| --- | ---: |
+| Cold time to initial display, median | 306.32 ms |
+| Cold time to full display, median | 2504.30 ms |
+| Startup CPU frame duration, P95 | 1671.10 ms |
+| Home scroll CPU frame duration, P50 | 14.49 ms |
+| Home scroll CPU frame duration, P95 | 24.53 ms |
+| Home scroll frame overrun, P95 | 11.85 ms |
+
+Startup's large emulator frame stalls and scroll's positive tail overruns remain observable;
+these results must not be advertised as proof of jank-free rendering or as a measured speedup.
+The full-journey raw profile has 15,398 rules / 483,372 bytes, SHA-256
+`3309fb3ef55fa778d22de05bdc5116789da27423b5bf97b282c51ec7cde4eb70`.
+Inspection confirmed minified descriptors, so it is retained for review instead of replacing the
+source-level shipping profile without R8 reconciliation and a controlled None-vs-Partial comparison.
