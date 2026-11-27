@@ -121,6 +121,10 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
     val gridState = rememberLazyGridState()
     var homeOptions by remember { mutableStateOf(false) }
     var regionDetails by remember { mutableStateOf(false) }
+    val snackbar = remember { androidx.compose.material3.SnackbarHostState() }
+    LaunchedEffect(paged, paged.refreshMessage) {
+        paged.refreshMessage?.let { snackbar.showSnackbar(it) }
+    }
     var showContinue by rememberSaveable { mutableStateOf(true) }
     val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(paged, lifecycle) {
@@ -134,8 +138,11 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
     }
     if (regionDetails) com.vidora.app.ui.theme.GlassAlertDialog(
         onDismissRequest = { regionDetails = false },
-        title = { Text("Home region") },
-        text = { Text("${com.vidora.app.data.GuestSources.countryName(region.code)} · ${region.method}. Public Explore uses regional topics, not official regional charts. Search is independent. Signed-in YouTube recommendations use your account.") },
+        title = { Text("Feed status") },
+        text = { Column {
+            Text("${com.vidora.app.data.GuestSources.countryName(region.code)} · ${region.method}. ${if (signedIn && tab.key == "acc") "YouTube account recommendations" else "Public discovery"}. Search is independent.")
+            com.vidora.app.ui.components.ProviderStatus(paged)
+        } },
         confirmButton = { androidx.compose.material3.TextButton(onClick = { regionDetails = false }) { Text("Done") } },
     )
 
@@ -163,6 +170,11 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
                 Box {
                     IconButton(onClick = { homeOptions = true }) { Icon(Icons.Rounded.AccountCircle, "Home options") }
                     androidx.compose.material3.DropdownMenu(expanded = homeOptions, onDismissRequest = { homeOptions = false }) {
+                        androidx.compose.material3.DropdownMenuItem(text = { Text("Refresh feed") }, enabled = !paged.loading && !paged.refreshing, onClick = {
+                            homeOptions = false; paged.load(refresh = true)
+                            scope.launch { gridState.scrollToItem(0) }
+                        })
+                        androidx.compose.material3.DropdownMenuItem(text = { Text("Feed status") }, onClick = { homeOptions = false; regionDetails = true })
                         androidx.compose.material3.DropdownMenuItem(text = { Text("Downloads") }, onClick = { homeOptions = false; nav.navigate(Routes.DOWNLOADS) })
                         androidx.compose.material3.DropdownMenuItem(text = { Text("Your library") }, onClick = { homeOptions = false; nav.navigate(Routes.LIBRARY) })
                         androidx.compose.material3.DropdownMenuItem(text = { Text("Home preferences") }, onClick = { homeOptions = false; nav.navigate(Routes.SETTINGS) })
@@ -172,15 +184,6 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
             },
             colors = com.vidora.app.ui.theme.glassBarColors()
         )
-        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            androidx.compose.material3.TextButton(onClick = { regionDetails = true }, modifier = Modifier.weight(1f)) {
-                Text(if (signedIn && tab.key == "acc") "Your YouTube recommendations" else "Explore · ${region.code}", maxLines = 2)
-            }
-            androidx.compose.material3.TextButton(enabled = !paged.loading && !paged.refreshing, onClick = {
-                paged.load(refresh = true)
-                scope.launch { gridState.scrollToItem(0) }
-            }) { Text(if (paged.refreshing) "Refreshing…" else "Refresh feed") }
-        }
         LazyRow(
             contentPadding = PaddingValues(horizontal = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -193,20 +196,22 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
             }
         }
     }) {
-        com.vidora.app.ui.theme.GlassRefreshBox(isRefreshing = paged.refreshing, onRefresh = { paged.load(refresh = true) }, modifier = Modifier.fillMaxSize()) {
-            val library by Graph.library.data.collectAsStateWithLifecycle()
-            val resume = remember(library.history) { com.vidora.app.data.ContinueWatching.pick(library.history) }
-            EntryGrid(
-                paged = paged, actions = actions, state = gridState,
-                explainHome = tab.key == HomeSection.FOR_YOU.name,
-                filter = { e -> !(e is Entry.Video && ((settings.hideShorts && e.video.isShort) || (tab.key == HomeSection.FOR_YOU.name && e.video.url in settings.lessLikeVideos))) },
-                header = {
-                    Column {
-                        com.vidora.app.ui.components.ProviderStatus(paged)
-                        if (showContinue && resume.isNotEmpty() && tab.key == HomeSection.FOR_YOU.name) ContinueWatchingRow(resume, actions)
+        Box(Modifier.fillMaxSize()) {
+            com.vidora.app.ui.theme.GlassRefreshBox(isRefreshing = paged.refreshing, onRefresh = { paged.load(refresh = true) }, modifier = Modifier.fillMaxSize()) {
+                val library by Graph.library.data.collectAsStateWithLifecycle()
+                val resume = remember(library.history) { com.vidora.app.data.ContinueWatching.pick(library.history) }
+                EntryGrid(
+                    paged = paged, actions = actions, state = gridState,
+                    explainHome = tab.key == HomeSection.FOR_YOU.name,
+                    filter = { e -> !(e is Entry.Video && ((settings.hideShorts && e.video.isShort) || (tab.key == HomeSection.FOR_YOU.name && e.video.url in settings.lessLikeVideos))) },
+                    header = {
+                        Column {
+                            if (showContinue && resume.isNotEmpty() && tab.key == HomeSection.FOR_YOU.name) ContinueWatchingRow(resume, actions)
+                        }
                     }
-                }
-            )
+                )
+            }
+            androidx.compose.material3.SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(12.dp))
         }
     }
 }

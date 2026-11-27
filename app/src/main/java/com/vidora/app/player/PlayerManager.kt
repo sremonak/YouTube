@@ -343,7 +343,9 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
         val video = _state.value.current ?: return
         if (!isPlaying || historyReportedFor == video.url) return
         val startSeconds = exoPlayer.currentPosition.coerceAtLeast(0) / 1000.0
-        historyReportJob = scope.launch {
+        // The application scope uses Dispatchers.Default. Media3 getters must stay on
+        // the player application thread, including after the 15-second suspension.
+        historyReportJob = scope.launch(Dispatchers.Main) {
             kotlinx.coroutines.delay(com.vidora.app.account.WatchHistoryPolicy.MIN_PLAY_MS)
             if (_state.value.current?.url == video.url && exoPlayer.isPlaying && settings.syncWatchHistory &&
                 !settings.incognito && Graph.account.isSignedIn && !video.isLive && Graph.repository.videoId(video.url) != null) {

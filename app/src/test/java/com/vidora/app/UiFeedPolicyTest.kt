@@ -6,6 +6,7 @@ import com.vidora.app.ui.theme.accentForeground
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.flow.last
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -36,6 +37,23 @@ class UiFeedPolicyTest {
         repo.search("unchanged query", VideoSource.YOUTUBE)
         assertEquals("unchanged query", queries.last())
     }
+    @Test fun repeatedSingleInterestRefreshAdvancesBeyondTheSameSecondPage() = runBlocking {
+        val requested = mutableListOf<Int>()
+        fun page(number: Int): PageResult {
+            requested += number
+            return PageResult(listOf(Entry.Video(VideoItem("video-$number", "Page $number"))),
+                next = if (number < 5) ({ page(number + 1) }) else null)
+        }
+        val repo = DiscoveryRepository(youtubeSearch = { _, _ -> page(1) },
+            commonsSearch = { PageResult(emptyList()) }, peerSearch = { PageResult(emptyList()) },
+            peerHome = { PageResult(emptyList()) }, freshness = FeedFreshness { 0L })
+        val settings = AppSettings(homeInterests = setOf("science"))
+        assertEquals("video-1", (repo.homeUpdates("BD", settings).last().items.first() as Entry.Video).video.url)
+        assertEquals("video-2", (repo.homeUpdates("BD", settings).last().items.first() as Entry.Video).video.url)
+        assertEquals("video-3", (repo.homeUpdates("BD", settings).last().items.first() as Entry.Video).video.url)
+        assertEquals(listOf(1, 1, 2, 1, 3), requested)
+    }
+
     @Test fun historyNeverUploadsForGuestIncognitoOrDisabledSync() {
         assertTrue(WatchHistoryPolicy.eligible(true, true, false, true))
         assertFalse(WatchHistoryPolicy.eligible(false, true, false, true))

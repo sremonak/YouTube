@@ -36,6 +36,8 @@ class Paged(private val scope: CoroutineScope, private val first: suspend () -> 
         return !s.incognito && (diskKey?.startsWith("search:") != true || s.saveSearchHistory)
     }
     fun cancelPending() { generation++; job?.cancel(); loading = false; refreshing = false }
+    /** Also invalidate references held by an already-composed Home after history sync. */
+    fun invalidate() { cancelPending(); loadedOnce = false; lastSuccess = 0L }
     fun load(refresh: Boolean = false) {
         job?.cancel()
         val ticket = ++generation

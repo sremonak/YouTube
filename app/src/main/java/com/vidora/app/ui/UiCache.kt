@@ -72,7 +72,7 @@ object UiCache {
 
     @Synchronized
     fun invalidate(prefix: String) {
-        pages.keys.filter { it.startsWith(prefix) }.forEach { pages.remove(it)?.value?.cancelPending() }
+        pages.keys.filter { it.startsWith(prefix) }.forEach { pages.remove(it)?.value?.invalidate() }
         values.keys.filter { it.startsWith(prefix) }.forEach(values::remove)
     }
 

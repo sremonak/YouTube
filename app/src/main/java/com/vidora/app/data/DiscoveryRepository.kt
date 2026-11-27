@@ -18,6 +18,29 @@ class DiscoveryRepository(
     private data class Feed(val name: String, val load: suspend () -> PageResult)
     private data class Result(val feed: Feed, val page: PageResult?)
 
+    // Bounded, process-only cursors. Repeating page two on every refresh used to
+    // leave a single-interest Home stuck forever despite making network requests.
+    private val candidateLock = Mutex()
+    private val candidateNext = LinkedHashMap<String, (suspend () -> PageResult)?>()
+    private val shown = LinkedHashMap<String, Set<String>>()
+
+    private suspend fun youtubeCandidates(plan: FeedFreshness.Plan, privateSession: Boolean): PageResult {
+        val first = youtubeSearch(plan.query, SearchFilter.VIDEOS)
+        if (plan.round == 0L) return first
+        return candidateLock.withLock {
+            val continuation = if (privateSession) first.next else candidateNext[plan.query] ?: first.next
+            val more = try { continuation?.invoke() } catch (e: CancellationException) { throw e }
+                catch (_: Exception) { null }
+            if (!privateSession && more != null) {
+                candidateNext.remove(plan.query)
+                candidateNext[plan.query] = more.next
+                while (candidateNext.size > 16) candidateNext.remove(candidateNext.keys.first())
+            }
+            if (more == null) first else PageResult((more.items + first.items).distinctBy { it.key }, more.next,
+                notices = first.notices + more.notices, retries = first.retries + more.retries)
+        }
+    }
+
     fun searchUpdates(query: String, source: VideoSource = VideoSource.ALL, filter: SearchFilter = SearchFilter.ALL): Flow<PageResult> {
         if (query.isBlank()) return flowOf(PageResult(emptyList()))
         val videoFilter = filter == SearchFilter.ALL || filter == SearchFilter.VIDEOS
@@ -34,20 +57,22 @@ class DiscoveryRepository(
     fun homeUpdates(country: String, settings: AppSettings = AppSettings(), watched: Set<String> = emptySet()): Flow<PageResult> {
         val plan = freshness.next(country, settings)
         val language = HomeRanking.languageTerm(settings.homeLanguage)
-        return updates(listOf(
-            Feed("Regional YouTube") {
-                val first = youtubeSearch(plan.query, SearchFilter.VIDEOS)
-                // Broaden candidates on explicit refresh; don't reshuffle only the same first page.
-                if (plan.round > 0 && first.next != null) {
-                    val more = try { first.next.invoke() } catch (e: CancellationException) { throw e }
-                        catch (_: Exception) { null }
-                    if (more != null) PageResult((first.items + more.items).distinctBy { it.key }, more.next,
-                        notices = first.notices + more.notices, retries = first.retries + more.retries) else first
-                } else first
-            },
-            Feed("Regional Commons") { commonsSearch(listOf(GuestSources.countryName(country), plan.topic).filter { it.isNotBlank() }.joinToString(" ")) },
-            Feed("PeerTube") { if (plan.topic.isBlank()) peerHome() else peerSearch(listOf(language, plan.topic).filter { it.isNotBlank() }.joinToString(" ")) },
-        ), rank = { HomeRanking.rank(it, settings, watched) })
+        val historyKey = "$country:${settings.homeLanguage}:${settings.homeInterests.sorted()}"
+        return flow {
+            val seen = if (settings.incognito) emptySet() else synchronized(shown) { shown[historyKey].orEmpty() }
+            var delivered: List<Entry> = emptyList()
+            emitAll(updates(listOf(
+                Feed("Regional YouTube") { youtubeCandidates(plan, settings.incognito) },
+                Feed("Regional Commons") { commonsSearch(listOf(GuestSources.countryName(country), plan.topic).filter { it.isNotBlank() }.joinToString(" ")) },
+                Feed("PeerTube") { if (plan.topic.isBlank()) peerHome() else peerSearch(listOf(language, plan.topic).filter { it.isNotBlank() }.joinToString(" ")) },
+            ), rank = { rows -> HomeRanking.rank(rows, settings, watched).sortedBy { it.key in seen } })
+                .onEach { delivered = it.items })
+            if (!settings.incognito) synchronized(shown) {
+                shown.remove(historyKey)
+                shown[historyKey] = (seen + delivered.map { it.key }).toList().takeLast(600).toSet()
+                while (shown.size > 8) shown.remove(shown.keys.first())
+            }
+        }
     }
     suspend fun home(country: String) = homeUpdates(country).last()
     suspend fun publicAlternatives(query: String) = search(query, VideoSource.PUBLIC)

@@ -71,6 +71,27 @@ class GuestReleaseGateTest {
         compose.waitUntil(10_000) { Graph.player.state.value.current?.url == commons.url }
         assertTrue(Graph.library.data.value.watchLater.any { it.url == peer.url })
     }
+    @Test fun delayedWatchHistoryCheckStaysOnPlayerThreadAfterFifteenSeconds() {
+        val media = File(context.cacheDir, "synthetic-long.mp4")
+        instrumentation.context.assets.open("synthetic-long.mp4").use { input -> media.outputStream().use { input.copyTo(it) } }
+        Graph.streamOverride = {
+            StreamDetails(peer.copy(duration = 40), "Long offline thread-regression fixture", -1, -1,
+                listOf(VideoOption(media.toURI().toString(), 999, 90, 15, "90p", "video/mp4", "mp4", "avc1.42E01E", false, 0, media.length())),
+                emptyList(), null, null, emptyList(), emptyList(), emptyList(), null)
+        }
+        scenario = ActivityScenario.launch(MainActivity::class.java)
+        instrumentation.runOnMainSync { Graph.player.play(peer.copy(duration = 40)) }
+        compose.waitUntil(20_000) { Graph.player.state.value.isPlaying }
+        // Inspect the real scheduled job: a two-second fixture previously ended before
+        // this delay and missed the crash, even for guest playback.
+        val field = Graph.player.javaClass.getDeclaredField("historyReportJob").apply { isAccessible = true }
+        lateinit var report: kotlinx.coroutines.Job
+        instrumentation.runOnMainSync { report = field.get(Graph.player) as kotlinx.coroutines.Job }
+        compose.waitUntil(25_000) { report.isCompleted }
+        assertFalse("Delayed player access failed/cancelled before completing", report.isCancelled)
+        assertNull(Graph.player.state.value.error)
+    }
+
     @Test fun explicitRefreshActuallyRequestsNewFeedAndReportsSameResultsHonestly() {
         val calls = java.util.concurrent.atomic.AtomicInteger()
         val fresh = peer.copy(url = peer.url + "?fresh", title = "Fresh fixture result")
@@ -79,10 +100,12 @@ class GuestReleaseGateTest {
         }, peerSearch = { PageResult(emptyList()) }, commonsSearch = { PageResult(emptyList()) }, peerHome = { PageResult(emptyList()) })
         scenario = ActivityScenario.launch(MainActivity::class.java)
         compose.waitUntil(20_000) { calls.get() > 0 && compose.onAllNodesWithText(peer.title).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() }
+        compose.onNodeWithContentDescription("Home options").performClick()
         compose.onNodeWithText("Refresh feed").performClick()
         compose.waitUntil(20_000) { compose.onAllNodesWithText(fresh.title).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() }
         assertTrue(calls.get() >= 2)
         compose.onNodeWithText("Feed updated · fresh results loaded").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Home options").performClick()
         compose.onNodeWithText("Refresh feed").performClick()
         compose.waitUntil(20_000) { compose.onAllNodesWithText("Checked just now · providers returned the same videos").fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() }
     }
@@ -99,6 +122,28 @@ class GuestReleaseGateTest {
         compose.onNodeWithText("Show results").performScrollTo().performClick()
         compose.onNodeWithText("Filters").assertIsDisplayed()
     }
+    @Test fun homeKeepsVerboseFeedLabelsOutOfTheHeader() {
+        scenario = ActivityScenario.launch(MainActivity::class.java)
+        compose.waitUntil(20_000) { compose.onAllNodesWithText(peer.title).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() }
+        compose.onNodeWithText("Explore · US").assertDoesNotExist()
+        compose.onNodeWithText("Your YouTube recommendations").assertDoesNotExist()
+        compose.onNodeWithText("Source details & retry").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Search").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Check for updates").assertIsDisplayed()
+    }
+    @Test fun invalidatingAnActiveAccountPageMakesItReloadOnReturn() {
+        lateinit var page: com.vidora.app.ui.Paged
+        var calls = 0
+        instrumentation.runOnMainSync {
+            page = UiCache.paged("home:true:fixture:acc") { calls++; PageResult(listOf(Entry.Video(peer))) }
+            page.ensureLoaded()
+        }
+        compose.waitUntil(5000) { page.items.isNotEmpty() && !page.loading }
+        instrumentation.runOnMainSync { UiCache.invalidate("home:true:"); page.ensureLoaded() }
+        compose.waitUntil(5000) { calls == 2 && !page.refreshing }
+        assertEquals(2, calls)
+    }
+
     @Test fun publicSnapshotsSurviveDatabaseReopenAndClear() = runBlocking {
         val name = "release-gate-${System.nanoTime()}.db"
         var store = FeedStore(context, name)

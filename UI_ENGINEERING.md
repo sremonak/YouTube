@@ -58,3 +58,20 @@ against reviewed source PNG assets (per-channel tolerance 12; at most 1% changed
 baselines fail rather than auto-accepting a new appearance. Captured candidates/reports are artifacts;
 only explicit reviewed assets become regression baselines. The matrix is not a substitute for
 manual TalkBack, physical foldable, battery or real-phone visual/performance review.
+
+## Android 11 crash / repeated refresh follow-up
+
+The 15-second watch-history job inherited the app's Default dispatcher and then read
+Media3 getters off the main thread. It now explicitly uses Main through suspension.
+A 40-second offline fixture waits for the real scheduled history job to complete, so
+short guest fixtures can no longer hide this regression. CI also runs the guest/crash
+suite on API 30 before the existing API 34 visual/signed-upgrade gate.
+
+Home no longer displays the permanent region/recommendation and provider-status rows:
+Refresh feed and Feed status live in Home options, pull-to-refresh remains, and refresh
+feedback is transient. Search and Update stay in the toolbar. Public discovery advances
+bounded in-memory continuation cursors rather than repeatedly fetching page two; unseen
+retrieved candidates precede already displayed ones. Account history success invalidates
+both the cache slot and live Paged reference so returning Home actually revalidates.
+History sync defaults on but still respects sign-in, the user's sync setting and incognito.
+No guest library is uploaded; YouTube may still return unchanged recommendations.
