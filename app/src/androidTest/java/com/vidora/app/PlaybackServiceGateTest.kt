@@ -8,6 +8,8 @@ import android.os.SystemClock
 import androidx.core.content.ContextCompat
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
+import com.vidora.app.data.DiscoveryRepository
+import com.vidora.app.data.PageResult
 import com.vidora.app.data.Diagnostics
 import com.vidora.app.data.VideoItem
 import com.vidora.app.player.PlaybackService
@@ -31,7 +33,9 @@ class PlaybackServiceGateTest {
         context.getSharedPreferences("vidora_onboarding", 0).edit().putBoolean("welcome_done", true).commit()
         Graph.settings.update { it.copy(autoUpdateCheck = false, autoRegionByIp = false, persistQueue = false,
             incognito = false, sponsorBlock = false, prefetchNext = false, onboardingDone = true) }
-        instrumentation.runOnMainSync { Graph.player.stop() }
+        Graph.discoveryOverride = DiscoveryRepository(youtubeSearch = { _, _ -> PageResult(emptyList()) },
+            peerSearch = { PageResult(emptyList()) }, commonsSearch = { PageResult(emptyList()) }, peerHome = { PageResult(emptyList()) })
+        instrumentation.runOnMainSync { Graph.player.stop(); com.vidora.app.ui.UiCache.clearAll() }
         activity = ActivityScenario.launch(MainActivity::class.java)
         Diagnostics.enabled = true
         Diagnostics.clear()
@@ -40,6 +44,7 @@ class PlaybackServiceGateTest {
     @After fun cleanup() {
         instrumentation.runOnMainSync { Graph.player.stop() }
         activity?.close()
+        Graph.discoveryOverride = null
         context.stopService(Intent(context, PlaybackService::class.java))
     }
 
@@ -80,6 +85,16 @@ class PlaybackServiceGateTest {
         await("one media notification") {
             context.getSystemService(NotificationManager::class.java).activeNotifications.count { it.id == PlaybackService.NOTIFICATION_ID } == 1
         }
+        instrumentation.runOnMainSync {
+            Graph.player.togglePlay()
+            ContextCompat.startForegroundService(context, Intent(context, PlaybackService::class.java))
+        }
+        SystemClock.sleep(8_000)
+        assertNotNull("A paused queue must not be discarded", Graph.player.state.value.current)
+        assertFalse("Service starts must never resume a paused player", Graph.player.state.value.isPlaying)
+        assertEquals(1, context.getSystemService(NotificationManager::class.java).activeNotifications.count { it.id == PlaybackService.NOTIFICATION_ID })
+        instrumentation.runOnMainSync { Graph.player.togglePlay() }
+        await("resume after paused service start") { Graph.player.state.value.isPlaying }
         repeat(4) { startThenImmediatelyStop(); SystemClock.sleep(100) }
         SystemClock.sleep(8_000)
         assertNull(Graph.player.state.value.current)

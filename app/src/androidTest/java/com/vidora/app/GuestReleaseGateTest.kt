@@ -94,7 +94,7 @@ class GuestReleaseGateTest {
         assertTrue(Graph.library.data.value.history.any { it.video.url == peer.url && it.actualWatchSeconds > 0 })
     }
 
-    @Test fun directHomeActionsDownloadsAndShortsAreReachable() {
+    @Test fun calmHomeKeepsDownloadsLibrarySettingsAndShortsReachable() {
         Graph.shortsOverride = ShortsRepository(browse = { PageResult(listOf(Entry.Video(peer.copy(isShort = true)))) }, search = { error("No search needed") })
         scenario = ActivityScenario.launch(MainActivity::class.java)
         compose.waitUntil(20_000) { compose.onAllNodesWithContentDescription("Search").fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() }
@@ -103,6 +103,17 @@ class GuestReleaseGateTest {
         compose.onNodeWithContentDescription("Settings").assertDoesNotExist()
         compose.onNodeWithContentDescription("Feed status").assertDoesNotExist()
         compose.onNodeWithContentDescription("Refresh feed").assertDoesNotExist()
+        compose.waitUntil(20_000) { compose.onAllNodesWithText(peer.title).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() }
+        compose.waitForIdle()
+        val screenshot = requireNotNull(instrumentation.uiAutomation.takeScreenshot())
+        val candidate = File(context.getExternalFilesDir(null), "home-clean.png")
+        candidate.outputStream().use { screenshot.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+        fun shell(command: String) = instrumentation.uiAutomation.executeShellCommand(command).use {
+            java.io.FileInputStream(it.fileDescriptor).bufferedReader().readText()
+        }
+        shell("mkdir -p /sdcard/Download/vidora-ui-snapshots")
+        shell("cp ${candidate.absolutePath} /sdcard/Download/vidora-ui-snapshots/home-clean.png")
+        assertTrue(shell("ls /sdcard/Download/vidora-ui-snapshots/home-clean.png").trim().endsWith("/home-clean.png"))
         compose.onNodeWithText("Downloads").performClick()
         compose.waitUntil(10_000) { compose.onAllNodesWithText("Downloads").fetchSemanticsNodes(atLeastOneRootRequired = false).size >= 2 }
         compose.onNodeWithText("You").performClick()
