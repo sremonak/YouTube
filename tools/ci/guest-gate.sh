@@ -15,4 +15,9 @@ for name in ('gate-gradle.log','gate-logcat.txt'):
     print('::error title='+name+'::'+text.replace('%','%25').replace('\n','%0A').replace('\r',''))
 PY
 fi
+if [ "$result" = 0 ]; then
+  # The baseline release and its corresponding GPL source are retained for continuity tests.
+  gh release download v1.0.108 --pattern Vidora-1.0.108.apk --dir "$RUNNER_TEMP/upgrade-baseline" --clobber || exit 1
+  python3 tools/ci/upgrade-gate.py "$RUNNER_TEMP/upgrade-baseline/Vidora-1.0.108.apk" app/build/outputs/apk/release/app-release.apk || exit 1
+fi
 exit "$result"

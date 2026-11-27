@@ -38,13 +38,18 @@ Existing APK signing and Update/Later flow remain unchanged.
 `assembleRelease testDebugUnitTest assembleDebugAndroidTest :benchmark:assembleBenchmark lintDebug`
 precedes the deterministic API 34 emulator gate. That gate uses a self-generated 2-second AVC/AAC
 fixture: guest Home/search, local Watch later, PeerTube/Commons routing/playback, activity recreation,
-and Room close/reopen/clear. The debug-only test injection seam is ignored in release builds.
+and Room close/reopen/clear. The same emulator also installs the retained v1.0.108 release,
+completes its actual guest welcome UI, force-stops/relaunches it, installs the new release in-place
+without uninstalling, and checks package UID plus guest-preference retention after upgrade/restart.
+This is an installation/preference continuity smoke, not a full library/download migration test.
+The debug-only test injection seam is ignored in release builds.
 Only a successful gate can publish an APK. Reports are uploaded even on failure.
 
 Real-network YouTube extraction tests remain separate (manual/weekly); upstream outages must not be
 mistaken for deterministic regressions. The performance workflow stores JSON/traces/generated profiles.
-Physical-phone battery, low-memory, PiP, long downloads and signed upgrade tests still require device
-validation. Do not label unrun or failing checks as passed.
+Physical-phone battery, low-memory, PiP, long downloads and full library/download migration still
+require device validation. The new signed upgrade/process-restart smoke must pass CI before being
+reported as verified. Do not label unrun or failing checks as passed.
 
 Performance execution: `./gradlew :benchmark:connectedBenchmarkAndroidTest` targets the release APK.
 `ProfileGenerator` produces a guest startup/scroll/search profile; `PerformanceBenchmarks` records

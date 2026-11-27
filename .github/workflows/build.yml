@@ -82,6 +82,8 @@ jobs:
           sudo udevadm trigger --name-match=kvm
 
       - name: Guest emulator release gate
+        env:
+          GH_TOKEN: ${{ github.token }}
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
         with:
           api-level: 34
@@ -154,7 +156,7 @@ jobs:
             --title "Vidora ${VIDORA_VERSION_NAME}" --notes-file notes.txt --latest
           # keep the 5 newest releases
           gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName,createdAt \
-            --jq 'sort_by(.createdAt) | reverse | .[5:] | .[].tagName' |
+            --jq 'map(select(.tagName != "v1.0.108")) | sort_by(.createdAt) | reverse | .[5:] | .[].tagName' |
             xargs -r -n1 gh release delete --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
 
       - name: Publish GitHub release
