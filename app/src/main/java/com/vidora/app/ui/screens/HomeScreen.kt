@@ -82,7 +82,7 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
     }
     val session by Graph.account.session.collectAsStateWithLifecycle()
     val signedIn = session != null && !settings.incognito
-    // Account recommendations remain optional; Explore stays the default for every user.
+    // Account recommendations are the signed-in default; guests start on public Explore.
     var accountChips by remember(signedIn) { mutableStateOf(UiCache.get<List<FeedChip>>("home:chips") ?: emptyList()) }
     val tabs = remember(signedIn, accountChips, region.code) {
         buildList {

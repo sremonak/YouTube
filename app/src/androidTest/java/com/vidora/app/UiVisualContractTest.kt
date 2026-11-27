@@ -66,7 +66,16 @@ class UiVisualContractTest {
             compose.onNodeWithTag("refresh-target").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
             compose.onNodeWithContentDescription("More").assertIsDisplayed().assertWidthIsAtLeast(48.dp).assertHeightIsAtLeast(48.dp)
             val actual = compose.onNodeWithTag("visual-fixture").captureToImage().asAndroidBitmap()
-            File(output, "${c.name}.png").outputStream().use { actual.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            val candidate = File(output, "${c.name}.png")
+            candidate.outputStream().use { actual.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            // AGP uninstalls the fixture APK (and its external files) after instrumentation.
+            // Export while it is still installed; only the test shell can write this directory.
+            InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(
+                "mkdir -p /sdcard/Download/vidora-ui-snapshots && cp '${candidate.absolutePath}' /sdcard/Download/vidora-ui-snapshots/ && echo exported"
+            ).use { descriptor ->
+                val message = java.io.FileInputStream(descriptor.fileDescriptor).bufferedReader().readText()
+                assertTrue("Could not preserve ${c.name}: $message", message.contains("exported"))
+            }
             val baseline = runCatching { InstrumentationRegistry.getInstrumentation().context.assets.open("ui-goldens/${c.name}.png").use { BitmapFactory.decodeStream(it) } }.getOrNull()
             if (baseline == null) { missing += c.name; continue }
             assertEquals("${c.name} width", baseline.width, actual.width)

@@ -7,7 +7,7 @@ mkdir -p app/build/reports
   --no-daemon 2>&1 | tee app/build/reports/gate-gradle.log
 result=${PIPESTATUS[0]}
 mkdir -p app/build/reports/ui-snapshots
-adb pull /sdcard/Android/data/com.vidora.app.debug/files/ui-snapshots/. app/build/reports/ui-snapshots/ || true
+adb pull /sdcard/Download/vidora-ui-snapshots/. app/build/reports/ui-snapshots/ || result=1
 adb logcat -d -t 400 -s AndroidRuntime:E TestRunner:E System.err:W > app/build/reports/gate-logcat.txt || true
 if [ "$result" != 0 ]; then
   python3 - <<'PY'

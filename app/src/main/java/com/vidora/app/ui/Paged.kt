@@ -85,6 +85,8 @@ class Paged(private val scope: CoroutineScope, private val first: suspend () -> 
         job = scope.launch {
             try {
                 val page = retry.load()
+                ensureActive()
+                if (ticket != generation) return@launch
                 val known = items.mapTo(hashSetOf()) { it.key }
                 items = items + page.items.filter { known.add(it.key) }
                 retries = retries.filterNot { it.label == retry.label } + page.retries
@@ -98,7 +100,7 @@ class Paged(private val scope: CoroutineScope, private val first: suspend () -> 
                 }
                 endReached = next == null; loadedOnce = true; error = null
             } catch (e: CancellationException) { throw e }
-            catch (e: Exception) { error = e.message }
+            catch (e: Exception) { if (ticket == generation) error = e.message }
             finally { if (ticket == generation) loading = false }
         }
     }
@@ -115,12 +117,14 @@ class Paged(private val scope: CoroutineScope, private val first: suspend () -> 
         job = scope.launch {
             try {
                 val page = n()
+                ensureActive()
+                if (ticket != generation) return@launch
                 notices = (notices + page.notices).distinct(); retries = (retries + page.retries).distinctBy { it.label }
                 val known = items.mapTo(hashSetOf()) { it.key }
                 items = items + page.items.filter { known.add(it.key) }
                 next = page.next; endReached = next == null
             } catch (e: CancellationException) { throw e }
-            catch (t: Exception) { error = t.message }
+            catch (t: Exception) { if (ticket == generation) error = t.message }
             finally { if (ticket == generation) loading = false }
         }
     }
