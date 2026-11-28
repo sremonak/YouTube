@@ -55,6 +55,7 @@ import com.vidora.app.ui.icons.NotificationsActive
 import com.vidora.app.ui.icons.Favorite
 import com.vidora.app.ui.icons.FavoriteBorder
 import com.vidora.app.ui.icons.HighQuality
+import com.vidora.app.ui.icons.KeyboardArrowUp
 import com.vidora.app.ui.icons.KeyboardArrowDown
 import com.vidora.app.ui.icons.Pause
 import com.vidora.app.ui.icons.PictureInPictureAlt
@@ -141,7 +142,7 @@ import com.vidora.app.ui.components.VideoCard
 import com.vidora.app.util.Format
 import kotlinx.coroutines.delay
 
-internal enum class Sheet { NONE, QUALITY, SPEED, SLEEP, QUEUE, CAPTIONS, AUDIO, EQ, COMMENTS, PLAYLIST, STATS, SETTINGS, CHAPTERS, CAST }
+internal enum class Sheet { NONE, QUALITY, SPEED, SLEEP, BOOKMARKS, QUEUE, CAPTIONS, AUDIO, EQ, COMMENTS, PLAYLIST, STATS, SETTINGS, CHAPTERS, CAST }
 
 @Composable
 fun PlayerScreen(
@@ -267,6 +268,7 @@ private fun LegacySheets(sheet: Sheet, state: PlayerUiState, actions: VideoActio
         Sheet.QUALITY -> QualitySheet(state, onDismiss)
         Sheet.SPEED -> SpeedSheet(state.speed, onDismiss)
         Sheet.SLEEP -> SleepSheet(state, onDismiss)
+        Sheet.BOOKMARKS -> BookmarkSheet(state, onDismiss)
         Sheet.STATS -> StatsSheet(onDismiss)
         Sheet.CAST -> CastSheet(onDismiss)
         Sheet.QUEUE -> QueueSheet(state, actions, onDismiss)
@@ -715,8 +717,12 @@ private fun SleepSheet(state: PlayerUiState, onDismiss: () -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun QueueSheet(state: PlayerUiState, actions: VideoActions, onDismiss: () -> Unit) {
+    var saving by remember { mutableStateOf(false) }
     GlassBottomSheet(onDismissRequest = onDismiss) {
         com.vidora.app.ui.theme.SheetHeading(stringResource(R.string.ui_queue))
+        com.vidora.app.ui.components.ChoiceMenu("Queue tools", listOf("Shuffle upcoming", "Clear upcoming", "Save queue as playlist")) {
+            when (it) { 0 -> Graph.player.shuffleUpcoming(); 1 -> Graph.player.clearUpcoming(); 2 -> saving = true }
+        }
         LazyColumn(Modifier.navigationBarsPadding(), contentPadding = PaddingValues(bottom = 24.dp)) {
             itemsIndexed(state.queue, key = { _, v -> v.url }) { index, v ->
                 val isCurrent = index == state.queueIndex
@@ -733,10 +739,17 @@ private fun QueueSheet(state: PlayerUiState, actions: VideoActions, onDismiss: (
                         Text(v.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         Text(v.uploader.orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
+                    Column {
+                        IconButton(enabled = index > 0, onClick = { Graph.player.moveQueueItem(index, index - 1) }) { Icon(Icons.Rounded.KeyboardArrowUp, "Move up") }
+                        IconButton(enabled = index < state.queue.lastIndex, onClick = { Graph.player.moveQueueItem(index, index + 1) }) { Icon(Icons.Rounded.KeyboardArrowDown, "Move down") }
+                    }
                     if (!isCurrent) IconButton(onClick = { Graph.player.removeFromQueue(v) }) { Icon(Icons.Rounded.Close, "Remove") }
                 }
             }
         }
+    }
+    if (saving) com.vidora.app.ui.components.NameDialog("Save queue as playlist", "", "Create", { saving = false }) {
+        Graph.library.createPlaylistFrom(it, Graph.player.state.value.queue); saving = false
     }
 }
 

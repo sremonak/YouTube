@@ -465,6 +465,7 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
             item { SwitchRow(stringResource(R.string.ui_resume_where_you_left_off), null, s.resumePlayback) { v -> update { it.copy(resumePlayback = v) } } }
             item { SwitchRow(stringResource(R.string.ui_start_in_audio_only_mode), stringResource(R.string.ui_great_for_music_and_podcasts_saves_data), s.audioOnlyDefault) { v -> update { it.copy(audioOnlyDefault = v) } } }
             item { SwitchRow(stringResource(R.string.ui_skip_silence), stringResource(R.string.ui_speeds_through_silent_parts), s.skipSilence) { v -> update { it.copy(skipSilence = v) } } }
+            item { SwitchRow("Fit Shorts video", "Show the whole frame instead of cropping to fill; also changeable in Shorts", s.shortsFit) { v -> update { it.copy(shortsFit = v) } } }
             item { SwitchRow(stringResource(R.string.ui_gestures), stringResource(R.string.ui_double_tap_to_seek_hold_for_2_swipe_for), s.gestures) { v -> update { it.copy(gestures = v) } } }
             item { SwitchRow(stringResource(R.string.ui_remember_queue), stringResource(R.string.ui_restore_what_you_were_watching_after_res), s.persistQueue) { v -> update { it.copy(persistQueue = v) } } }
             item { SwitchRow("Piped / Invidious fallback", "If YouTube blocks your network, play through public privacy servers as a last resort", s.altFrontends) { v -> update { it.copy(altFrontends = v) } } }

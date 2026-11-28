@@ -373,13 +373,14 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
         _state.value = _state.value.copy(error = "Publisher rate limit. Retry in ${((rateLimitUntil - System.currentTimeMillis()) / 1000).coerceAtLeast(1)} seconds.")
         return true
     }
-    fun play(item: VideoItem, queue: List<VideoItem>? = null) {
+    fun play(item: VideoItem, queue: List<VideoItem>? = null, startPositionMs: Long? = null) {
         if (pausedByPublisher(item.url)) return
         val newQueue = (queue ?: _state.value.queue.takeIf { q -> q.any { it.url == item.url } } ?: listOf(item))
             .distinctBy { it.url }
         val index = newQueue.indexOfFirst { it.url == item.url }.coerceAtLeast(0)
         if (_state.value.current?.url == item.url && _state.value.details != null) {
             _state.value = _state.value.copy(queue = newQueue, queueIndex = index)
+            startPositionMs?.let { exoPlayer.seekTo(it.coerceAtLeast(0)) }
             exoPlayer.play()
             return
         }
@@ -435,7 +436,7 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
                 if (settings.saveHistory && !settings.incognito) Graph.library.addHistory(merged)
                 val requestedResume = userRetryPosition?.takeIf { it.first == item.url }?.second
                 userRetryPosition = null
-                val resumeAt = requestedResume ?: if (settings.resumePlayback && !merged.isLive) {
+                val resumeAt = startPositionMs?.coerceAtLeast(0) ?: requestedResume ?: if (settings.resumePlayback && !merged.isLive) {
                     Graph.library.positionOf(merged.url).takeIf { it > 5_000 && (merged.duration == 0L || it < merged.duration * 1000 - 10_000) } ?: 0
                 } else 0
                 prepare(details, resumeAt, autoPlay = true)
@@ -606,6 +607,31 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
         if (item.url == s.current?.url) return
         val q = s.queue.filter { it.url != item.url }
         _state.value = s.copy(queue = q, queueIndex = q.indexOfFirst { it.url == s.current?.url })
+    }
+
+    fun enqueueAll(items: List<VideoItem>) {
+        val unique = items.distinctBy { it.url }
+        if (unique.isEmpty()) return
+        if (_state.value.current == null) { play(unique.first(), unique); return }
+        val s = _state.value
+        _state.value = s.copy(queue = (s.queue + unique).distinctBy { it.url })
+        _events.tryEmit("Added selection to queue")
+    }
+
+    fun moveQueueItem(from: Int, to: Int) {
+        val s = _state.value
+        val q = com.vidora.app.data.CollectionTools.move(s.queue, from, to)
+        _state.value = s.copy(queue = q, queueIndex = q.indexOfFirst { it.url == s.current?.url })
+    }
+
+    fun shuffleUpcoming() {
+        val s = _state.value
+        _state.value = s.copy(queue = com.vidora.app.data.CollectionTools.shuffleUpcoming(s.queue, s.queueIndex))
+    }
+
+    fun clearUpcoming() {
+        val s = _state.value
+        if (s.queueIndex in s.queue.indices) _state.value = s.copy(queue = s.queue.take(s.queueIndex + 1))
     }
 
     fun playNext() {

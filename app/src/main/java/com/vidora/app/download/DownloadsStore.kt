@@ -80,11 +80,10 @@ class DownloadsStore(context: Context, private val scope: CoroutineScope) {
     }
 
     private fun save() {
-        val snapshot = _items.value
         scope.launch(Dispatchers.IO) {
             mutex.withLock {
                 val tmp = File(file.parentFile, file.name + ".tmp")
-                tmp.writeText(json.encodeToString(ListSerializer(DownloadRecord.serializer()), snapshot))
+                tmp.writeText(json.encodeToString(ListSerializer(DownloadRecord.serializer()), _items.value))
                 tmp.renameTo(file)
             }
         }

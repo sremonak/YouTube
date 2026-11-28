@@ -133,6 +133,7 @@ data class AppSettings(
     val blockedKeywords: Set<String> = emptySet(),
     val hideWatched: Boolean = false,
     val shortsPlayer: Boolean = true,
+    val shortsFit: Boolean = false,
     val notifyHours: Int = 0,
     val syncAccountActions: Boolean = true,
     /** Report what you watch to the YouTube account's watch history (like the official app). */
@@ -218,6 +219,7 @@ class SettingsRepository(private val context: Context) {
         val syncAccountActions = booleanPreferencesKey("sync_account")
         val syncWatchHistory = booleanPreferencesKey("sync_watch_history")
         val showContinueWatching = booleanPreferencesKey("show_continue_watching")
+        val shortsFit = booleanPreferencesKey("shorts_fit")
         val persistQueue = booleanPreferencesKey("persist_queue")
     }
 
@@ -301,6 +303,7 @@ class SettingsRepository(private val context: Context) {
             syncAccountActions = this[K.syncAccountActions] ?: d.syncAccountActions,
             syncWatchHistory = this[K.syncWatchHistory] ?: d.syncWatchHistory,
             showContinueWatching = this[K.showContinueWatching] ?: d.showContinueWatching,
+            shortsFit = this[K.shortsFit] ?: d.shortsFit,
             persistQueue = this[K.persistQueue] ?: d.persistQueue,
         )
     }
@@ -383,6 +386,7 @@ class SettingsRepository(private val context: Context) {
             p[K.syncAccountActions] = s.syncAccountActions
             p[K.syncWatchHistory] = s.syncWatchHistory
             p[K.showContinueWatching] = s.showContinueWatching
+            p[K.shortsFit] = s.shortsFit
             p[K.persistQueue] = s.persistQueue
         }
     }

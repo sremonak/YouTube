@@ -101,6 +101,7 @@ object Routes {
     const val LOGIN = "login"
     const val ACCOUNT_FEED = "account/{feed}"
     const val LOCAL_PLAYLIST = "local/{id}"
+    const val BOOKMARKS = "bookmarks"
     const val FILTERS = "filters"
     const val SHORTS = "shorts"
     const val ABOUT = "about"
@@ -262,6 +263,7 @@ fun AppRoot(activity: MainActivity, settings: AppSettings) {
                     composable(Routes.LOCAL_PLAYLIST, arguments = listOf(navArgument("id") { type = NavType.StringType })) { entry ->
                         LocalPlaylistScreen(nav, actions, entry.arguments?.getString("id").orEmpty())
                     }
+                    composable(Routes.BOOKMARKS) { com.vidora.app.ui.screens.BookmarksScreen(nav) }
                     composable(Routes.FILTERS) { FiltersScreen(nav) }
                     composable(Routes.SHORTS) { ShortsScreen(nav, actions) }
                     composable(Routes.LIST, arguments = listOf(navArgument("kind") { type = NavType.StringType })) { entry ->

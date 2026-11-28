@@ -2,8 +2,8 @@
 # The exit status of the actual fixture tests must gate APK publication.
 set -uo pipefail
 mkdir -p app/build/reports
-classes=com.vidora.app.GuestReleaseGateTest,com.vidora.app.PlaybackServiceGateTest,com.vidora.app.UiVisualContractTest
-if [ "${1:-}" = android11 ]; then classes=com.vidora.app.GuestReleaseGateTest,com.vidora.app.PlaybackServiceGateTest; fi
+classes=com.vidora.app.GuestReleaseGateTest,com.vidora.app.PlaybackServiceGateTest,com.vidora.app.CollectionUpgradeGateTest,com.vidora.app.UiVisualContractTest
+if [ "${1:-}" = android11 ]; then classes=com.vidora.app.GuestReleaseGateTest,com.vidora.app.PlaybackServiceGateTest,com.vidora.app.CollectionUpgradeGateTest; fi
 ./gradlew connectedDebugAndroidTest \
   -Pandroid.testInstrumentationRunnerArguments.class="$classes" \
   --no-daemon 2>&1 | tee app/build/reports/gate-gradle.log

@@ -44,6 +44,10 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import androidx.compose.ui.semantics.Role
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -89,6 +93,9 @@ fun ShortsScreen(nav: NavHostController, actions: VideoActions) {
     val items = remember { mutableStateListOf<VideoItem>().apply { addAll(ShortsSession.seed.distinctBy { it.url }) } }
     var next by remember { mutableStateOf<(suspend () -> PageResult)?>(null) }
     var pageError by remember { mutableStateOf<String?>(null) }
+    var pageRetry by remember { mutableStateOf(0) }
+    val settings by Graph.settingsState.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
     if (items.isEmpty()) {
         // Opened from the bottom bar: build a Shorts feed (like YouTube's Shorts tab).
         var failed by remember { mutableStateOf<String?>(null) }
@@ -133,7 +140,7 @@ fun ShortsScreen(nav: NavHostController, actions: VideoActions) {
             }
         }
     }
-    LaunchedEffect(pager.settledPage, items.size) {
+    LaunchedEffect(pager.settledPage, items.size, pageRetry) {
         val load = next
         if (pager.settledPage >= items.size - 3 && load != null) {
             try {
@@ -167,20 +174,25 @@ fun ShortsScreen(nav: NavHostController, actions: VideoActions) {
                             PlayerView(ctx).apply {
                                 layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
                                 useController = false
-                                resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                                resizeMode = if (settings.shortsFit) AspectRatioFrameLayout.RESIZE_MODE_FIT else AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                                 keepScreenOn = true
                                 player = Graph.player.sessionPlayer
                             }
                         },
+                        update = { it.resizeMode = if (settings.shortsFit) AspectRatioFrameLayout.RESIZE_MODE_FIT else AspectRatioFrameLayout.RESIZE_MODE_ZOOM },
                         onRelease = { it.player = null },
-                        modifier = Modifier.fillMaxSize().clickable { Graph.player.togglePlay() }
+                        modifier = Modifier.fillMaxSize().clickable(role = Role.Button,
+                            onClickLabel = if (state.isPlaying) "Pause Short" else "Play Short") { Graph.player.togglePlay() }
                     )
                     if (!state.isPlaying && !state.loading) {
                         Icon(Icons.Rounded.PlayArrow, null, tint = Color.White.copy(alpha = 0.8f), modifier = Modifier.align(Alignment.Center).size(72.dp))
                     }
                     if (state.loading) CircularProgressIndicator(Modifier.align(Alignment.Center), color = Color.White)
                     state.error?.let {
-                        Text(stringResource(R.string.ui_couldn_t_play_this_short), color = Color.White, modifier = Modifier.align(Alignment.Center))
+                        Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(stringResource(R.string.ui_couldn_t_play_this_short), color = Color.White)
+                            androidx.compose.material3.TextButton(onClick = { Graph.player.retry() }) { Text("Retry Short", color = Color.White) }
+                        }
                     }
                 } else {
                     AsyncImage(item.thumbnail, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
@@ -200,8 +212,12 @@ fun ShortsScreen(nav: NavHostController, actions: VideoActions) {
             modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(8.dp).size(48.dp)) {
             Icon(Icons.Rounded.Refresh, "Refresh Shorts", tint = Color.White)
         }
+        androidx.compose.material3.TextButton(onClick = { scope.launch { Graph.settings.update { it.copy(shortsFit = !it.shortsFit) } } },
+            modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 8.dp)) {
+            Text(if (settings.shortsFit) "Fit video" else "Fill screen", color = Color.White)
+        }
         pageError?.let { message ->
-            androidx.compose.material3.TextButton(onClick = { pageError = null; next = null; items.clear() }, modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding()) {
+            androidx.compose.material3.TextButton(onClick = { pageError = null; pageRetry++ }, modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 56.dp)) {
                 Text("$message · Retry", color = Color.White, maxLines = 2)
             }
         }

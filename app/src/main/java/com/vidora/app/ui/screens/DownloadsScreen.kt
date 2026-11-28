@@ -62,6 +62,12 @@ import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.navigation.NavHostController
 import com.vidora.app.Graph
+import com.vidora.app.download.DownloadDashboard
+import com.vidora.app.download.DownloadView
+import com.vidora.app.download.DownloadOrder
+import com.vidora.app.ui.components.ChoiceMenu
+import androidx.compose.material3.OutlinedTextField
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.vidora.app.download.DownloadKind
 import com.vidora.app.download.DownloadRecord
 import com.vidora.app.download.DownloadStatus
@@ -77,9 +83,16 @@ import kotlinx.coroutines.launch
 @Composable
 fun DownloadsScreen(nav: NavHostController) {
     val context = LocalContext.current
-    val items by Graph.downloads.items.collectAsState()
+    val items by Graph.downloads.items.collectAsStateWithLifecycle()
     var filter by rememberSaveable { mutableStateOf(0) } // 0 all, 1 video, 2 audio
     var deleteTarget by remember { mutableStateOf<DownloadRecord?>(null) }
+    var query by rememberSaveable { mutableStateOf("") }
+    var view by rememberSaveable { mutableStateOf(DownloadView.ALL) }
+    var order by rememberSaveable { mutableStateOf(DownloadOrder.NEWEST) }
+    var bulkCancel by remember { mutableStateOf<List<String>?>(null) }
+    var retrying by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
 
     // Storage permission is only needed on Android 9 and older.
     LaunchedEffect(Unit) {
@@ -90,14 +103,10 @@ fun DownloadsScreen(nav: NavHostController) {
         }
     }
 
-    val visible = items.filter {
-        when (filter) {
-            1 -> it.kind == DownloadKind.VIDEO
-            2 -> it.kind == DownloadKind.AUDIO
-            else -> true
-        }
+    val visible = remember(items, query, filter, view, order) {
+        DownloadDashboard.filter(items, query, when (filter) { 1 -> DownloadKind.VIDEO; 2 -> DownloadKind.AUDIO; else -> null }, view, order)
     }
-    val totalSize = items.filter { it.status == DownloadStatus.COMPLETED }.sumOf { it.totalBytes }
+    val totalSize = DownloadDashboard.completedBytes(items)
 
     com.vidora.app.ui.theme.GlassPage(header = {
         TopAppBar(
@@ -110,18 +119,45 @@ fun DownloadsScreen(nav: NavHostController) {
             },
             colors = com.vidora.app.ui.theme.glassBarColors()
         )
+        OutlinedTextField(query, { query = it }, singleLine = true, label = { Text("Search downloads") },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp))
         LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
             items(listOf("All", "Video", "Audio").withIndex().toList()) { (i, label) ->
                 FilterChip(selected = filter == i, onClick = { filter = i }, label = { Text(label) })
             }
         }
+        LazyRow(contentPadding = PaddingValues(horizontal = 8.dp)) {
+            item { ChoiceMenu(view.label, DownloadView.entries.map { it.label }) { view = DownloadView.entries[it] } }
+            item { ChoiceMenu(order.label, DownloadOrder.entries.map { it.label }) { order = DownloadOrder.entries[it] } }
+            if (!retrying) item { ChoiceMenu("Batch actions", listOf("Retry matching failed/cancelled", "Cancel matching active")) { action ->
+                if (action == 1) bulkCancel = visible.filter { DownloadDashboard.active(it.status) }.map { it.id }
+                else {
+                    val ids = visible.filter { DownloadDashboard.retryable(it.status) }.map { it.id }
+                    scope.launch {
+                        retrying = true
+                        var count = 0
+                        try {
+                            for (id in ids) if (DownloadDashboard.retryable(Graph.downloads.get(id)?.status ?: continue)) {
+                                Downloads.retry(context, id); count++
+                            }
+                            Toast.makeText(context, "$count downloads queued for retry", Toast.LENGTH_SHORT).show()
+                        } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+                        catch (_: Exception) { Toast.makeText(context, "Some downloads could not be queued. Check their status.", Toast.LENGTH_LONG).show() }
+                        finally { retrying = false }
+                    }
+                }
+            } }
+            item { TextButton(onClick = { query = ""; filter = 0; view = DownloadView.ALL; order = DownloadOrder.NEWEST }) { Text("Reset filters") } }
+        }
+        Text("${visible.size} matching · ${Format.bytes(DownloadDashboard.completedBytes(visible))} completed${if (retrying) " · Queueing retries…" else ""}",
+            style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
     }) {
         if (visible.isEmpty()) {
             Column {
                 com.vidora.app.ui.theme.TopChromeSpacer()
                 EmptyState(
-                    stringResource(R.string.ui_no_downloads_yet),
-                    stringResource(R.string.ui_tap_download_on_any_video_to_save_it_as),
+                    if (items.isEmpty()) stringResource(R.string.ui_no_downloads_yet) else "No matching downloads",
+                    if (items.isEmpty()) stringResource(R.string.ui_tap_download_on_any_video_to_save_it_as) else "Change your search or reset filters.",
                     Icons.Rounded.Download
                 )
             }
@@ -140,6 +176,16 @@ fun DownloadsScreen(nav: NavHostController) {
                 }
             }
         }
+    }
+
+    bulkCancel?.let { ids ->
+        GlassAlertDialog(onDismissRequest = { bulkCancel = null }, title = { Text("Cancel ${ids.size} matching downloads?") },
+            text = { Text("Completed files are kept. Cancelled downloads can be retried from the beginning; this is not pause/resume.") },
+            confirmButton = { TextButton(onClick = {
+                ids.forEach { id -> if (Graph.downloads.get(id)?.let { DownloadDashboard.active(it.status) } == true) Downloads.cancel(context, id) }
+                bulkCancel = null
+            }) { Text("Cancel downloads") } },
+            dismissButton = { TextButton(onClick = { bulkCancel = null }) { Text("Keep downloading") } })
     }
 
     deleteTarget?.let { r ->
@@ -175,7 +221,7 @@ private fun DownloadRow(record: DownloadRecord, onPlay: () -> Unit, onDelete: ()
             Text(record.video.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(2.dp))
             val statusText = when (record.status) {
-                DownloadStatus.QUEUED -> "Waiting for network…"
+                DownloadStatus.QUEUED -> "Queued · waiting for worker / network"
                 DownloadStatus.RUNNING -> "${(record.progress * 100).toInt()}% · ${Format.bytes(record.downloadedBytes)} / ${Format.bytes(record.totalBytes)} · ${Format.speed(record.speedBps)}"
                 DownloadStatus.MUXING -> "Merging audio + video…"
                 DownloadStatus.COMPLETED -> "${if (record.kind == DownloadKind.AUDIO) "Audio" else "Video"} · ${record.qualityLabel} · ${Format.bytes(record.totalBytes)}"

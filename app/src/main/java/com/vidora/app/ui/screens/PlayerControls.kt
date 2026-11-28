@@ -14,6 +14,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -476,7 +477,7 @@ internal fun PlayerSettingsSheet(state: PlayerUiState, openSheet: (Sheet) -> Uni
     val details = state.details
     val settings by Graph.settingsState.collectAsState()
     GlassBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.96f)) {
-        Column(Modifier.navigationBarsPadding().padding(bottom = 16.dp)) {
+        Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()).navigationBarsPadding().padding(bottom = 16.dp)) {
             fun go(s: Sheet) { onDismiss(); openSheet(s) }
             SettingRow(Icons.Rounded.HighQuality, "Quality", state.qualityLabel) { go(Sheet.QUALITY) }
             SettingRow(Icons.Rounded.Speed, "Playback speed", if (state.speed == 1f) "Normal" else "${trimSpeedLabel(state.speed)}×") { go(Sheet.SPEED) }
@@ -491,6 +492,7 @@ internal fun PlayerSettingsSheet(state: PlayerUiState, openSheet: (Sheet) -> Uni
                 else -> "Off"
             }) { go(Sheet.SLEEP) }
             SettingRow(Icons.Rounded.GraphicEq, "Equalizer & volume boost", if (settings.eqEnabled) "On" else "Off") { go(Sheet.EQ) }
+            SettingRow(Icons.Rounded.Bedtime, "Saved moments", "Timestamp bookmarks") { go(Sheet.BOOKMARKS) }
             SettingRow(Icons.AutoMirrored.Rounded.QueueMusic, "Queue", "${state.queue.size}") { go(Sheet.QUEUE) }
             ToggleRow(if (state.loop) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat, "Loop video", state.loop) { Graph.player.toggleLoop() }
             ToggleRow(Icons.Rounded.Audiotrack, "Audio only", state.audioOnly) { Graph.player.setAudioOnly(!state.audioOnly) }

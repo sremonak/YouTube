@@ -27,6 +27,17 @@ data class LibraryData(
     val searchHistory: List<String> = emptyList(),
     val playlists: List<LocalPlaylist> = emptyList(),
     val groups: List<SubscriptionGroup> = emptyList(),
+    val bookmarks: List<PlaybackBookmark> = emptyList(),
+)
+
+/** Explicit local timestamp, independent of resume/history measurements. Included in library backup. */
+@Serializable
+data class PlaybackBookmark(
+    val id: String,
+    val video: VideoItem,
+    val positionMs: Long,
+    val label: String,
+    val createdAt: Long = System.currentTimeMillis(),
 )
 
 /** User-defined folder of subscribed channels (by channel URL). */
@@ -115,6 +126,26 @@ class LibraryStore(context: Context, private val scope: CoroutineScope) {
         else d.copy(watchLater = d.watchLater + video)
     }
 
+    /** Local cleanup only: deliberately does not unlike/delete remote YouTube history. */
+    fun removeLocalVideos(kind: String, urls: Set<String>) = mutate { d -> when (kind) {
+        "liked" -> d.copy(favorites = d.favorites.filterNot { it.url in urls })
+        "later" -> d.copy(watchLater = d.watchLater.filterNot { it.url in urls })
+        "history" -> d.copy(history = d.history.filterNot { it.video.url in urls })
+        else -> d
+    } }
+
+    fun saveBookmark(video: VideoItem, positionMs: Long, label: String): String {
+        val id = java.util.UUID.randomUUID().toString()
+        val position = positionMs.coerceAtLeast(0)
+        mutate { d -> d.copy(bookmarks = (listOf(PlaybackBookmark(id, video, position,
+            label.trim().take(160).ifBlank { "Saved moment" })) + d.bookmarks).take(500)) }
+        return id
+    }
+    fun renameBookmark(id: String, label: String) = mutate { d -> d.copy(bookmarks = d.bookmarks.map {
+        if (it.id == id) it.copy(label = label.trim().take(160).ifBlank { it.label }) else it
+    }) }
+    fun removeBookmark(id: String) = mutate { d -> d.copy(bookmarks = d.bookmarks.filterNot { it.id == id }) }
+
     // subscriptions
     fun isSubscribed(url: String) = _data.value.subscriptions.any { it.url == url }
     fun toggleSubscription(channel: ChannelItem) {
@@ -150,9 +181,11 @@ class LibraryStore(context: Context, private val scope: CoroutineScope) {
     // local playlists
     fun playlist(id: String): LocalPlaylist? = _data.value.playlists.firstOrNull { it.id == id }
 
-    fun createPlaylist(name: String, first: VideoItem? = null): String {
+    fun createPlaylist(name: String, first: VideoItem? = null): String = createPlaylistFrom(name, listOfNotNull(first))
+
+    fun createPlaylistFrom(name: String, videos: List<VideoItem>): String {
         val id = java.util.UUID.randomUUID().toString()
-        mutate { d -> d.copy(playlists = d.playlists + LocalPlaylist(id, name.trim().ifBlank { "My playlist" }, listOfNotNull(first))) }
+        mutate { d -> d.copy(playlists = d.playlists + LocalPlaylist(id, name.trim().ifBlank { "My playlist" }, videos.distinctBy { it.url })) }
         return id
     }
 
@@ -169,6 +202,10 @@ class LibraryStore(context: Context, private val scope: CoroutineScope) {
     fun movePlaylistItem(id: String, from: Int, to: Int) = updatePlaylist(id) { p ->
         if (from !in p.videos.indices || to !in p.videos.indices) p
         else p.copy(videos = p.videos.toMutableList().apply { add(to, removeAt(from)) })
+    }
+
+    fun reorderPlaylist(id: String, order: CollectionOrder) = updatePlaylist(id) {
+        it.copy(videos = CollectionTools.videos(it.videos, order = order))
     }
 
     private fun updatePlaylist(id: String, block: (LocalPlaylist) -> LocalPlaylist) = mutate { d ->

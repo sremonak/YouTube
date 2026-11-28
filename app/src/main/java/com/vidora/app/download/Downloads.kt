@@ -150,6 +150,8 @@ object Downloads {
     }
 
     suspend fun retry(context: Context, id: String) {
+        val record = Graph.downloads.get(id) ?: return
+        if (!DownloadDashboard.retryable(record.status)) return
         Graph.downloads.update(id, persist = true) {
             it.copy(status = DownloadStatus.QUEUED, error = null, progress = 0f, downloadedBytes = 0)
         }

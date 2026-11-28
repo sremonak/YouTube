@@ -182,6 +182,7 @@ fun LibraryScreen(nav: NavHostController, actions: VideoActions) {
             item {
                 val downloads by Graph.downloads.items.collectAsStateWithLifecycle()
                 LibraryGroup(null) {
+                    LibraryRow(Icons.Rounded.WatchLater, "Saved moments", "${library.bookmarks.size} timestamps · local bookmarks") { nav.navigate(Routes.BOOKMARKS) }
                     LibraryRow(Icons.Rounded.Download, "Downloads", "${downloads.size} files · watch offline") { nav.navigate(Routes.DOWNLOADS) }
                     if (session == null) {
                         LibraryRow(Icons.Rounded.ThumbUp, "Liked videos", "${library.favorites.size} videos") { nav.navigate(Routes.list("liked")) }
@@ -292,48 +293,7 @@ private fun LibraryGroup(title: String?, content: @Composable () -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VideoListScreen(nav: NavHostController, actions: VideoActions, kind: String) {
-    val library by Graph.library.data.collectAsStateWithLifecycle()
-    var confirmClear by remember { mutableStateOf(false) }
-    val (title, videos: List<VideoItem>) = when (kind) {
-        "liked" -> "Liked videos" to library.favorites
-        "later" -> "Watch later" to library.watchLater
-        else -> "History" to library.history.map { it.video }
-    }
-    com.vidora.app.ui.theme.GlassPage(header = {
-        TopAppBar(
-            title = { Text(title) },
-            navigationIcon = { IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") } },
-            actions = {
-                if (videos.isNotEmpty()) {
-                    TextButton(onClick = { Graph.player.play(videos.first(), videos); nav.navigate(Routes.PLAYER) }) { Text(stringResource(R.string.ui_play_all)) }
-                }
-                if (kind == "history" && videos.isNotEmpty()) {
-                    IconButton(onClick = { confirmClear = true }) { Icon(Icons.Rounded.DeleteSweep, "Clear history") }
-                }
-            },
-            colors = com.vidora.app.ui.theme.glassBarColors()
-        )
-    }) {
-        if (videos.isEmpty()) {
-            Column {
-                com.vidora.app.ui.theme.TopChromeSpacer()
-                EmptyState(stringResource(R.string.ui_nothing_here_yet), stringResource(R.string.ui_videos_you_add_will_appear_here))
-            }
-        } else {
-            LazyColumn(contentPadding = PaddingValues(top = com.vidora.app.ui.theme.topChromePadding(), bottom = com.vidora.app.ui.theme.bottomChromePadding())) {
-                items(videos, key = { it.url }) { v -> VideoCard(v, actions, compact = true) }
-            }
-        }
-    }
-    if (confirmClear) {
-        GlassAlertDialog(
-            onDismissRequest = { confirmClear = false },
-            title = { Text(stringResource(R.string.ui_clear_watch_history)) },
-            text = { Text(stringResource(R.string.ui_this_removes_all_watched_videos_and_resu)) },
-            confirmButton = { TextButton(onClick = { Graph.library.clearHistory(); confirmClear = false }) { Text(stringResource(R.string.ui_clear)) } },
-            dismissButton = { TextButton(onClick = { confirmClear = false }) { Text(stringResource(R.string.ui_cancel)) } }
-        )
-    }
+    ManagedLibraryScreen(nav, actions, kind)
 }
 
 @Composable

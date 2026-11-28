@@ -130,3 +130,44 @@ Downloads remains a bottom destination, pull/reselect refresh remains, and TalkB
 a custom Refresh feed action. Continue watching has an in-section Hide action and a
 persisted Content-settings switch. Region/sync explanations live in Settings rather
 than an always-visible Home row. Shared card/sheet visual baselines remain unchanged.
+
+## Coordinated collection/player upgrade (user-approved scope)
+
+This update adds workflows, not a second Home toolbar. Existing sleep, gesture,
+equalizer, download and playlist features are not counted as new.
+
+- Saved moments: explicitly named local video timestamps, player settings sheet,
+  searchable/sortable library destination, rename/remove/share, and JSON backup
+  migration with an empty default for old libraries. Incognito hides moments and
+  rejects saving at the confirmation boundary. A bookmark is never measured watch
+  time or proof of a YouTube history write. Opening a saved moment uses a completed
+  local download when available, otherwise the original video link; timestamp
+  sharing depends on the destination provider supporting its time parameter.
+- Queue: bounded reorder, shuffle only upcoming entries, clear upcoming, deduplicated
+  batch append, and save the queue as a local playlist. Changing order must preserve
+  the current media item/position and update its queue index.
+- Device library: tokenized title/creator search, stable sort, explicit duration
+  buckets (unknown/live excluded when a length bucket is chosen), multi-selection,
+  select matching/deselect, play/shuffle/queue, playlist from a selection, and
+  confirmed local-only removal. Removing local likes/history never silently sends
+  unlike/history-deletion requests to the account; the confirmation explains scope.
+- Downloads: query/type/status intersections, stable sort, completed-byte summary
+  excluding unfinished estimates, retry eligibility guards and matching-active
+  cancellation confirmation. Completed files are protected by a fresh status check.
+  Retry restarts work; this is NOT HTTP range-resume or pause. Async persistence
+  snapshots the latest state under the write mutex, avoiding stale queued saves.
+- Playlists: search/filter/sort views, independent duplicate, and persist a chosen
+  sort without removing hidden items. Manual reordering is disabled in filtered or
+  sorted views to avoid misleading indices. Playlist tools replace a crowded header.
+- Shorts: persistent Fit/Fill, accessible playback tap label, per-video retry and
+  continuation retry without discarding the current feed. Search has a local-history
+  clear confirmation independent of watch/account history.
+
+CollectionUpgradeTest covers pure filters, bucket boundaries, ordering, queue identity,
+download eligibility/sizes, and old/new bookmark serialization. The mandatory API 30
+and 34 CollectionUpgradeGateTest exercises actual selection/confirmation, bookmark
+privacy/backup, timed offline playback/queue changes, protected batch cancellation,
+independent playlist duplication and search-history clearing. New screen captures are
+review candidates only; existing visual baselines are not autoaccepted. Android 11
+foreground watchdog and signed v108 upgrade gates remain mandatory. No private account
+or physical OEM firmware is available in CI.

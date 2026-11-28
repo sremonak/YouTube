@@ -44,6 +44,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
+import com.vidora.app.data.CollectionTools
+import com.vidora.app.data.CollectionOrder
+import com.vidora.app.data.CollectionLength
+import com.vidora.app.ui.components.CollectionControls
+import com.vidora.app.ui.components.ChoiceMenu
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -65,6 +71,10 @@ fun LocalPlaylistScreen(nav: NavHostController, actions: VideoActions, id: Strin
     var deleting by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf(false) }
     var batch by remember { mutableStateOf(false) }
+    var duplicating by remember { mutableStateOf(false) }
+    var query by rememberSaveable { mutableStateOf("") }
+    var order by rememberSaveable { mutableStateOf(CollectionOrder.SAVED) }
+    var length by rememberSaveable { mutableStateOf(CollectionLength.ALL) }
     val context = LocalContext.current
 
     if (playlist == null) {
@@ -72,45 +82,53 @@ fun LocalPlaylistScreen(nav: NavHostController, actions: VideoActions, id: Strin
         return
     }
 
+    val visible = CollectionTools.videos(playlist.videos, query, order, length)
+    val canReorder = query.isBlank() && order == CollectionOrder.SAVED && length == CollectionLength.ALL
+    LaunchedEffect(canReorder) { if (!canReorder) editing = false }
     com.vidora.app.ui.theme.GlassPage(header = {
         TopAppBar(
             title = { Text(playlist.name) },
             navigationIcon = { IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") } },
             actions = {
-                IconButton(onClick = { renaming = true }) { Icon(Icons.Rounded.Edit, "Rename") }
-                if (playlist.videos.isNotEmpty()) {
-                    IconButton(onClick = {
-                        val text = playlist.name + "\n" + playlist.videos.joinToString("\n") { "${it.title} — ${it.url}" }
-                        context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text), "Share playlist"))
-                    }) { Icon(Icons.Rounded.Share, "Share") }
+                ChoiceMenu("Playlist tools", listOf("Rename", "Share playlist", "Download all", "Duplicate playlist", "Apply sort to playlist", "Delete playlist")) {
+                    when (it) {
+                        0 -> renaming = true
+                        1 -> {
+                            val text = playlist.name + "\n" + playlist.videos.joinToString("\n") { v -> "${v.title} — ${v.url}" }
+                            context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text), "Share playlist"))
+                        }
+                        2 -> if (playlist.videos.isNotEmpty()) batch = true
+                        3 -> duplicating = true
+                        4 -> { Graph.library.reorderPlaylist(id, order); order = CollectionOrder.SAVED }
+                        5 -> deleting = true
+                    }
                 }
-                if (playlist.videos.isNotEmpty()) IconButton(onClick = { batch = true }) { Icon(Icons.Rounded.Download, "Download all") }
-                IconButton(onClick = { deleting = true }) { Icon(Icons.Rounded.Delete, "Delete") }
             },
             colors = com.vidora.app.ui.theme.glassBarColors()
         )
-        if (playlist.videos.isNotEmpty()) Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Button(onClick = { Graph.player.play(playlist.videos.first(), playlist.videos); nav.navigate(Routes.PLAYER) }) {
+        CollectionControls(query, { query = it }, order, { order = it }, length, { length = it }, visible.size)
+        if (visible.isNotEmpty()) Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Button(onClick = { Graph.player.play(visible.first(), visible); nav.navigate(Routes.PLAYER) }) {
                 Icon(Icons.Rounded.PlayArrow, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.ui_play_all))
             }
             FilledTonalButton(onClick = {
-                val shuffled = playlist.videos.shuffled()
+                val shuffled = visible.shuffled()
                 Graph.player.play(shuffled.first(), shuffled); nav.navigate(Routes.PLAYER)
             }) {
                 Icon(Icons.Rounded.Shuffle, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.ui_shuffle))
             }
             Spacer(Modifier.weight(1f))
-            TextButton(onClick = { editing = !editing }) { Text(if (editing) "Done" else "Edit") }
+            TextButton(enabled = canReorder, onClick = { editing = !editing }) { Text(if (editing) "Done" else "Edit") }
         }
         if (playlist.videos.isNotEmpty()) Text("${playlist.videos.size} videos", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 6.dp))
     }) {
-        if (playlist.videos.isEmpty()) {
+        if (visible.isEmpty()) {
             Column {
                 com.vidora.app.ui.theme.TopChromeSpacer()
-                EmptyState(stringResource(R.string.ui_empty_playlist), stringResource(R.string.ui_use_save_to_playlist_on_any_video_to_add))
+                EmptyState(if (playlist.videos.isEmpty()) stringResource(R.string.ui_empty_playlist) else "No matching videos", "Change your search or reset filters. Saved playlist items are kept.")
             }
         } else LazyColumn(contentPadding = PaddingValues(top = com.vidora.app.ui.theme.topChromePadding(), bottom = com.vidora.app.ui.theme.bottomChromePadding())) {
-            itemsIndexed(playlist.videos, key = { _, v -> v.url }) { index, v ->
+            itemsIndexed(visible, key = { _, v -> v.url }) { index, v ->
                 if (editing) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) { VideoCard(v, actions, compact = true) }
@@ -121,12 +139,17 @@ fun LocalPlaylistScreen(nav: NavHostController, actions: VideoActions, id: Strin
                         IconButton(onClick = { Graph.library.removeFromPlaylist(id, v.url) }) { Icon(Icons.Rounded.RemoveCircleOutline, "Remove") }
                     }
                 } else {
-                    VideoCard(v, actions = VideoActions({ Graph.player.play(it, playlist.videos); nav.navigate(Routes.PLAYER) }, actions.openChannel, actions.openPlaylist, actions.download), compact = true)
+                    VideoCard(v, actions = VideoActions({ Graph.player.play(it, visible); nav.navigate(Routes.PLAYER) }, actions.openChannel, actions.openPlaylist, actions.download), compact = true)
                 }
             }
         }
     }
 
+    if (duplicating) NameDialog("Duplicate playlist", playlist.name + " copy", "Create", { duplicating = false }) {
+        val copyId = Graph.library.createPlaylistFrom(it, playlist.videos)
+        duplicating = false
+        nav.navigate(Routes.localPlaylist(copyId))
+    }
     if (batch) com.vidora.app.ui.components.BatchDownloadDialog(playlist.videos) { batch = false }
     if (renaming) {
         NameDialog("Rename playlist", playlist.name, "Save", onDismiss = { renaming = false }) {

@@ -71,6 +71,7 @@ fun SearchScreen(nav: NavHostController, actions: VideoActions, initialQuery: St
     val focus = LocalFocusManager.current
     val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     val focusRequester = remember { FocusRequester() }
+    var confirmSearchClear by remember { mutableStateOf(false) }
     var text by rememberSaveable { mutableStateOf(initialQuery) }
     var submitted by rememberSaveable { mutableStateOf(initialQuery) }
     var source by rememberSaveable { mutableStateOf(initialSource) }
@@ -174,6 +175,9 @@ fun SearchScreen(nav: NavHostController, actions: VideoActions, initialQuery: St
         if (editing) {
             val history = if (privateMode || !keepSearch) emptyList() else (if (text.isBlank()) library.searchHistory else library.searchHistory.filter { it.contains(text, true) }).take(6)
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = com.vidora.app.ui.theme.topChromePadding(), bottom = com.vidora.app.ui.theme.bottomChromePadding())) {
+                if (!privateMode && keepSearch && library.searchHistory.isNotEmpty()) item {
+                    androidx.compose.material3.TextButton(onClick = { confirmSearchClear = true }) { Text("Clear search history") }
+                }
                 items(history.distinct(), key = { "h$it" }) { q ->
                     SuggestionRow(q, isHistory = true, onClick = { submit(q) }, onFill = { text = q }, onRemove = { Graph.library.removeSearch(q) })
                 }
@@ -198,6 +202,12 @@ fun SearchScreen(nav: NavHostController, actions: VideoActions, initialQuery: St
             )
         }
     }
+    if (confirmSearchClear) com.vidora.app.ui.theme.GlassAlertDialog(
+        onDismissRequest = { confirmSearchClear = false }, title = { Text("Clear search history?") },
+        text = { Text("Removes saved searches on this device only. Watch history and your YouTube account are not changed.") },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = { Graph.library.clearSearchHistory(); confirmSearchClear = false }) { Text("Clear") } },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = { confirmSearchClear = false }) { Text("Cancel") } })
+
     if (showFilters) com.vidora.app.ui.theme.GlassBottomSheet(onDismissRequest = { showFilters = false }) {
         com.vidora.app.ui.theme.SheetHeading("Search filters", "Only affects these search results")
         Column(Modifier.fillMaxWidth().verticalScroll(androidx.compose.foundation.rememberScrollState()).padding(horizontal = 24.dp)) {
