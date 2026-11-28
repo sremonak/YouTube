@@ -147,10 +147,12 @@ fun DownloadsScreen(nav: NavHostController) {
                     }
                 }
             } }
-            item { TextButton(onClick = { query = ""; filter = 0; view = DownloadView.ALL; order = DownloadOrder.NEWEST }) { Text("Reset filters") } }
         }
-        Text("${visible.size} matching · ${Format.bytes(DownloadDashboard.completedBytes(visible))} completed${if (retrying) " · Queueing retries…" else ""}",
-            style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+        Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("${visible.size} matching · ${Format.bytes(DownloadDashboard.completedBytes(visible))} completed${if (retrying) " · Queueing retries…" else ""}",
+                style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
+            TextButton(onClick = { query = ""; filter = 0; view = DownloadView.ALL; order = DownloadOrder.NEWEST }) { Text("Reset filters") }
+        }
     }) {
         if (visible.isEmpty()) {
             Column {

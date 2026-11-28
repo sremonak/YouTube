@@ -32,7 +32,7 @@ class GuestReleaseGateTest {
         }
         context.getSharedPreferences("vidora_onboarding", 0).edit().putBoolean("welcome_done", true).commit()
         Graph.settings.update { it.copy(autoUpdateCheck = false, autoRegionByIp = false, contentCountry = "US", glassUi = false,
-            sponsorBlock = false, prefetchNext = false, persistQueue = false, showContinueWatching = true, onboardingDone = true, homeInterests = emptySet(), homeLanguage = "", lessLikeVideos = emptySet()) }
+            sponsorBlock = false, prefetchNext = false, persistQueue = false, shortsFit = false, showContinueWatching = true, onboardingDone = true, homeInterests = emptySet(), homeLanguage = "", lessLikeVideos = emptySet()) }
         com.vidora.app.ui.screens.ShortsSession.seed = emptyList()
         Graph.discoveryOverride = DiscoveryRepository(youtubeSearch = { _, _ -> PageResult(emptyList()) },
             peerSearch = { PageResult(listOf(Entry.Video(peer))) }, commonsSearch = { PageResult(listOf(Entry.Video(commons))) },
@@ -122,6 +122,11 @@ class GuestReleaseGateTest {
         compose.onNodeWithText("Shorts").performClick()
         compose.waitUntil(20_000) { compose.onAllNodesWithContentDescription("Refresh Shorts").fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() }
         compose.onNodeWithContentDescription("Refresh Shorts").assertIsDisplayed()
+        compose.onNodeWithText("Fill screen").performClick()
+        compose.waitUntil(5000) { Graph.settingsState.value.shortsFit }
+        compose.onNodeWithText("Fit video").assertIsDisplayed()
+        compose.onNodeWithText("Fit video").performClick()
+        compose.waitUntil(5000) { !Graph.settingsState.value.shortsFit }
     }
 
     @Test fun explicitRefreshActuallyRequestsNewFeedAndReportsSameResultsHonestly() {

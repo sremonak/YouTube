@@ -87,7 +87,7 @@ fun LocalPlaylistScreen(nav: NavHostController, actions: VideoActions, id: Strin
     LaunchedEffect(canReorder) { if (!canReorder) editing = false }
     com.vidora.app.ui.theme.GlassPage(header = {
         TopAppBar(
-            title = { Text(playlist.name) },
+            title = { Text(playlist.name, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
             navigationIcon = { IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") } },
             actions = {
                 ChoiceMenu("Playlist tools", listOf("Rename", "Share playlist", "Download all", "Duplicate playlist", "Apply sort to playlist", "Delete playlist")) {
