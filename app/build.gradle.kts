@@ -121,8 +121,8 @@ android {
 dependencies {
     coreLibraryDesugaring(libs.desugar.jdk.libs)
 
-    implementation("androidx.room:room-runtime:2.8.4")
-    annotationProcessor("androidx.room:room-compiler:2.8.4")
+    implementation("androidx.room:room-runtime:2.8.5")
+    annotationProcessor("androidx.room:room-compiler:2.8.5")
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
