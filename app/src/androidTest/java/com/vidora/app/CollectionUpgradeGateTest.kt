@@ -3,6 +3,7 @@ package com.vidora.app
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.test.*
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.*
@@ -151,6 +152,7 @@ class CollectionUpgradeGateTest {
         Graph.downloads.upsert(record("fixture-failed", DownloadStatus.FAILED))
         screen { DownloadsScreen(it) }
         compose.onNodeWithText("Search downloads").performTextReplacement("fixture-active")
+        compose.onNodeWithTag("download-details-fixture-active", useUnmergedTree = true).assertWidthIsAtLeast(140.dp)
         snapshot("upgrade-downloads")
         compose.onNodeWithText("Batch actions").performClick()
         compose.onNodeWithText("Cancel matching active").performClick()

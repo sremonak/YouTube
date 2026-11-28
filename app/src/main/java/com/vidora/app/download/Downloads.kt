@@ -157,10 +157,10 @@ object Downloads {
         }
         try { start(context, id) }
         catch (cancelled: kotlinx.coroutines.CancellationException) {
-            Graph.downloads.update(id, persist = true) { record }
+            Graph.downloads.update(id, persist = true) { if (it.status == DownloadStatus.QUEUED) record else it }
             throw cancelled
         } catch (failure: Exception) {
-            Graph.downloads.update(id, persist = true) { it.copy(status = DownloadStatus.FAILED, error = "Could not queue retry", speedBps = 0) }
+            Graph.downloads.update(id, persist = true) { if (it.status == DownloadStatus.QUEUED) it.copy(status = DownloadStatus.FAILED, error = "Could not queue retry", speedBps = 0) else it }
             throw failure
         }
     }

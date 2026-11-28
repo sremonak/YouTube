@@ -1,6 +1,8 @@
 package com.vidora.app.ui.screens
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -81,13 +83,15 @@ fun ManagedLibraryScreen(nav: NavHostController, actions: VideoActions, kind: St
         } else LazyColumn(contentPadding = PaddingValues(top = com.vidora.app.ui.theme.topChromePadding(), bottom = com.vidora.app.ui.theme.bottomChromePadding())) {
             items(visible, key = { it.url }) { video ->
                 if (selecting) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = video.url in selected, onCheckedChange = { checked ->
-                            selected = if (checked) (selected + video.url).distinct() else selected - video.url
-                        }, modifier = Modifier.padding(start = 8.dp))
+                    Row(Modifier.fillMaxWidth().heightIn(min = 72.dp).toggleable(
+                        value = video.url in selected, role = Role.Checkbox,
+                        onValueChange = { checked -> selected = if (checked) (selected + video.url).distinct() else selected - video.url }
+                    ).padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = video.url in selected, onCheckedChange = null)
+                        Spacer(Modifier.width(16.dp))
                         Column(Modifier.weight(1f)) {
-                            VideoCard(video, VideoActions({ selected = if (it.url in selected) selected - it.url else selected + it.url },
-                                actions.openChannel, actions.openPlaylist, actions.download), compact = true)
+                            Text(video.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                            Text(video.uploader.orEmpty(), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                         }
                     }
                 } else VideoCard(video, actions, compact = true)

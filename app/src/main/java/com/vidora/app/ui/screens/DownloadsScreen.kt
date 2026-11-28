@@ -56,6 +56,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -211,15 +213,17 @@ private fun DownloadRow(record: DownloadRecord, onPlay: () -> Unit, onDelete: ()
     val scope = rememberCoroutineScope()
     var menu by remember { mutableStateOf(false) }
     val active = record.status == DownloadStatus.RUNNING || record.status == DownloadStatus.QUEUED || record.status == DownloadStatus.MUXING
+    val config = LocalConfiguration.current
+    val thumbnailWidth = if (config.screenWidthDp < 400 || config.fontScale > 1.3f) 96.dp else 128.dp
 
     Row(
         Modifier.fillMaxWidth().clickable(enabled = record.status == DownloadStatus.COMPLETED, onClick = onPlay)
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Thumbnail(record.video.copy(duration = if (record.kind == DownloadKind.AUDIO) 0 else record.video.duration), Modifier.width(128.dp))
+        Thumbnail(record.video.copy(duration = if (record.kind == DownloadKind.AUDIO) 0 else record.video.duration), Modifier.width(thumbnailWidth))
         Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
+        Column(Modifier.weight(1f).testTag("download-details-${record.id}")) {
             Text(record.video.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(2.dp))
             val statusText = when (record.status) {
@@ -240,32 +244,38 @@ private fun DownloadRow(record: DownloadRecord, onPlay: () -> Unit, onDelete: ()
                     LinearProgressIndicator(progress = { record.progress }, modifier = Modifier.fillMaxWidth())
                 } else LinearProgressIndicator(Modifier.fillMaxWidth())
             }
-        }
-        when {
-            active -> IconButton(onClick = { Downloads.cancel(context, record.id) }) { Icon(Icons.Rounded.Close, "Cancel") }
-            record.status == DownloadStatus.FAILED || record.status == DownloadStatus.CANCELLED ->
-                IconButton(onClick = { scope.launch { Downloads.retry(context, record.id) } }) { Icon(Icons.Rounded.Refresh, "Retry") }
-            else -> IconButton(onClick = onPlay) { Icon(Icons.Rounded.PlayArrow, "Play") }
-        }
-        androidx.compose.foundation.layout.Box {
-            IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.MoreVert, "More") }
-            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                if (record.status == DownloadStatus.COMPLETED) {
-                    DropdownMenuItem(text = { Text(stringResource(R.string.ui_open_with)) }, leadingIcon = { Icon(Icons.AutoMirrored.Rounded.OpenInNew, null) }, onClick = {
-                        menu = false
-                        val uri = Storage.shareableUri(context, record) ?: return@DropdownMenuItem
-                        val intent = Intent(Intent.ACTION_VIEW).setDataAndType(uri, record.mime).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        try { context.startActivity(Intent.createChooser(intent, "Open with")) } catch (_: ActivityNotFoundException) {}
-                    })
-                    DropdownMenuItem(text = { Text(stringResource(R.string.ui_share_file)) }, leadingIcon = { Icon(Icons.Rounded.Share, null) }, onClick = {
-                        menu = false
-                        val uri = Storage.shareableUri(context, record) ?: return@DropdownMenuItem
-                        val intent = Intent(Intent.ACTION_SEND).setType(record.mime).putExtra(Intent.EXTRA_STREAM, uri)
-                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        context.startActivity(Intent.createChooser(intent, "Share"))
-                    })
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.End) {
+                when {
+                    active -> IconButton(onClick = { Downloads.cancel(context, record.id) }) { Icon(Icons.Rounded.Close, "Cancel") }
+                    record.status == DownloadStatus.FAILED || record.status == DownloadStatus.CANCELLED ->
+                        IconButton(onClick = { scope.launch {
+                            try { Downloads.retry(context, record.id) }
+                            catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+                            catch (_: Exception) { Toast.makeText(context, "Could not queue retry", Toast.LENGTH_SHORT).show() }
+                        } }) { Icon(Icons.Rounded.Refresh, "Retry") }
+                    else -> IconButton(onClick = onPlay) { Icon(Icons.Rounded.PlayArrow, "Play") }
                 }
-                DropdownMenuItem(text = { Text(stringResource(R.string.ui_delete)) }, leadingIcon = { Icon(Icons.Rounded.Delete, null) }, onClick = { menu = false; onDelete() })
+                androidx.compose.foundation.layout.Box {
+                    IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.MoreVert, "More") }
+                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        if (record.status == DownloadStatus.COMPLETED) {
+                            DropdownMenuItem(text = { Text(stringResource(R.string.ui_open_with)) }, leadingIcon = { Icon(Icons.AutoMirrored.Rounded.OpenInNew, null) }, onClick = {
+                                menu = false
+                                val uri = Storage.shareableUri(context, record) ?: return@DropdownMenuItem
+                                val intent = Intent(Intent.ACTION_VIEW).setDataAndType(uri, record.mime).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                try { context.startActivity(Intent.createChooser(intent, "Open with")) } catch (_: ActivityNotFoundException) {}
+                            })
+                            DropdownMenuItem(text = { Text(stringResource(R.string.ui_share_file)) }, leadingIcon = { Icon(Icons.Rounded.Share, null) }, onClick = {
+                                menu = false
+                                val uri = Storage.shareableUri(context, record) ?: return@DropdownMenuItem
+                                val intent = Intent(Intent.ACTION_SEND).setType(record.mime).putExtra(Intent.EXTRA_STREAM, uri)
+                                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                context.startActivity(Intent.createChooser(intent, "Share"))
+                            })
+                        }
+                        DropdownMenuItem(text = { Text(stringResource(R.string.ui_delete)) }, leadingIcon = { Icon(Icons.Rounded.Delete, null) }, onClick = { menu = false; onDelete() })
+                    }
+                }
             }
         }
     }

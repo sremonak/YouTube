@@ -171,3 +171,9 @@ independent playlist duplication and search-history clearing. New screen capture
 review candidates only; existing visual baselines are not autoaccepted. Android 11
 foreground watchdog and signed v108 upgrade gates remain mandatory. No private account
 or physical OEM firmware is available in CI.
+
+The first new-screen review exposed cramped legacy download rows on 320dp phones.
+Download primary/menu actions now sit below the details, with a smaller thumbnail
+for narrow/large-font devices; a 140dp minimum details-width assertion protects the
+fixture phone. Selection mode uses a full-width, single-toggle checkbox row rather
+than nesting a thumbnail, video playback menu and checkbox into the same narrow row.
