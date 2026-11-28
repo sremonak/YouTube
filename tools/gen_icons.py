@@ -12,7 +12,7 @@ RES = os.path.join(ROOT, "res")
 
 # id, label, gradient start, gradient end, glyph color
 ICONS = [
-    ("classic",  "Classic",  "#FF1744", "#B0003A", "#FFFFFF"),
+    ("classic",  "Orbit",    "#091E2B", "#142B3D", "#72F7C1"),
     ("midnight", "Midnight", "#311B92", "#0D0221", "#E1BEE7"),
     ("ocean",    "Ocean",    "#00B0FF", "#0039CB", "#FFFFFF"),
     ("emerald",  "Emerald",  "#00E676", "#00695C", "#FFFFFF"),
@@ -22,8 +22,8 @@ ICONS = [
 
 # id, string resource value
 NAMES = [
-    ("vidora", "Vidora"),
-    ("vidorapro", "Vidora Pro"),
+    ("vidora", "Orvixa"),
+    ("vidorapro", "Orvixa Plus"),
     ("player", "Player"),
     ("mediahub", "Media Hub"),
 ]
@@ -48,26 +48,21 @@ BG = """<?xml version="1.0" encoding="utf-8"?>
 </vector>
 """
 
-# Rounded "play" glyph inside a soft ring, kept within the 66dp safe zone.
+# Original orbit/play mark. Legacy icon/name ids are retained for in-place launcher updates.
 FG = """<?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp"
     android:viewportWidth="108" android:viewportHeight="108">
-    <path android:fillColor="{g}" android:fillAlpha="0.18"
-        android:pathData="M54,30a24,24 0,1 1,0 48a24,24 0,1 1,0 -48z" />
+    <path android:fillColor="#00000000" android:strokeColor="{g}"
+        android:strokeWidth="7" android:strokeLineCap="round"
+        android:pathData="M65,34 C54,27 41,31 34,42 C26,56 33,72 47,76 C59,80 71,74 76,64" />
     <path android:fillColor="{g}"
-        android:pathData="M47.5,40.6 C46,39.7 44,40.8 44,42.6 L44,65.4 C44,67.2 46,68.3 47.5,67.4 L66.3,56 C67.8,55.1 67.8,52.9 66.3,52 Z" />
+        android:pathData="M49,42 Q47,41 47,44 L47,66 Q47,69 50,67 L68,56 Q71,54 68,52 Z" />
+    <path android:fillColor="#FFD497" android:pathData="M80,32 A4,4 0,1 1,72 32 A4,4 0,1 1,80 32" />
 </vector>
 """
 
-MONO = """<?xml version="1.0" encoding="utf-8"?>
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp" android:height="108dp"
-    android:viewportWidth="108" android:viewportHeight="108">
-    <path android:fillColor="#FFFFFFFF"
-        android:pathData="M47.5,40.6 C46,39.7 44,40.8 44,42.6 L44,65.4 C44,67.2 46,68.3 47.5,67.4 L66.3,56 C67.8,55.1 67.8,52.9 66.3,52 Z" />
-</vector>
-"""
+MONO = FG.replace("{g}", "#FFFFFFFF").replace("#FFD497", "#FFFFFFFF")
 
 ADAPTIVE = """<?xml version="1.0" encoding="utf-8"?>
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">

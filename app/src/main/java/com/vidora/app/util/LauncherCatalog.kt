@@ -6,7 +6,7 @@ data class LauncherName(val id: String, val label: String)
 
 object LauncherCatalog {
     val icons = listOf(
-        IconStyle("classic", "Classic", 0xFFFF1744, 0xFFB0003A),
+        IconStyle("classic", "Orbit", 0xFF091E2B, 0xFF142B3D),
         IconStyle("midnight", "Midnight", 0xFF311B92, 0xFF0D0221),
         IconStyle("ocean", "Ocean", 0xFF00B0FF, 0xFF0039CB),
         IconStyle("emerald", "Emerald", 0xFF00E676, 0xFF00695C),
@@ -14,8 +14,8 @@ object LauncherCatalog {
         IconStyle("mono", "Mono", 0xFF212121, 0xFF000000)
     )
     val names = listOf(
-        LauncherName("vidora", "Vidora"),
-        LauncherName("vidorapro", "Vidora Pro"),
+        LauncherName("vidora", "Orvixa"),
+        LauncherName("vidorapro", "Orvixa Plus"),
         LauncherName("player", "Player"),
         LauncherName("mediahub", "Media Hub")
     )

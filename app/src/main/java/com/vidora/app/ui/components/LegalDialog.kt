@@ -21,7 +21,7 @@ fun LegalDialog(onDismiss: () -> Unit) {
     val context = LocalContext.current
     val notices = remember {
         buildString {
-            appendLine("Vidora ${BuildConfig.VERSION_NAME} — GPL-3.0")
+            appendLine("Orvixa ${BuildConfig.VERSION_NAME} — GPL-3.0")
             appendLine("Copyright Vidora contributors. No warranty. You may modify and redistribute this software under GPLv3.")
             appendLine()
             appendLine("NewPipe Extractor — GPLv3, Team NewPipe contributors.")

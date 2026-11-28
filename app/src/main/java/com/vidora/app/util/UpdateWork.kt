@@ -75,8 +75,8 @@ class UpdateInstallReceiver : BroadcastReceiver() {
                 confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 val foreground = ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
                 if (foreground) runCatching { context.startActivity(confirm) }.onFailure {
-                    UpdateNotify.show(context, "Vidora update ready", "Tap to install the new version", confirm)
-                } else UpdateNotify.show(context, "Vidora update ready", "Tap to install the new version", confirm)
+                    UpdateNotify.show(context, "Orvixa update ready", "Tap to install the new version", confirm)
+                } else UpdateNotify.show(context, "Orvixa update ready", "Tap to install the new version", confirm)
             }
             PackageInstaller.STATUS_SUCCESS -> UpdateNotify.cancel(context)
             else -> {
@@ -101,7 +101,7 @@ class UpdateInstallReceiver : BroadcastReceiver() {
 class UpdatedReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_MY_PACKAGE_REPLACED) return
-        UpdateNotify.show(context, "Vidora updated", "You're now on version ${BuildConfig.VERSION_NAME}. Tap to see what's new.")
+        UpdateNotify.show(context, "Orvixa updated", "You're now on version ${BuildConfig.VERSION_NAME}. Tap to see what's new.")
         File(context.cacheDir, "updates").listFiles()?.forEach { it.delete() }
     }
 }
@@ -128,7 +128,7 @@ class UpdateWorker(context: Context, params: WorkerParameters) : CoroutineWorker
             Updater.downloadAndInstall(applicationContext, info)
         } else if (prefs.getString("notified", null) != info.version) {
             prefs.edit().putString("notified", info.version).apply()
-            UpdateNotify.show(applicationContext, "Vidora ${info.version} is available", "Tap to update — ${info.notes.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty().take(120)}")
+            UpdateNotify.show(applicationContext, "Orvixa ${info.version} is available", "Tap to update — ${info.notes.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty().take(120)}")
         }
         return Result.success()
     }

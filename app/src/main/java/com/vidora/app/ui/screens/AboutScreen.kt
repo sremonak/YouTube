@@ -129,7 +129,7 @@ fun AboutScreen(nav: NavHostController) {
                         if (icon != null) Image(icon, null, Modifier.size(64.dp).clip(RoundedCornerShape(16.dp)))
                         Spacer(Modifier.width(16.dp))
                         Column(Modifier.weight(1f)) {
-                            Text(settings?.displayName ?: "Vidora", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                            Text(settings?.displayName ?: "Orvixa", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                             Text("Version ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
@@ -195,7 +195,7 @@ private fun UpdateCard(st: UpdateState, autoInstall: Boolean, onAutoInstall: (Bo
                 UpdateState.Checking -> "Checking…"
                 is UpdateState.UpToDate -> "You're on the latest version."
                 is UpdateState.Available -> "Version ${st.info.version} is available" + (if (st.info.sizeBytes > 0) " · ${st.info.sizeBytes / 1_048_576} MB" else "")
-                is UpdateState.NeedsPermission -> "Allow Vidora to install apps, then tap Update again."
+                is UpdateState.NeedsPermission -> "Allow Orvixa to install apps, then tap Update again."
                 is UpdateState.Downloading -> "Downloading ${st.info.version}… ${(st.progress * 100).toInt()}%"
                 is UpdateState.Installing -> "Installing ${st.info.version}…"
                 is UpdateState.Failed -> st.message
@@ -211,7 +211,7 @@ private fun UpdateCard(st: UpdateState, autoInstall: Boolean, onAutoInstall: (Bo
                     info != null && st !is UpdateState.Downloading && st !is UpdateState.Installing -> Button(onClick = {
                         if (info.apkUrl == null) { Toast.makeText(context, "Update file is not available yet. Please try later.", Toast.LENGTH_LONG).show(); return@Button }
                         if (!Updater.canInstall(context)) {
-                            Toast.makeText(context, "Allow Vidora to install updates, then come back", Toast.LENGTH_LONG).show()
+                            Toast.makeText(context, "Allow Orvixa to install updates, then come back", Toast.LENGTH_LONG).show()
                             Updater.state.value = UpdateState.NeedsPermission(info)
                             Updater.openInstallPermission(context); return@Button
                         }
@@ -349,11 +349,11 @@ private fun waNumber(v: String): String {
 
 private val Contacts = listOf(
     Contact("whatsapp", "WhatsApp", com.vidora.app.ui.icons.BrandGlyphs.whatsapp, Color(0xFF25D366)) { v ->
-        if (v.startsWith("http")) v else "https://wa.me/${waNumber(v)}?text=" + Uri.encode("Hi! I'm messaging from Vidora.")
+        if (v.startsWith("http")) v else "https://wa.me/${waNumber(v)}?text=" + Uri.encode("Hi! I'm messaging from Orvixa.")
     },
     Contact("phone", "Call", com.vidora.app.ui.icons.IosGlyphs.phoneFill, Color(0xFF34C759)) { v -> "tel:" + v.filter { it.isDigit() || it == '+' } },
     Contact("email", "Email", com.vidora.app.ui.icons.IosGlyphs.envelopeFill, Color(0xFF007AFF)) { v ->
-        "mailto:$v?subject=" + Uri.encode("Vidora")
+        "mailto:$v?subject=" + Uri.encode("Orvixa")
     },
     Contact("telegram", "Telegram", com.vidora.app.ui.icons.BrandGlyphs.telegram, Color(0xFF26A5E4)) { v -> web(v, "https://t.me/") },
     Contact("facebook", "Facebook", com.vidora.app.ui.icons.BrandGlyphs.facebook, Color(0xFF0866FF)) { v -> web(v, "https://facebook.com/") },
@@ -389,7 +389,7 @@ private fun DeveloperCard(dev: AboutRepository.Developer?, open: (String) -> Uni
             }
             Spacer(Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(dev?.name ?: "Vidora developer", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text(dev?.name ?: "Orvixa developer", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 if ((dev?.get("verified")?.lowercase() ?: "") in setOf("yes", "true", "1")) {
                     Icon(com.vidora.app.ui.icons.IosGlyphs.checkmarkSealFill, null, Modifier.padding(start = 6.dp).size(20.dp), tint = Color(0xFF007AFF))
                 }

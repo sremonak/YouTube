@@ -123,7 +123,7 @@ fun SearchScreen(nav: NavHostController, actions: VideoActions, initialQuery: St
     fun startVoice() {
         val intent = android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
             .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_WEB_SEARCH)
-            .putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, "Search Vidora")
+            .putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, "Search Orvixa")
         runCatching { voice.launch(intent) }
             .onFailure { android.widget.Toast.makeText(context, "Voice search isn't available on this device", android.widget.Toast.LENGTH_SHORT).show() }
     }

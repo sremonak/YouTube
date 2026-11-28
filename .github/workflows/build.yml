@@ -159,14 +159,14 @@ jobs:
       - name: Rename APK
         run: |
           mkdir -p dist
-          cp app/build/outputs/apk/release/*.apk "dist/Vidora-${VIDORA_VERSION_NAME}.apk"
+          cp app/build/outputs/apk/release/*.apk "dist/Orvixa-${VIDORA_VERSION_NAME}.apk"
           (cd dist && sha256sum *.apk > SHA256SUMS.txt)
           ls -la dist
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: Vidora-${{ env.VIDORA_VERSION_NAME }}
+          name: Orvixa-${{ env.VIDORA_VERSION_NAME }}
           path: dist/*.apk
           if-no-files-found: error
 
@@ -184,7 +184,7 @@ jobs:
           printf '\nCorresponding source (GPLv3) for this APK: https://github.com/%s/archive/refs/tags/%s.zip\n' "$GITHUB_REPOSITORY" "$tag" >> notes.txt
           printf 'Build instructions and licence: https://github.com/%s/tree/%s\n' "$GITHUB_REPOSITORY" "$tag" >> notes.txt
           gh release create "$tag" dist/*.apk dist/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-            --title "Vidora ${VIDORA_VERSION_NAME}" --notes-file notes.txt --latest
+            --title "Orvixa ${VIDORA_VERSION_NAME}" --notes-file notes.txt --latest
           # Keep recent binary releases plus the upgrade baseline. Preserve source tags so
           # previously distributed APKs retain their corresponding GPL source archive URLs.
           gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName,createdAt \

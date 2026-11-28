@@ -72,7 +72,7 @@ def launch():
 
 def assert_existing_guest():
     def ready(root):
-        if find(root, "text", "Welcome to Vidora") is not None:
+        if any(find(root, "text", title) is not None for title in ("Welcome to Vidora", "Welcome to Orvixa")):
             raise AssertionError("Previously completed guest welcome was lost")
         return find(root, "content-desc", "Search")
     wait_for(ready, "existing guest Home after process restart/upgrade")

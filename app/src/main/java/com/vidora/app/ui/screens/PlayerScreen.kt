@@ -142,7 +142,7 @@ import com.vidora.app.ui.components.VideoCard
 import com.vidora.app.util.Format
 import kotlinx.coroutines.delay
 
-internal enum class Sheet { NONE, QUALITY, SPEED, SLEEP, BOOKMARKS, QUEUE, CAPTIONS, AUDIO, EQ, COMMENTS, PLAYLIST, STATS, SETTINGS, CHAPTERS, CAST }
+internal enum class Sheet { NONE, QUALITY, SPEED, SLEEP, BOOKMARKS, SECTION, QUEUE, CAPTIONS, AUDIO, EQ, COMMENTS, PLAYLIST, STATS, SETTINGS, CHAPTERS, CAST }
 
 @Composable
 fun PlayerScreen(
@@ -269,6 +269,7 @@ private fun LegacySheets(sheet: Sheet, state: PlayerUiState, actions: VideoActio
         Sheet.SPEED -> SpeedSheet(state.speed, onDismiss)
         Sheet.SLEEP -> SleepSheet(state, onDismiss)
         Sheet.BOOKMARKS -> BookmarkSheet(state, onDismiss)
+        Sheet.SECTION -> SectionRepeatSheet(state, onDismiss)
         Sheet.STATS -> StatsSheet(onDismiss)
         Sheet.CAST -> CastSheet(onDismiss)
         Sheet.QUEUE -> QueueSheet(state, actions, onDismiss)
@@ -686,18 +687,24 @@ private fun SpeedSheet(current: Float, onDismiss: () -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SleepSheet(state: PlayerUiState, onDismiss: () -> Unit) {
-    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(Unit) { while (true) { delay(1000); now = System.currentTimeMillis() } }
+    var custom by remember { mutableStateOf(false) }
+    var now by remember { mutableLongStateOf(android.os.SystemClock.elapsedRealtime()) }
+    LaunchedEffect(Unit) { while (true) { delay(1000); now = android.os.SystemClock.elapsedRealtime() } }
     GlassBottomSheet(onDismissRequest = onDismiss) {
         com.vidora.app.ui.theme.SheetHeading(stringResource(R.string.ui_sleep_timer))
         if (state.sleepTimerEndsAt > 0) {
-            val left = ((state.sleepTimerEndsAt - now) / 1000).coerceAtLeast(0)
+            val left = ((state.sleepTimerElapsedAt - now) / 1000).coerceAtLeast(0)
             Text("Pausing in ${Format.duration(left)}", color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 24.dp))
         }
         if (state.sleepAtEnd) {
             Text(stringResource(R.string.ui_stopping_when_this_video_ends), color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 24.dp))
         }
+        if (state.sleepTimerElapsedAt > now) Row(Modifier.padding(horizontal = 16.dp)) {
+            TextButton(onClick = { Graph.player.extendSleepTimer(5) }) { Text("Add 5 minutes") }
+            TextButton(onClick = { Graph.player.extendSleepTimer(15) }) { Text("Add 15 minutes") }
+        }
         LazyColumn(Modifier.navigationBarsPadding(), contentPadding = PaddingValues(bottom = 24.dp)) {
+            item { ListItem(headlineContent = { Text("Custom duration") }, modifier = Modifier.clickable { custom = true }) }
             item {
                 ListItem(
                     headlineContent = { Text(stringResource(R.string.ui_end_of_current_video)) },
@@ -712,6 +719,7 @@ private fun SleepSheet(state: PlayerUiState, onDismiss: () -> Unit) {
             }
         }
     }
+    if (custom) CustomSleepDialog({ custom = false }) { Graph.player.setSleepTimer(it); custom = false; onDismiss() }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -806,7 +814,7 @@ fun MiniPlayer(onOpen: () -> Unit, floating: Boolean = false) {
                 Column(Modifier.weight(1f)) {
                     Text(item.title.ifBlank { if (state.loading) "Loading…" else "Now playing" }, style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(item.uploader?.takeIf { it.isNotBlank() } ?: "Vidora", style = MaterialTheme.typography.bodySmall,
+                    Text(item.uploader?.takeIf { it.isNotBlank() } ?: "Orvixa", style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 IconButton(onClick = { Graph.player.togglePlay() }) {

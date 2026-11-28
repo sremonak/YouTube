@@ -1,6 +1,6 @@
-# Vidora — ad-free video client for Android
+# Orvixa — ad-free video client for Android
 
-Vidora is a modern, fully native Android app (Kotlin + Jetpack Compose + Media3) for watching
+Orvixa (formerly Vidora) is a modern, fully native Android app (Kotlin + Jetpack Compose + Media3) for watching
 public YouTube, PeerTube and Wikimedia Commons videos, with **background playback**, **picture-in-picture**,
 **video/audio downloads in the quality you choose**, SponsorBlock and a fully customisable
 design — no ad SDKs, with a local library. Signing in with a YouTube account is

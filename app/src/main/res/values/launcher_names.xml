@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="launcher_name_vidora" translatable="false">Vidora</string>
-    <string name="launcher_name_vidorapro" translatable="false">Vidora Pro</string>
+    <string name="launcher_name_vidora" translatable="false">Orvixa</string>
+    <string name="launcher_name_vidorapro" translatable="false">Orvixa Plus</string>
     <string name="launcher_name_player" translatable="false">Player</string>
     <string name="launcher_name_mediahub" translatable="false">Media Hub</string>
 </resources>

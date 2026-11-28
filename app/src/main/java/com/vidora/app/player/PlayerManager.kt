@@ -56,6 +56,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -76,6 +77,9 @@ data class PlayerUiState(
     val localFile: Boolean = false,
     val segments: List<SponsorSegment> = emptyList(),
     val sleepTimerEndsAt: Long = 0,
+    val sleepTimerElapsedAt: Long = 0,
+    val sectionStartMs: Long = -1,
+    val sectionEndMs: Long = -1,
     /** Sleep timer set to "end of current video". */
     val sleepAtEnd: Boolean = false,
     val loop: Boolean = false,
@@ -148,6 +152,7 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
     }
     private var tickerJob: Job? = null
     private var sleepJob: Job? = null
+    private var sectionJob: Job? = null
     private val skippedSegments = mutableSetOf<String>()
 
     private val streamClient = Graph.http.newBuilder()
@@ -380,10 +385,11 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
         val index = newQueue.indexOfFirst { it.url == item.url }.coerceAtLeast(0)
         if (_state.value.current?.url == item.url && _state.value.details != null) {
             _state.value = _state.value.copy(queue = newQueue, queueIndex = index)
-            startPositionMs?.let { exoPlayer.seekTo(it.coerceAtLeast(0)) }
+            startPositionMs?.let { seekTo(it.coerceAtLeast(0)) }
             exoPlayer.play()
             return
         }
+        clearSectionRepeat()
         persistPosition()
         historyReportedFor = null
         historyAttempts = 0
@@ -452,6 +458,7 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
 
     /** Plays a downloaded file from local storage (works fully offline). */
     fun playLocal(item: VideoItem, uri: Uri, audioOnly: Boolean) {
+        clearSectionRepeat()
         persistPosition()
         historyReportedFor = null
         historyAttempts = 0
@@ -460,6 +467,8 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
         _state.value = PlayerUiState(
             current = item, localFile = true, audioOnly = audioOnly, speed = _state.value.speed,
             queue = listOf(item), queueIndex = 0,
+            sleepTimerEndsAt = _state.value.sleepTimerEndsAt, sleepTimerElapsedAt = _state.value.sleepTimerElapsedAt,
+            sleepAtEnd = _state.value.sleepAtEnd,
         )
         val mediaItem = MediaItem.Builder().setUri(uri).setMediaMetadata(metadata(item)).build()
         exoPlayer.setMediaSource(ProgressiveMediaSource.Factory(dataSourceFactory).createMediaSource(mediaItem))
@@ -541,6 +550,7 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
     }
 
     fun toggleLoop() {
+        clearSectionRepeat()
         val loop = !_state.value.loop
         _state.value = _state.value.copy(loop = loop)
         exoPlayer.repeatMode = if (loop) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
@@ -548,28 +558,77 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
 
     /** Pause when the current video finishes instead of playing the next one. */
     fun setSleepAtEnd() {
+        clearSectionRepeat()
         sleepJob?.cancel()
-        _state.value = _state.value.copy(sleepTimerEndsAt = 0, sleepAtEnd = true)
+        _state.value = _state.value.copy(sleepTimerEndsAt = 0, sleepTimerElapsedAt = 0, sleepAtEnd = true)
     }
 
     fun setSleepTimer(minutes: Int) {
+        if (minutes <= 0) { scheduleSleep(0); return }
+        scheduleSleep(minutes.coerceAtMost(StudyTools.MAX_SLEEP_MINUTES) * 60_000L)
+    }
+
+    fun extendSleepTimer(minutes: Int): Boolean {
+        val left = StudyTools.remaining(_state.value.sleepTimerElapsedAt, android.os.SystemClock.elapsedRealtime())
+        if (left == 0L || minutes !in 1..60) return false
+        scheduleSleep((left + minutes * 60_000L).coerceAtMost(StudyTools.MAX_SLEEP_MINUTES * 60_000L))
+        return true
+    }
+
+    private fun scheduleSleep(durationMs: Long) {
         sleepJob?.cancel()
-        _state.value = _state.value.copy(sleepAtEnd = false)
-        if (minutes <= 0) {
-            _state.value = _state.value.copy(sleepTimerEndsAt = 0)
-            return
-        }
-        val endsAt = System.currentTimeMillis() + minutes * 60_000L
-        _state.value = _state.value.copy(sleepTimerEndsAt = endsAt)
+        _state.value = _state.value.copy(sleepAtEnd = false,
+            sleepTimerEndsAt = if (durationMs > 0) System.currentTimeMillis() + durationMs else 0,
+            sleepTimerElapsedAt = if (durationMs > 0) android.os.SystemClock.elapsedRealtime() + durationMs else 0)
+        if (durationMs <= 0) return
         sleepJob = scope.launch(Dispatchers.Main) {
-            delay(minutes * 60_000L)
+            delay(durationMs)
             exoPlayer.pause()
-            _state.value = _state.value.copy(sleepTimerEndsAt = 0)
+            _state.value = _state.value.copy(sleepTimerEndsAt = 0, sleepTimerElapsedAt = 0)
             _events.tryEmit("Sleep timer: playback paused")
         }
     }
 
-    fun seekTo(ms: Long) = exoPlayer.seekTo(ms)
+    fun setSectionStart(): Boolean {
+        val s = _state.value
+        if (s.current == null || s.current.isLive || s.loading || s.restored) return false
+        clearSectionRepeat()
+        _state.value = _state.value.copy(sectionStartMs = exoPlayer.currentPosition.coerceAtLeast(0))
+        return true
+    }
+
+    fun setSectionEnd(): Boolean {
+        val s = _state.value
+        val end = exoPlayer.currentPosition
+        if (!StudyTools.validSection(s.sectionStartMs, end)) return false
+        _state.value = s.copy(sectionEndMs = end, loop = false, sleepAtEnd = false)
+        exoPlayer.repeatMode = Player.REPEAT_MODE_OFF
+        sectionJob?.cancel()
+        sectionJob = scope.launch(Dispatchers.Main) {
+            // No polling while paused/buffering. All player access remains on Main.
+            state.collectLatest { current ->
+                if (current.isPlaying && StudyTools.validSection(current.sectionStartMs, current.sectionEndMs)) {
+                    while (isActive) {
+                        val position = exoPlayer.currentPosition
+                        if (position >= current.sectionEndMs || position < current.sectionStartMs) exoPlayer.seekTo(current.sectionStartMs)
+                        delay(80)
+                    }
+                }
+            }
+        }
+        return true
+    }
+
+    fun clearSectionRepeat() {
+        sectionJob?.cancel(); sectionJob = null
+        _state.value = _state.value.copy(sectionStartMs = -1, sectionEndMs = -1)
+    }
+
+    fun seekTo(ms: Long) {
+        val s = _state.value
+        if (s.sectionEndMs >= 0 && ms !in s.sectionStartMs until s.sectionEndMs) clearSectionRepeat()
+        exoPlayer.seekTo(ms)
+    }
 
     /** Stops decoding video while the app is in the background → much lower battery use. */
     fun setVideoTrackEnabled(enabled: Boolean) {
@@ -654,6 +713,7 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
     }
 
     fun stop() {
+        clearSectionRepeat()
         persistPosition()
         loadJob?.cancel()
         recoveryJob?.cancel()
@@ -957,6 +1017,10 @@ class PlayerManager(private val context: Context, private val scope: CoroutineSc
             persistPosition(reset = true)
             _events.tryEmit("Sleep timer: stopped at the end of the video")
             return
+        }
+        val s = _state.value
+        if (StudyTools.validSection(s.sectionStartMs, s.sectionEndMs)) {
+            exoPlayer.seekTo(s.sectionStartMs); exoPlayer.play(); return
         }
         persistPosition(reset = true)
         if (!_state.value.loop) playNext()
