@@ -121,6 +121,14 @@ fun LibraryScreen(nav: NavHostController, actions: VideoActions) {
                     }
                 }
             }
+            if (library.playlists.any { it.pinned }) item {
+                SectionHeader("Quick access")
+                LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(library.playlists.filter { it.pinned }, key = { it.id }) { playlist ->
+                        YouPill(Icons.AutoMirrored.Rounded.PlaylistPlay, playlist.name) { nav.navigate(Routes.localPlaylist(playlist.id)) }
+                    }
+                }
+            }
             item {
                 val downloads by Graph.downloads.items.collectAsStateWithLifecycle()
                 LazyRow(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -208,7 +216,7 @@ fun LibraryScreen(nav: NavHostController, actions: VideoActions) {
                 }
                 item {
                     LibraryGroup("On this device") {
-                        LibraryRow(Icons.Rounded.History, "Vidora history", "${library.history.size} videos") { nav.navigate(Routes.list("history")) }
+                        LibraryRow(Icons.Rounded.History, "Orvixa history", "${library.history.size} videos") { nav.navigate(Routes.list("history")) }
                         LibraryRow(Icons.Rounded.Favorite, "Favourites", "${library.favorites.size} videos") { nav.navigate(Routes.list("liked")) }
                         LibraryRow(Icons.Rounded.WatchLater, "Saved for later", "${library.watchLater.size} videos") { nav.navigate(Routes.list("later")) }
                         LibraryRow(Icons.Rounded.Subscriptions, "Subscribed channels", "${library.subscriptions.size} channels") { nav.navigate(Routes.SUBS) }
@@ -235,7 +243,7 @@ fun LibraryScreen(nav: NavHostController, actions: VideoActions) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
                 } else LibraryGroup(null) {
                     library.playlists.forEach { p ->
-                        LibraryRow(Icons.AutoMirrored.Rounded.PlaylistPlay, p.name, "${p.videos.size} videos") { nav.navigate(Routes.localPlaylist(p.id)) }
+                        LibraryRow(Icons.AutoMirrored.Rounded.PlaylistPlay, p.name, "${p.videos.size} videos${if (p.pinned) " · pinned" else ""}") { nav.navigate(Routes.localPlaylist(p.id)) }
                     }
                 }
             }

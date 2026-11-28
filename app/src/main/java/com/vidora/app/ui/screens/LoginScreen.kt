@@ -76,7 +76,7 @@ import com.vidora.app.ui.icons.BrandGlyphs
 import kotlinx.coroutines.launch
 
 /**
- * Sign in on Google's own page inside a WebView. Vidora never sees the password — it only keeps
+ * Sign in on Google's own page inside a WebView. Orvixa never sees the password — it only keeps
  * the resulting youtube.com session cookies (encrypted on the device).
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -161,7 +161,7 @@ private fun Intro(onGoogle: () -> Unit, onManual: () -> Unit, onHelp: () -> Unit
             }
             Spacer(Modifier.height(12.dp))
             Point(Icons.Rounded.Lock, "Google verifies your identity. Choosing a phone account is not automatic authorization; Google may still request a password.")
-            Point(Icons.Rounded.Shield, "Your YouTube session is stored encrypted on this phone. Vidora does not ask for your password in its own form.")
+            Point(Icons.Rounded.Shield, "Your YouTube session is stored encrypted on this phone. Orvixa does not ask for your password in its own form.")
             Spacer(Modifier.height(8.dp))
             TextButton(onClick = onGuest) { Text("Continue without signing in") }
             TextButton(onClick = { advanced = !advanced }) { Text(if (advanced) "Hide advanced options" else "Advanced options") }
@@ -192,7 +192,7 @@ private fun SignInHelpDialog(email: String?, onDismiss: () -> Unit) {
                 Spacer(Modifier.height(10.dp))
                 Text("3. If you forgot the email, use Find my email. If you forgot the password, use Account recovery. Only Google can restore access.")
                 Spacer(Modifier.height(10.dp))
-                Text("Recovery opens in your browser. After recovery, return to Vidora to finish signing in. Signing in in your browser does not automatically sign Vidora in.",
+                Text("Recovery opens in your browser. After recovery, return to Orvixa to finish signing in. Signing in in your browser does not automatically sign Orvixa in.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 TextButton(onClick = { open(GoogleSignInLinks.recovery(email)) }) { Text("Account recovery") }
                 TextButton(onClick = { open(GoogleSignInLinks.FIND_EMAIL) }) { Text("Find my email") }

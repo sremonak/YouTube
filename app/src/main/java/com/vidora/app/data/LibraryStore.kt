@@ -38,6 +38,7 @@ data class PlaybackBookmark(
     val positionMs: Long,
     val label: String,
     val createdAt: Long = System.currentTimeMillis(),
+    val note: String = "",
 )
 
 /** User-defined folder of subscribed channels (by channel URL). */
@@ -54,6 +55,7 @@ data class LocalPlaylist(
     val name: String,
     val videos: List<VideoItem> = emptyList(),
     val createdAt: Long = System.currentTimeMillis(),
+    val pinned: Boolean = false,
 ) {
     val thumbnail: String? get() = videos.firstOrNull()?.thumbnail
 }
@@ -144,6 +146,9 @@ class LibraryStore(context: Context, private val scope: CoroutineScope) {
     fun renameBookmark(id: String, label: String) = mutate { d -> d.copy(bookmarks = d.bookmarks.map {
         if (it.id == id) it.copy(label = label.trim().take(160).ifBlank { it.label }) else it
     }) }
+    fun updateBookmarkNote(id: String, note: String) = mutate { d -> d.copy(bookmarks = d.bookmarks.map {
+        if (it.id == id) it.copy(note = note.trim().take(4000)) else it
+    }) }
     fun removeBookmark(id: String) = mutate { d -> d.copy(bookmarks = d.bookmarks.filterNot { it.id == id }) }
 
     // subscriptions
@@ -190,6 +195,7 @@ class LibraryStore(context: Context, private val scope: CoroutineScope) {
     }
 
     fun renamePlaylist(id: String, name: String) = updatePlaylist(id) { it.copy(name = name.trim().ifBlank { it.name }) }
+    fun togglePlaylistPin(id: String) = updatePlaylist(id) { it.copy(pinned = !it.pinned) }
     fun deletePlaylist(id: String) = mutate { d -> d.copy(playlists = d.playlists.filter { it.id != id }) }
 
     fun addToPlaylist(id: String, videos: List<VideoItem>) = updatePlaylist(id) { p ->

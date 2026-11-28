@@ -38,7 +38,7 @@ object CrashReporter {
         val sw = StringWriter()
         error?.printStackTrace(PrintWriter(sw))
         return buildString {
-            appendLine("Vidora ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+            appendLine("Orvixa ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
             appendLine("Android ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT}) · ${Build.MANUFACTURER} ${Build.MODEL}")
             appendLine("Time: ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())}")
             if (extra != null) appendLine(extra)

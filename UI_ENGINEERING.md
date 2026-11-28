@@ -177,3 +177,41 @@ Download primary/menu actions now sit below the details, with a smaller thumbnai
 for narrow/large-font devices; a 140dp minimum details-width assertion protects the
 fixture phone. Selection mode uses a full-width, single-toggle checkbox row rather
 than nesting a thumbnail, video playback menu and checkbox into the same narrow row.
+
+## Orvixa identity + study update (approved before implementation)
+
+Orvixa replaces the default Vidora display identity. `AppBrand.displayName` maps only
+an absent/empty/old default to Orvixa; custom display names remain unchanged. Package
+id `com.vidora.app`, signer, all 24 legacy launcher alias ids, settings keys, data files,
+existing download folders and the v108 signed-upgrade baseline stay stable. The icon
+generator now emits an original orbit/play ribbon (dark ink/mint default), including
+monochrome variants. Home uses the matching original mark instead of the red play badge.
+Public app/widget/welcome/update labels and new release APK filenames use Orvixa.
+Historical source/type names and copyright notices are deliberately retained. The
+fixed-word component golden fixtures remain historical sample content; no golden is
+silently changed to approve the new brand. Actual Home/feature captures are reviewed.
+
+A–B repeat uses explicit marks at least 1 second apart, actual Main-thread player
+seeks, no polling while paused/buffering, and clears on a different video, stop,
+whole-video loop or seeking outside the range. Whole-video loop and A–B repeat are
+mutually exclusive; choosing sleep-at-end clears the section so the video can end.
+Rewinds remain seeks, never fabricated watch-history intervals. It is not sample-
+accurate audio editing; normal ExoPlayer/stream seek granularity still applies.
+
+Saved moments gain bounded 4000-character plain-text study notes. Note search includes
+label/video/creator/note tokens; sharing includes a note only by an explicit share
+action. Incognito still hides moments and blocks note writes at confirmation. New
+JSON note/pin fields default safely for old backups. Pinning a playlist adds it to
+Quick access under You, never a new Home action row. Duplicate playlists start unpinned.
+
+Sleep timers add validated 1–240 minute custom durations and 5/15 minute extensions,
+using an elapsed-realtime deadline for countdown/extension rather than wall-clock
+changes. Local playback retains a running timer instead of hiding a still-running
+job. Completed download cancellation is guarded again inside the atomic state update.
+
+Pure tests cover branding normalization, legacy alias catalog identity, A–B bounds,
+custom duration limits, note token search and old/new backup serialization. API 30/34
+feature gates additionally inspect real manifest aliases/labels, edit/search/backup
+notes, pin/restore/discover Quick access, validate/extend timers, and listen for actual
+offline A–B rewind seeks before checking section reset. The original foreground
+watchdog, collection, shared visual and signed-upgrade gates remain mandatory.

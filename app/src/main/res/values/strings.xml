@@ -1,17 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name" translatable="false">Vidora</string>
+    <string name="app_name" translatable="false">Orvixa</string>
     <string name="channel_playback">Playback</string>
     <string name="channel_downloads">Downloads</string>
     <string name="channel_new_videos">New videos</string>
-    <string name="widget_label">Vidora · Now playing</string>
+    <string name="widget_label">Orvixa · Now playing</string>
     <string name="widget_description">Control playback from your home screen</string>
     <string name="widget_idle_title">Nothing playing</string>
-    <string name="widget_idle_subtitle">Tap to open Vidora</string>
+    <string name="widget_idle_subtitle">Tap to open Orvixa</string>
     <string name="widget_previous">Previous</string>
     <string name="widget_next">Next</string>
     <string name="widget_play_pause">Play or pause</string>
-    <string name="tile_label">Vidora</string>
+    <string name="tile_label">Orvixa</string>
     <string name="tile_idle">Nothing playing</string>
     <string name="nav_home">Home</string>
     <string name="nav_subscriptions">Subscriptions</string>

@@ -492,6 +492,7 @@ internal fun PlayerSettingsSheet(state: PlayerUiState, openSheet: (Sheet) -> Uni
                 else -> "Off"
             }) { go(Sheet.SLEEP) }
             SettingRow(Icons.Rounded.GraphicEq, "Equalizer & volume boost", if (settings.eqEnabled) "On" else "Off") { go(Sheet.EQ) }
+            SettingRow(Icons.Rounded.Repeat, "A–B repeat", if (state.sectionEndMs >= 0) "On" else "Practice a section") { go(Sheet.SECTION) }
             SettingRow(Icons.Rounded.Bedtime, "Saved moments", "Timestamp bookmarks") { go(Sheet.BOOKMARKS) }
             SettingRow(Icons.AutoMirrored.Rounded.QueueMusic, "Queue", "${state.queue.size}") { go(Sheet.QUEUE) }
             ToggleRow(if (state.loop) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat, "Loop video", state.loop) { Graph.player.toggleLoop() }

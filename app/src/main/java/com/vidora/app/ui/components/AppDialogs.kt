@@ -145,7 +145,7 @@ fun CrashDialog(report: String, onDismiss: () -> Unit) {
         },
         confirmButton = {
             TextButton(onClick = {
-                context.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Vidora crash", report))
+                context.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Orvixa crash", report))
                 Toast.makeText(context, "Report copied", Toast.LENGTH_SHORT).show()
                 onDismiss()
             }) { Text("Copy report") }
@@ -153,7 +153,7 @@ fun CrashDialog(report: String, onDismiss: () -> Unit) {
         dismissButton = {
             Column {
                 TextButton(onClick = {
-                    context.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Vidora crash", report))
+                    context.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Orvixa crash", report))
                     Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
                 }) { Text(stringResource(R.string.ui_copy)) }
                 TextButton(onClick = onDismiss) { Text(stringResource(R.string.ui_dismiss)) }

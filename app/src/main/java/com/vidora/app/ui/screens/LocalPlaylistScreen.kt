@@ -90,7 +90,7 @@ fun LocalPlaylistScreen(nav: NavHostController, actions: VideoActions, id: Strin
             title = { Text(playlist.name, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
             navigationIcon = { IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") } },
             actions = {
-                ChoiceMenu("Playlist tools", listOf("Rename", "Share playlist", "Download all", "Duplicate playlist", "Apply sort to playlist", "Delete playlist")) {
+                ChoiceMenu("Playlist tools", listOf("Rename", "Share playlist", "Download all", "Duplicate playlist", "Apply sort to playlist", "Delete playlist", if (playlist.pinned) "Unpin from Quick access" else "Pin to Quick access")) {
                     when (it) {
                         0 -> renaming = true
                         1 -> {
@@ -101,6 +101,7 @@ fun LocalPlaylistScreen(nav: NavHostController, actions: VideoActions, id: Strin
                         3 -> duplicating = true
                         4 -> { Graph.library.reorderPlaylist(id, order); order = CollectionOrder.SAVED }
                         5 -> deleting = true
+                        6 -> Graph.library.togglePlaylistPin(id)
                     }
                 }
             },

@@ -69,9 +69,10 @@ fun BookmarksScreen(nav: NavHostController) {
     var query by rememberSaveable { mutableStateOf("") }
     var sort by rememberSaveable { mutableStateOf(0) }
     var renaming by remember { mutableStateOf<PlaybackBookmark?>(null) }
+    var editingNote by remember { mutableStateOf<PlaybackBookmark?>(null) }
     var removing by remember { mutableStateOf<PlaybackBookmark?>(null) }
     val matches = if (settings.incognito) emptyList() else library.bookmarks.filter {
-        query.trim().split(Regex("\\s+")).all { word -> "${it.label} ${it.video.title} ${it.video.uploader.orEmpty()}".contains(word, true) }
+        com.vidora.app.player.StudyTools.matches(it, query)
     }.let { when (sort) {
         1 -> it.sortedBy { b -> b.video.title.lowercase() }
         2 -> it.sortedBy { b -> b.positionMs }
@@ -91,7 +92,7 @@ fun BookmarksScreen(nav: NavHostController) {
             if (matches.isEmpty()) item { EmptyState("No saved moments", if (settings.incognito) "Hidden in incognito mode." else "Open a video's player settings → Saved moments to bookmark a timestamp.") }
             items(matches, key = { it.id }) { bookmark ->
                 ListItem(headlineContent = { Text(bookmark.label) },
-                    supportingContent = { Text("${bookmark.video.title}\n${Format.duration(bookmark.positionMs / 1000).ifBlank { "0:00" }}") },
+                    supportingContent = { Text("${bookmark.video.title}\n${Format.duration(bookmark.positionMs / 1000).ifBlank { "0:00" }}" + if (bookmark.note.isNotBlank()) "\n${bookmark.note}" else "", maxLines = 4, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
                     modifier = Modifier.clickable {
                         val current = Graph.player.state.value
                         val download = Graph.downloads.items.value.firstOrNull { it.video.url == bookmark.video.url && it.status == DownloadStatus.COMPLETED && it.uri != null }
@@ -108,10 +109,11 @@ fun BookmarksScreen(nav: NavHostController) {
                         nav.navigate(Routes.PLAYER)
                     },
                     trailingContent = {
-                        ChoiceMenu("Moment actions", listOf("Rename", "Share timestamp", "Remove")) {
+                        ChoiceMenu("Moment actions", listOf("Rename", "Edit note", "Share timestamp", "Remove")) {
                             when (it) {
                                 0 -> renaming = bookmark
-                                1 -> {
+                                1 -> editingNote = bookmark
+                                2 -> {
                                     val original = bookmark.video.url.toUri()
                                     val link = if (original.isHierarchical && original.scheme in listOf("https", "http")) {
                                         val uri = original.buildUpon().clearQuery().fragment(null)
@@ -121,15 +123,19 @@ fun BookmarksScreen(nav: NavHostController) {
                                         uri.appendQueryParameter("t", (bookmark.positionMs / 1000).toString()).build().toString()
                                     } else bookmark.video.url
                                     context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain")
-                                        .putExtra(Intent.EXTRA_TEXT, "${bookmark.label}\n$link"), "Share moment"))
+                                        .putExtra(Intent.EXTRA_TEXT, listOf(bookmark.label, bookmark.note, link).filter { it.isNotBlank() }.joinToString("\n")), "Share moment"))
                                 }
-                                2 -> removing = bookmark
+                                3 -> removing = bookmark
                             }
                         }
                     })
             }
         }
     }
+    editingNote?.let { b -> MomentNoteDialog(b.note, { editingNote = null }) {
+        if (!Graph.settingsState.value.incognito) Graph.library.updateBookmarkNote(b.id, it)
+        editingNote = null
+    } }
     renaming?.let { b -> NameDialog("Rename moment", b.label, "Save", { renaming = null }) { Graph.library.renameBookmark(b.id, it); renaming = null } }
     removing?.let { b -> GlassAlertDialog(onDismissRequest = { removing = null }, title = { Text("Remove saved moment?") },
         text = { Text(b.label) }, confirmButton = { TextButton(onClick = { Graph.library.removeBookmark(b.id); removing = null }) { Text("Remove") } },

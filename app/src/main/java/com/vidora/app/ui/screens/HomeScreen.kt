@@ -151,7 +151,7 @@ fun HomeScreen(nav: NavHostController, actions: VideoActions, settings: AppSetti
 
     com.vidora.app.ui.theme.GlassPage(header = {
         TopAppBar(
-            title = { BrandLogo(settings.displayName.ifBlank { "Vidora" }) },
+            title = { BrandLogo(settings.displayName.ifBlank { com.vidora.app.util.AppBrand.NAME }) },
             actions = {
                 IconButton(onClick = { nav.navigate(Routes.search()) }) { Icon(Icons.Rounded.Search, "Search") }
                 IconButton(
@@ -242,18 +242,15 @@ private fun ContinueWatchingRow(entries: List<com.vidora.app.data.HistoryEntry>,
     }
 }
 
-/** YouTube-style wordmark: red rounded "play" badge + bold name. */
+/** Original Orvixa orbit/play mark, shared with the launcher's visual identity. */
 @Composable
 fun BrandLogo(name: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            Modifier.size(width = 30.dp, height = 21.dp)
-                .background(MaterialTheme.colorScheme.primary, androidx.compose.foundation.shape.RoundedCornerShape(6.dp)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(Icons.Rounded.PlayArrow, null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(18.dp))
-        }
-        Spacer(Modifier.width(4.dp))
+        androidx.compose.foundation.Image(
+            painter = androidx.compose.ui.res.painterResource(com.vidora.app.R.drawable.orvixa_mark),
+            contentDescription = null, modifier = Modifier.size(32.dp)
+        )
+        Spacer(Modifier.width(8.dp))
         Text(name, style = BrandTitle.copy(fontSize = 20.sp, letterSpacing = (-0.8).sp), color = MaterialTheme.colorScheme.onBackground,
             maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
     }

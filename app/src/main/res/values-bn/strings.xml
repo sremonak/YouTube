@@ -42,10 +42,10 @@
     <string name="channel_playback">প্লেব্যাক</string>
     <string name="channel_downloads">ডাউনলোড</string>
     <string name="channel_new_videos">নতুন ভিডিও</string>
-    <string name="widget_label">Vidora · এখন চলছে</string>
+    <string name="widget_label">Orvixa · এখন চলছে</string>
     <string name="widget_description">হোম স্ক্রিন থেকে প্লেব্যাক নিয়ন্ত্রণ করুন</string>
     <string name="widget_idle_title">কিছু চলছে না</string>
-    <string name="widget_idle_subtitle">Vidora খুলতে ট্যাপ করুন</string>
+    <string name="widget_idle_subtitle">Orvixa খুলতে ট্যাপ করুন</string>
     <string name="widget_previous">আগের</string>
     <string name="widget_next">পরের</string>
     <string name="widget_play_pause">প্লে বা পজ</string>

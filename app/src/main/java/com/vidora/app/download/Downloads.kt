@@ -166,8 +166,9 @@ object Downloads {
     }
 
     fun cancel(context: Context, id: String) {
+        if (Graph.downloads.get(id)?.let { DownloadDashboard.active(it.status) } != true) return
         WorkManager.getInstance(context).cancelUniqueWork(id)
-        Graph.downloads.update(id, persist = true) { it.copy(status = DownloadStatus.CANCELLED, speedBps = 0) }
+        Graph.downloads.update(id, persist = true) { if (DownloadDashboard.active(it.status)) it.copy(status = DownloadStatus.CANCELLED, speedBps = 0) else it }
     }
 
     fun delete(context: Context, id: String, deleteFile: Boolean) {

@@ -2,6 +2,8 @@ package com.vidora.app
 
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.*
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -164,6 +166,8 @@ class CollectionUpgradeGateTest {
         compose.waitUntil(5000) { Graph.downloads.get("fixture-active")?.status == DownloadStatus.CANCELLED }
         assertEquals(DownloadStatus.COMPLETED, Graph.downloads.get("fixture-completed")!!.status)
         assertEquals(DownloadStatus.FAILED, Graph.downloads.get("fixture-failed")!!.status)
+        Downloads.cancel(context, "fixture-completed")
+        assertEquals(DownloadStatus.COMPLETED, Graph.downloads.get("fixture-completed")!!.status)
         compose.onNodeWithText("Reset filters").performClick()
         compose.onNodeWithText("All statuses").performClick()
         compose.onNodeWithText("Completed").performClick()
@@ -200,4 +204,112 @@ class CollectionUpgradeGateTest {
         compose.waitUntil(5000) { Graph.library.data.value.searchHistory.isEmpty() }
         assertEquals(1, Graph.library.data.value.history.size)
     }
+    @Test fun orvixaBrandKeepsLauncherAliasesAndMigratesOnlyTheDefaultName() {
+        assertEquals("Orvixa", context.applicationInfo.loadLabel(context.packageManager).toString())
+        @Suppress("DEPRECATION")
+        val info = context.packageManager.getPackageInfo(context.packageName,
+            android.content.pm.PackageManager.GET_ACTIVITIES or android.content.pm.PackageManager.MATCH_DISABLED_COMPONENTS)
+        val aliases = info.activities.orEmpty().filter { it.name.contains(".alias.L_") }
+        assertEquals(24, aliases.size)
+        assertEquals("Orvixa", aliases.first { it.name.endsWith("L_classic_vidora") }.loadLabel(context.packageManager).toString())
+        assertTrue(context.getString(R.string.widget_label).startsWith("Orvixa"))
+        runBlocking {
+            Graph.settings.update { it.copy(displayName = "Vidora") }
+            assertEquals("Orvixa", Graph.settings.flow.first().displayName)
+            Graph.settings.update { it.copy(displayName = "My theatre") }
+            assertEquals("My theatre", Graph.settings.flow.first().displayName)
+        }
+    }
+
+    @Test fun studyNoteCanBeEditedSearchedAndBackedUpWithoutChangingTimestamp() {
+        val id = Graph.library.saveBookmark(alpha, 12_345, "Opening example")
+        screen { BookmarksScreen(it) }
+        compose.onNodeWithText("Moment actions").performClick()
+        compose.onNodeWithText("Edit note").performClick()
+        compose.onNodeWithText("Notes for this moment").performTextReplacement("Quadratic equations: revisit this example")
+        compose.onNodeWithText("Save note").performClick()
+        compose.waitUntil(5000) { Graph.library.data.value.bookmarks.single().note.isNotBlank() }
+        compose.onNodeWithText("Search saved moments").performTextReplacement("quadratic example")
+        compose.onNodeWithText("Opening example").assertIsDisplayed()
+        assertEquals(12_345L, Graph.library.data.value.bookmarks.single().positionMs)
+        val backup = Graph.library.exportJson()
+        Graph.library.updateBookmarkNote(id, "")
+        assertTrue(Graph.library.importJson(backup))
+        assertTrue(Graph.library.data.value.bookmarks.single().note.contains("Quadratic"))
+        snapshot("orvixa-study-notes")
+    }
+
+    @Test fun playlistPinAppearsInQuickAccessAndSurvivesBackup() {
+        val id = Graph.library.createPlaylistFrom("Practice playlist", listOf(alpha, beta))
+        var library by androidx.compose.runtime.mutableStateOf(false)
+        screen { if (library) LibraryScreen(it, actions) else LocalPlaylistScreen(it, actions, id) }
+        compose.onNodeWithText("Playlist tools").performClick()
+        compose.onNodeWithText("Pin to Quick access").performClick()
+        compose.waitUntil(5000) { Graph.library.playlist(id)!!.pinned }
+        val backup = Graph.library.exportJson()
+        Graph.library.togglePlaylistPin(id)
+        Graph.library.importJson(backup)
+        assertTrue(Graph.library.playlist(id)!!.pinned)
+        compose.runOnIdle { library = true }
+        compose.onNodeWithText("Quick access").assertIsDisplayed()
+        compose.onAllNodesWithText("Practice playlist").onFirst().assertIsDisplayed()
+        snapshot("orvixa-quick-access")
+    }
+
+    @Test fun customSleepDurationIsValidatedExtendableAndSurvivesLocalPlayback() {
+        var open by androidx.compose.runtime.mutableStateOf(true)
+        screen { if (open) CustomSleepDialog({ open = false }) { Graph.player.setSleepTimer(it); open = false } else Text("Timer set") }
+        compose.onNodeWithText("Minutes (1–240)").performTextReplacement("0")
+        compose.onNodeWithText("Start timer").assertIsNotEnabled()
+        compose.onNodeWithText("Minutes (1–240)").performTextReplacement("17")
+        compose.onNodeWithText("Start timer").assertIsEnabled().performClick()
+        instrumentation.runOnMainSync {
+            val deadline = Graph.player.state.value.sleepTimerElapsedAt
+            assertTrue(deadline > android.os.SystemClock.elapsedRealtime() + 16 * 60_000)
+            assertTrue(Graph.player.extendSleepTimer(5))
+            assertTrue(Graph.player.state.value.sleepTimerElapsedAt >= deadline + 5 * 60_000 - 1000)
+            val extended = Graph.player.state.value.sleepTimerElapsedAt
+            Graph.player.playLocal(alpha, android.net.Uri.fromFile(File(context.cacheDir, "collection-long.mp4")), false)
+            assertEquals(extended, Graph.player.state.value.sleepTimerElapsedAt)
+            Graph.player.setSleepTimer(0)
+            assertEquals(0L, Graph.player.state.value.sleepTimerElapsedAt)
+            assertFalse(Graph.player.extendSleepTimer(5))
+        }
+    }
+
+    @Test fun sectionRepeatReallySeeksBackAndClearsOutsideTheRangeOrOnAnotherVideo() {
+        screen { Text("Offline A–B fixture") }
+        instrumentation.runOnMainSync { Graph.player.play(alpha) }
+        compose.waitUntil(20_000) { Graph.player.state.value.isPlaying }
+        val loops = java.util.concurrent.atomic.AtomicInteger()
+        val listener = object : androidx.media3.common.Player.Listener {
+            override fun onPositionDiscontinuity(oldPosition: androidx.media3.common.Player.PositionInfo,
+                newPosition: androidx.media3.common.Player.PositionInfo, reason: Int) {
+                if (reason == androidx.media3.common.Player.DISCONTINUITY_REASON_SEEK && newPosition.positionMs in 11_900L..12_100L) loops.incrementAndGet()
+            }
+        }
+        try {
+            instrumentation.runOnMainSync {
+                Graph.player.exoPlayer.pause()
+                Graph.player.seekTo(12_000)
+                assertTrue(Graph.player.setSectionStart())
+                Graph.player.seekTo(14_000)
+                Graph.player.exoPlayer.addListener(listener)
+                assertTrue(Graph.player.setSectionEnd())
+                Graph.player.exoPlayer.play()
+            }
+            compose.waitUntil(12_000) { loops.get() >= 2 }
+            instrumentation.runOnMainSync {
+                assertEquals(alpha.url, Graph.player.state.value.current?.url)
+                Graph.player.seekTo(25_000)
+                assertEquals(-1L, Graph.player.state.value.sectionEndMs)
+                assertTrue(Graph.player.setSectionStart())
+                Graph.player.seekTo(27_000)
+                assertTrue(Graph.player.setSectionEnd())
+                Graph.player.play(beta)
+                assertEquals(-1L, Graph.player.state.value.sectionStartMs)
+            }
+        } finally { instrumentation.runOnMainSync { Graph.player.exoPlayer.removeListener(listener) } }
+    }
+
 }

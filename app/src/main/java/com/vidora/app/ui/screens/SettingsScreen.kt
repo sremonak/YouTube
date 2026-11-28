@@ -255,7 +255,7 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
                 item {
                     ClickRow(
                         if (importing) "Importing subscriptions…" else "Import YouTube subscriptions",
-                        "Copy the channels you follow into Vidora's subscriptions"
+                        "Copy the channels you follow into Orvixa's subscriptions"
                     ) {
                         if (importing) return@ClickRow
                         importing = true
@@ -314,7 +314,7 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
                             confirmButton = {
                                 TextButton(onClick = {
                                     val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                    cm.setPrimaryClip(android.content.ClipData.newPlainText("Vidora account check", text))
+                                    cm.setPrimaryClip(android.content.ClipData.newPlainText("Orvixa account check", text))
                                     Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
                                 }) { Text("Copy") }
                             },
@@ -587,7 +587,7 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
                     update { it.copy(poToken = v) }
                 }
             }
-            item { SwitchRow(stringResource(R.string.ui_check_for_updates_automatically), "Check for new Vidora versions in the app", s.autoUpdateCheck) { v -> update { it.copy(autoUpdateCheck = v) } } }
+            item { SwitchRow(stringResource(R.string.ui_check_for_updates_automatically), "Check for new Orvixa versions in the app", s.autoUpdateCheck) { v -> update { it.copy(autoUpdateCheck = v) } } }
             item { SwitchRow("Download & install updates automatically", "New versions download in the background and install on their own (Android 12+ after the first in-app update)", s.autoInstallUpdates) { v -> update { it.copy(autoInstallUpdates = v) } } }
             item {
                 ClickRow(if (checkingUpdate) "Checking…" else "Check for updates now", "Current version ${BuildConfig.VERSION_NAME}") {
@@ -599,7 +599,7 @@ fun SettingsScreen(nav: NavHostController, s: AppSettings) {
                 ClickRow(stringResource(R.string.ui_report_a_problem), "Copy a report to send to the developer") {
                     val body = com.vidora.app.util.CrashReporter.report(null, "Describe the problem:")
                     context.getSystemService(android.content.ClipboardManager::class.java)
-                        .setPrimaryClip(android.content.ClipData.newPlainText("Vidora report", body))
+                        .setPrimaryClip(android.content.ClipData.newPlainText("Orvixa report", body))
                     Toast.makeText(context, "Report copied", Toast.LENGTH_SHORT).show()
                 }
             }
@@ -764,7 +764,7 @@ private fun TextDialog(title: String, initial: String, onDismiss: () -> Unit, on
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = { OutlinedTextField(value = text, onValueChange = { text = it }, singleLine = true) },
-        confirmButton = { TextButton(onClick = { onSave(text.trim().ifEmpty { "Vidora" }); onDismiss() }) { Text(stringResource(R.string.ui_save)) } },
+        confirmButton = { TextButton(onClick = { onSave(text.trim().ifEmpty { com.vidora.app.util.AppBrand.NAME }); onDismiss() }) { Text(stringResource(R.string.ui_save)) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.ui_cancel)) } }
     )
 }

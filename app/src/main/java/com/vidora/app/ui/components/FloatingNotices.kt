@@ -164,7 +164,7 @@ fun WelcomeCard(onSignIn: () -> Unit, onDone: () -> Unit) {
                 contentAlignment = Alignment.Center,
             ) { Icon(IosGlyphs.playFill, null, Modifier.size(42.dp), tint = Color.White) }
             Spacer(Modifier.height(14.dp))
-            Text("Welcome to Vidora", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+            Text("Welcome to Orvixa", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
             Text(
                 "Public videos, background playback and offline saves where the source allows them.",
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center,
@@ -189,7 +189,7 @@ fun WelcomeCard(onSignIn: () -> Unit, onDone: () -> Unit) {
             Spacer(Modifier.height(6.dp))
             TextButton(onClick = ::skip, modifier = Modifier.fillMaxWidth()) { Text("Continue without signing in") }
             Text(
-                "You sign in on Google's own page — Vidora never sees your password.",
+                "You sign in on Google's own page — Orvixa never sees your password.",
                 style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center,
             )
         }
@@ -218,7 +218,7 @@ fun ExitCard(activity: Activity, onDismiss: () -> Unit) {
             NoticeTile(IosGlyphs.squareArrowRight, Color(0xFFFF3B30))
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
-                Text("Exit Vidora?", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("Exit Orvixa?", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text(
                     if (playing) "Exiting stops the video. Keep it playing in the background instead?" else "See you soon!",
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -261,7 +261,7 @@ fun UpdateCardNotice(info: UpdateInfo, onLater: () -> Unit) {
             Column(Modifier.weight(1f)) {
                 Text("Update available", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text(
-                    "Vidora ${info.version}" + (if (info.sizeBytes > 0) " · ${info.sizeBytes / 1_048_576} MB" else "") + " is ready to install",
+                    "Orvixa ${info.version}" + (if (info.sizeBytes > 0) " · ${info.sizeBytes / 1_048_576} MB" else "") + " is ready to install",
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -293,7 +293,7 @@ fun UpdateCardNotice(info: UpdateInfo, onLater: () -> Unit) {
                         Toast.makeText(context, "Update file is not available yet. Please try later.", Toast.LENGTH_LONG).show(); return@Button
                     }
                     if (!Updater.canInstall(context)) {
-                        Toast.makeText(context, "Allow Vidora to install updates, then tap Update again", Toast.LENGTH_LONG).show()
+                        Toast.makeText(context, "Allow Orvixa to install updates, then tap Update again", Toast.LENGTH_LONG).show()
                         Updater.openInstallPermission(context); return@Button
                     }
                     Graph.appScope.launch { Updater.downloadAndInstall(context.applicationContext, info) }

@@ -1,7 +1,12 @@
-# Vidora
+# Orvixa
 Ad-free YouTube with background play, downloads and a clean **glass** design.
 
 > News and details from the developer. Use the refresh button to get the latest information.
+
+## New study tools
+- A–B section repeat for practice
+- Timestamp study notes and pinned playlists
+- Custom and extendable sleep timers
 
 ## What's inside
 - No ads, SponsorBlock, DeArrow and Return YouTube Dislike
@@ -18,4 +23,4 @@ Made by **sremonak**.
 Powered by NewPipe Extractor (GPLv3), Media3/ExoPlayer, SponsorBlock, DeArrow, Return YouTube Dislike and Framework7 Icons (MIT).
 
 ---
-*Vidora is not affiliated with YouTube or Google.*
+*Orvixa is not affiliated with YouTube or Google.*
