@@ -1,0 +1,12 @@
+<p><b>Vidora</b> is a modern, ad-free YouTube client built with Jetpack Compose and Media3.</p>
+<ul>
+<li>No ads, no trackers, optional sign-in</li>
+<li>Background playback, picture-in-picture, sleep timer, queue that survives restarts</li>
+<li>Download video (up to 4K) or audio in the quality you choose</li>
+<li>Gestures, seek-bar previews, captions with auto-translate, audio-language picker, equalizer</li>
+<li>Comments, Return YouTube Dislike, DeArrow, SponsorBlock</li>
+<li>Vertical Shorts player, content filters, local playlists, subscription groups</li>
+<li>New-video notifications, widget, Quick Settings tile, Android Auto and Android TV</li>
+<li>Fully customisable theme, accent colour, launcher icon and name</li>
+</ul>
+<p>Vidora is not affiliated with YouTube or Google.</p>

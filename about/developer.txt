@@ -1,0 +1,28 @@
+# Vidora developer profile — shown at the top of Settings → About.
+# Edit this file on GitHub from your phone (tap the pencil ✏️, change, then "Commit changes").
+# Write after the colon ( : ). Leave a line empty to hide it. Lines starting with # are notes.
+# The app picks up changes the next time About is opened (pull down / tap refresh).
+
+name: Shahriar Rahman
+role: Developer of Vidora
+verified: yes
+location: Bangladesh
+bio: Building a clean, ad-free YouTube experience for everyone.
+
+# PHOTO: upload a picture named photo.jpg into this same "about" folder
+# (GitHub → about folder → Add file → Upload files), then write:  photo: photo.jpg
+# Or paste any picture link, e.g.  photo: https://example.com/me.jpg
+photo:
+
+# CONTACTS — each one becomes a button. Phone numbers can be 01XXXXXXXXX or +8801XXXXXXXXX.
+whatsapp:
+phone:
+email:
+telegram:
+facebook:
+instagram:
+youtube:
+tiktok:
+x:
+github: sremonak
+website:

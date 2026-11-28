@@ -1,0 +1,91 @@
+# Diagnostics only: checks from a datacenter IP (like a VPN exit) which YouTube player clients
+# still return playable streams. Results are reported as annotations on the run.
+name: Playback probe
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "tools/probe/**"
+      - ".github/workflows/probe.yml"
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@4c125117fe7c5aed11272ec4213f602f012f89f2 # v5
+      - name: Probe clients (Kotlin + NewPipe Extractor)
+        run: |
+          set +e
+          ./gradlew -p tools/probe run --no-daemon -q 2>&1 | tee probe.txt
+          status=${PIPESTATUS[0]}
+          grep -E "^e: |error:|Exception" probe.txt | head -15 | while IFS= read -r l; do echo "::error::$l"; done
+          exit $status
+      - name: Compare with yt-dlp
+        continue-on-error: true
+        run: |
+          pip install -q --upgrade "yt-dlp[default]"
+          curl -fsSL https://deno.land/install.sh | sh -s -- -y >/dev/null 2>&1 || true
+          export PATH="$HOME/.deno/bin:$PATH"
+          yt-dlp --no-colors --print-traffic -f 140 --extractor-args "youtube:player_client=tv_samsung" -o /tmp/a.m4a "https://www.youtube.com/watch?v=dQw4w9WgXcQ" > /tmp/dl.log 2>&1 || true
+          tr=$(grep "videoplayback" /tmp/dl.log | head -1 | sed -E 's/\?[^ ]*/?…/' | sed 's/\\r\\n/\n/g' | cut -c1-400; grep -E "reply:" /tmp/dl.log | tail -2)
+          tr=$(echo "$tr" | sed 's/%/%25/g' | tr '\n' '\001' | sed 's/\x01/%0A/g')
+          echo "::notice title=yt-dlp traffic tv_samsung 140::$tr"
+          python3 - <<'PY' > /tmp/replay.txt 2>&1 || true
+          import re, urllib.request
+          log = open('/tmp/dl.log').read()
+          m = re.search(r"send: b'GET (/videoplayback\?[^ ]+) HTTP/1.1\\r\\nHost: ([^\\]+)\\r\\n(.*?)\\r\\n\\r\\n'", log)
+          if not m:
+              print('no match'); raise SystemExit
+          path, host, hdrs = m.group(1), m.group(2), m.group(3)
+          H = dict(h.split(': ', 1) for h in hdrs.split('\\r\\n'))
+          url = f'https://{host}{path}'
+          def t(name, headers):
+              try:
+                  r = urllib.request.urlopen(urllib.request.Request(url, headers=headers)); print(name, r.status, end=' '); r.close()
+              except Exception as e:
+                  print(name, getattr(e, 'code', e), end=' ')
+          t('exact', H)
+          t('smallRange', {**H, 'Range': 'bytes=0-4095'})
+          t('noSecFetch', {k: v for k, v in H.items() if k != 'Sec-Fetch-Mode'})
+          t('noAccept', {k: v for k, v in H.items() if k not in ('Accept', 'Accept-Language')})
+          t('tvUA', {**H, 'User-Agent': 'Mozilla/5.0 (SMART-TV; Linux; Tizen 2.4.0) AppleWebKit/538.1 (KHTML, like Gecko) Version/2.4.0 TV Safari/538.1'})
+          t('onlyUA+Range', {'User-Agent': H['User-Agent'], 'Range': H['Range']})
+          t('onlyRange', {'Range': H['Range']})
+          import urllib.parse, subprocess
+          q = dict(urllib.parse.parse_qsl(path.split('?',1)[1]))
+          print('\nDL: n=%s siglen=%d sig=%s lsiglen=%d' % (q.get('n'), len(q.get('sig','')), q.get('sig','')[:12], len(q.get('lsig',''))))
+          for label, extra in (('g-cached', []), ('g-nocache', ['--no-cache-dir'])):
+              g = subprocess.run(['yt-dlp', '-g', '-f', '140', *extra, '--extractor-args', 'youtube:player_client=tv_samsung', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'], capture_output=True, text=True).stdout.strip().splitlines()
+              if not g: print(label, 'no url'); continue
+              gq = dict(urllib.parse.parse_qsl(g[0].split('?',1)[1]))
+              try:
+                  st = urllib.request.urlopen(urllib.request.Request(g[0], headers={'Range': 'bytes=0-4095'})).status
+              except Exception as e:
+                  st = getattr(e, 'code', e)
+              print('\n%s: status=%s n=%s siglen=%d sig=%s' % (label, st, gq.get('n'), len(gq.get('sig','')), gq.get('sig','')[:12]))
+          PY
+          rp=$(cat /tmp/replay.txt | sed 's/%/%25/g' | tr '\n' '\001' | sed 's/\x01/%0A/g')
+          echo "::notice title=yt-dlp replay tv_samsung 140::$rp"
+          u=$(yt-dlp -g -f 140 --extractor-args "youtube:player_client=tv_samsung" "https://www.youtube.com/watch?v=dQw4w9WgXcQ" 2>/dev/null | head -1)
+          CH="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36"
+          r=""
+          r="$r plain=$(curl -s -o /dev/null -w "%{http_code}" -r 0-4095 "$u")"
+          r="$r chromeUA=$(curl -s -o /dev/null -w "%{http_code}" -A "$CH" -r 0-4095 "$u")"
+          r="$r secfetch=$(curl -s -o /dev/null -w "%{http_code}" -A "$CH" -H "Sec-Fetch-Mode: navigate" -r 0-4095 "$u")"
+          r="$r accept=$(curl -s -o /dev/null -w "%{http_code}" -A "$CH" -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" -H "Accept-Language: en-us,en;q=0.5" -r 0-4095 "$u")"
+          r="$r origin=$(curl -s -o /dev/null -w "%{http_code}" -A "$CH" -H "Origin: https://www.youtube.com" -H "Referer: https://www.youtube.com/" -r 0-4095 "$u")"
+          r="$r all=$(curl -s -o /dev/null -w "%{http_code}" -A "$CH" -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" -H "Accept-Language: en-us,en;q=0.5" -H "Sec-Fetch-Mode: navigate" -H "Accept-Encoding: gzip, deflate" -r 0-4095 "$u")"
+          r="$r ytdlpRange=$(curl -s -o /dev/null -w "%{http_code}" -A "$CH" -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" -H "Accept-Language: en-us,en;q=0.5" -H "Sec-Fetch-Mode: navigate" -r 0-10485759 "$u")"
+          r="$r http11=$(curl -s --http1.1 -o /dev/null -w "%{http_code}" -r 0-4095 "$u")"
+          r="$r http11chrome=$(curl -s --http1.1 -o /dev/null -w "%{http_code}" -A "$CH" -r 0-4095 "$u")"
+          r="$r py=$(python3 -c "import urllib.request,sys;r=urllib.request.Request(sys.argv[1],headers={'Range':'bytes=0-4095','User-Agent':'$CH'});print(urllib.request.urlopen(r).status)" "$u" 2>&1 | tail -1 | cut -c1-60)"
+          echo "::notice title=yt-dlp url tv_samsung 140::$r"
+          for c in default; do
+            out=$(yt-dlp -v --no-colors -F --extractor-args "youtube:player_client=$c" "https://www.youtube.com/watch?v=dQw4w9WgXcQ" 2>&1 | grep -E "WARNING|ERROR|^[0-9]{2,3} |player API JSON|\[debug\] yt-dlp version|JS runtimes" | head -40 | sed 's/%/%25/g' | tr '\n' '\001' | sed 's/\x01/%0A/g')
+            echo "::notice title=yt-dlp $c::$out"
+          done

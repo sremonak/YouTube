@@ -1,0 +1,282 @@
+package com.vidora.app.ui.screens
+
+import com.vidora.app.ui.theme.GlassAlertDialog
+import androidx.compose.ui.res.stringResource
+import com.vidora.app.R
+import android.Manifest
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import android.widget.Toast
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import com.vidora.app.ui.icons.OpenInNew
+import com.vidora.app.ui.icons.Close
+import com.vidora.app.ui.icons.Delete
+import com.vidora.app.ui.icons.Download
+import com.vidora.app.ui.icons.MoreVert
+import com.vidora.app.ui.icons.PlayArrow
+import com.vidora.app.ui.icons.Refresh
+import com.vidora.app.ui.icons.Share
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
+import androidx.navigation.NavHostController
+import com.vidora.app.Graph
+import com.vidora.app.download.DownloadDashboard
+import com.vidora.app.download.DownloadView
+import com.vidora.app.download.DownloadOrder
+import com.vidora.app.ui.components.ChoiceMenu
+import androidx.compose.material3.OutlinedTextField
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.vidora.app.download.DownloadKind
+import com.vidora.app.download.DownloadRecord
+import com.vidora.app.download.DownloadStatus
+import com.vidora.app.download.Downloads
+import com.vidora.app.download.Storage
+import com.vidora.app.ui.Routes
+import com.vidora.app.ui.components.EmptyState
+import com.vidora.app.ui.components.Thumbnail
+import com.vidora.app.util.Format
+import kotlinx.coroutines.launch
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DownloadsScreen(nav: NavHostController) {
+    val context = LocalContext.current
+    val items by Graph.downloads.items.collectAsStateWithLifecycle()
+    var filter by rememberSaveable { mutableStateOf(0) } // 0 all, 1 video, 2 audio
+    var deleteTarget by remember { mutableStateOf<DownloadRecord?>(null) }
+    var query by rememberSaveable { mutableStateOf("") }
+    var view by rememberSaveable { mutableStateOf(DownloadView.ALL) }
+    var order by rememberSaveable { mutableStateOf(DownloadOrder.NEWEST) }
+    var bulkCancel by remember { mutableStateOf<List<String>?>(null) }
+    var retrying by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+
+    // Storage permission is only needed on Android 9 and older.
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
+        ) {
+            (context as? android.app.Activity)?.requestPermissions(arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE), 7)
+        }
+    }
+
+    val visible = remember(items, query, filter, view, order) {
+        DownloadDashboard.filter(items, query, when (filter) { 1 -> DownloadKind.VIDEO; 2 -> DownloadKind.AUDIO; else -> null }, view, order)
+    }
+    val totalSize = DownloadDashboard.completedBytes(items)
+
+    com.vidora.app.ui.theme.GlassPage(header = {
+        TopAppBar(
+            title = {
+                Column {
+                    Text(stringResource(R.string.ui_downloads))
+                    Text("${items.count { it.status == DownloadStatus.COMPLETED }} files · ${Format.bytes(totalSize)}",
+                        style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            },
+            colors = com.vidora.app.ui.theme.glassBarColors()
+        )
+        OutlinedTextField(query, { query = it }, singleLine = true, label = { Text("Search downloads") },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp))
+        LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+            items(listOf("All", "Video", "Audio").withIndex().toList()) { (i, label) ->
+                FilterChip(selected = filter == i, onClick = { filter = i }, label = { Text(label) })
+            }
+        }
+        LazyRow(contentPadding = PaddingValues(horizontal = 8.dp)) {
+            item { ChoiceMenu(view.label, DownloadView.entries.map { it.label }) { view = DownloadView.entries[it] } }
+            item { ChoiceMenu(order.label, DownloadOrder.entries.map { it.label }) { order = DownloadOrder.entries[it] } }
+            if (!retrying) item { ChoiceMenu("Batch actions", listOf("Retry matching failed/cancelled", "Cancel matching active")) { action ->
+                if (action == 1) bulkCancel = visible.filter { DownloadDashboard.active(it.status) }.map { it.id }
+                else {
+                    val ids = visible.filter { DownloadDashboard.retryable(it.status) }.map { it.id }
+                    scope.launch {
+                        retrying = true
+                        var count = 0
+                        try {
+                            for (id in ids) if (DownloadDashboard.retryable(Graph.downloads.get(id)?.status ?: continue)) {
+                                Downloads.retry(context, id); count++
+                            }
+                            Toast.makeText(context, "$count downloads queued for retry", Toast.LENGTH_SHORT).show()
+                        } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+                        catch (_: Exception) { Toast.makeText(context, "Some downloads could not be queued. Check their status.", Toast.LENGTH_LONG).show() }
+                        finally { retrying = false }
+                    }
+                }
+            } }
+        }
+        Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("${visible.size} matching · ${Format.bytes(DownloadDashboard.completedBytes(visible))} completed${if (retrying) " · Queueing retries…" else ""}",
+                style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
+            TextButton(onClick = { query = ""; filter = 0; view = DownloadView.ALL; order = DownloadOrder.NEWEST }) { Text("Reset filters") }
+        }
+    }) {
+        if (visible.isEmpty()) {
+            Column {
+                com.vidora.app.ui.theme.TopChromeSpacer()
+                EmptyState(
+                    if (items.isEmpty()) stringResource(R.string.ui_no_downloads_yet) else "No matching downloads",
+                    if (items.isEmpty()) stringResource(R.string.ui_tap_download_on_any_video_to_save_it_as) else "Change your search or reset filters.",
+                    Icons.Rounded.Download
+                )
+            }
+        } else {
+            LazyColumn(contentPadding = PaddingValues(top = com.vidora.app.ui.theme.topChromePadding(), bottom = com.vidora.app.ui.theme.bottomChromePadding())) {
+                items(visible, key = { it.id }) { record ->
+                    DownloadRow(record, onPlay = {
+                        val uri = record.uri?.toUri() ?: return@DownloadRow
+                        if (!Storage.exists(context, record)) {
+                            Toast.makeText(context, "File was moved or deleted", Toast.LENGTH_SHORT).show()
+                            return@DownloadRow
+                        }
+                        Graph.player.playLocal(record.video, uri, audioOnly = record.kind == DownloadKind.AUDIO)
+                        nav.navigate(Routes.PLAYER)
+                    }, onDelete = { deleteTarget = record })
+                }
+            }
+        }
+    }
+
+    bulkCancel?.let { ids ->
+        GlassAlertDialog(onDismissRequest = { bulkCancel = null }, title = { Text("Cancel ${ids.size} matching downloads?") },
+            text = { Text("Completed files are kept. Cancelled downloads can be retried from the beginning; this is not pause/resume.") },
+            confirmButton = { TextButton(onClick = {
+                ids.forEach { id -> if (Graph.downloads.get(id)?.let { DownloadDashboard.active(it.status) } == true) Downloads.cancel(context, id) }
+                bulkCancel = null
+            }) { Text("Cancel downloads") } },
+            dismissButton = { TextButton(onClick = { bulkCancel = null }) { Text("Keep downloading") } })
+    }
+
+    deleteTarget?.let { r ->
+        GlassAlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            title = { Text(stringResource(R.string.ui_delete_download)) },
+            text = { Text(r.video.title) },
+            confirmButton = {
+                TextButton(onClick = { Downloads.delete(context, r.id, deleteFile = true); deleteTarget = null }) { Text(stringResource(R.string.ui_delete_file)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { Downloads.delete(context, r.id, deleteFile = false); deleteTarget = null }) { Text(stringResource(R.string.ui_remove_from_list)) }
+            }
+        )
+    }
+}
+
+@Composable
+private fun DownloadRow(record: DownloadRecord, onPlay: () -> Unit, onDelete: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var menu by remember { mutableStateOf(false) }
+    val active = record.status == DownloadStatus.RUNNING || record.status == DownloadStatus.QUEUED || record.status == DownloadStatus.MUXING
+    val config = LocalConfiguration.current
+    val thumbnailWidth = if (config.screenWidthDp < 400 || config.fontScale > 1.3f) 96.dp else 128.dp
+
+    Row(
+        Modifier.fillMaxWidth().clickable(enabled = record.status == DownloadStatus.COMPLETED, onClick = onPlay)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Thumbnail(record.video.copy(duration = if (record.kind == DownloadKind.AUDIO) 0 else record.video.duration), Modifier.width(thumbnailWidth))
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f).testTag("download-details-${record.id}")) {
+            Text(record.video.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Spacer(Modifier.height(2.dp))
+            val statusText = when (record.status) {
+                DownloadStatus.QUEUED -> "Queued · waiting for worker / network"
+                DownloadStatus.RUNNING -> "${(record.progress * 100).toInt()}% · ${Format.bytes(record.downloadedBytes)} / ${Format.bytes(record.totalBytes)} · ${Format.speed(record.speedBps)}"
+                DownloadStatus.MUXING -> "Merging audio + video…"
+                DownloadStatus.COMPLETED -> "${if (record.kind == DownloadKind.AUDIO) "Audio" else "Video"} · ${record.qualityLabel} · ${Format.bytes(record.totalBytes)}"
+                DownloadStatus.FAILED -> "Failed: ${record.error ?: "unknown error"}"
+                DownloadStatus.CANCELLED -> "Cancelled"
+            }
+            Text(
+                statusText, style = MaterialTheme.typography.bodySmall, maxLines = 2,
+                color = if (record.status == DownloadStatus.FAILED) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (active) {
+                Spacer(Modifier.height(6.dp))
+                if (record.status == DownloadStatus.RUNNING && record.progress > 0f) {
+                    LinearProgressIndicator(progress = { record.progress }, modifier = Modifier.fillMaxWidth())
+                } else LinearProgressIndicator(Modifier.fillMaxWidth())
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.End) {
+                when {
+                    active -> IconButton(onClick = { Downloads.cancel(context, record.id) }) { Icon(Icons.Rounded.Close, "Cancel") }
+                    record.status == DownloadStatus.FAILED || record.status == DownloadStatus.CANCELLED ->
+                        IconButton(onClick = { scope.launch {
+                            try { Downloads.retry(context, record.id) }
+                            catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+                            catch (_: Exception) { Toast.makeText(context, "Could not queue retry", Toast.LENGTH_SHORT).show() }
+                        } }) { Icon(Icons.Rounded.Refresh, "Retry") }
+                    else -> IconButton(onClick = onPlay) { Icon(Icons.Rounded.PlayArrow, "Play") }
+                }
+                androidx.compose.foundation.layout.Box {
+                    IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.MoreVert, "More") }
+                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        if (record.status == DownloadStatus.COMPLETED) {
+                            DropdownMenuItem(text = { Text(stringResource(R.string.ui_open_with)) }, leadingIcon = { Icon(Icons.AutoMirrored.Rounded.OpenInNew, null) }, onClick = {
+                                menu = false
+                                val uri = Storage.shareableUri(context, record) ?: return@DropdownMenuItem
+                                val intent = Intent(Intent.ACTION_VIEW).setDataAndType(uri, record.mime).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                try { context.startActivity(Intent.createChooser(intent, "Open with")) } catch (_: ActivityNotFoundException) {}
+                            })
+                            DropdownMenuItem(text = { Text(stringResource(R.string.ui_share_file)) }, leadingIcon = { Icon(Icons.Rounded.Share, null) }, onClick = {
+                                menu = false
+                                val uri = Storage.shareableUri(context, record) ?: return@DropdownMenuItem
+                                val intent = Intent(Intent.ACTION_SEND).setType(record.mime).putExtra(Intent.EXTRA_STREAM, uri)
+                                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                context.startActivity(Intent.createChooser(intent, "Share"))
+                            })
+                        }
+                        DropdownMenuItem(text = { Text(stringResource(R.string.ui_delete)) }, leadingIcon = { Icon(Icons.Rounded.Delete, null) }, onClick = { menu = false; onDelete() })
+                    }
+                }
+            }
+        }
+    }
+}

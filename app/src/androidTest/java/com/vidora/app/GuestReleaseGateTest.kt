@@ -1,0 +1,202 @@
+package com.vidora.app
+
+import androidx.compose.ui.test.*
+import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.test.core.app.ActivityScenario
+import androidx.test.platform.app.InstrumentationRegistry
+import androidx.media3.common.Player
+import com.vidora.app.data.*
+import com.vidora.app.ui.UiCache
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.joinAll
+import org.junit.*
+import org.junit.Assert.*
+import java.io.File
+
+/** Offline fixture gate, deliberately separate from upstream-dependent PlaybackE2ETest. */
+class GuestReleaseGateTest {
+    @get:Rule val compose = createEmptyComposeRule()
+    private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
+    private val context get() = instrumentation.targetContext
+    private var scenario: ActivityScenario<MainActivity>? = null
+    private val peer = VideoItem("https://tilvids.com/videos/watch/3620cd16-97f4-488c-a018-a6897baddbc4", "Peer fixture video", uploader = "Fixture creator", duration = 2, platform = "PeerTube")
+    private val commons = VideoItem(GuestSources.commonsUrl("File:Fixture.webm"), "Commons fixture video", duration = 2, platform = "Commons")
+    @Before fun prepare() = runBlocking {
+        // Keep the platform permission dialog out of the Compose-only fixture journey.
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            instrumentation.uiAutomation.executeShellCommand(
+                "pm grant ${context.packageName} android.permission.POST_NOTIFICATIONS"
+            ).close()
+        }
+        context.getSharedPreferences("vidora_onboarding", 0).edit().putBoolean("welcome_done", true).commit()
+        Graph.settings.update { it.copy(autoUpdateCheck = false, autoRegionByIp = false, contentCountry = "US", glassUi = false,
+            sponsorBlock = false, prefetchNext = false, persistQueue = false, shortsFit = false, showContinueWatching = true, onboardingDone = true, homeInterests = emptySet(), homeLanguage = "", lessLikeVideos = emptySet()) }
+        com.vidora.app.ui.screens.ShortsSession.seed = emptyList()
+        Graph.discoveryOverride = DiscoveryRepository(youtubeSearch = { _, _ -> PageResult(emptyList()) },
+            peerSearch = { PageResult(listOf(Entry.Video(peer))) }, commonsSearch = { PageResult(listOf(Entry.Video(commons))) },
+            peerHome = { PageResult(listOf(Entry.Video(peer))) })
+        val media = File(context.cacheDir, "synthetic.mp4")
+        instrumentation.context.assets.open("synthetic.mp4").use { input -> media.outputStream().use { input.copyTo(it) } }
+        Graph.streamOverride = { url ->
+            val item = if (GuestSources.isCommons(url)) commons else peer
+            StreamDetails(item, "Synthetic release-test fixture", -1, -1,
+                listOf(VideoOption(media.toURI().toString(), 999, 90, 15, "90p", "video/mp4", "mp4", "avc1.42E01E", false, 0, media.length())),
+                emptyList(), null, null, emptyList(), emptyList(), emptyList(), null)
+        }
+        instrumentation.runOnMainSync { UiCache.clearAll() }
+    }
+    @After fun cleanup() {
+        scenario?.close()
+        instrumentation.runOnMainSync { Graph.player.stop(); UiCache.clearAll() }
+        Graph.discoveryOverride = null; Graph.streamOverride = null; Graph.shortsOverride = null
+    }
+    @Test fun guestHomeSearchSaveAndBothSourcePlayback() {
+        scenario = ActivityScenario.launch(MainActivity::class.java)
+        compose.waitUntil(20_000) { compose.onAllNodesWithText(peer.title).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() }
+        compose.onNodeWithContentDescription("Search").performClick()
+        compose.onAllNodes(hasSetTextAction()).onFirst().performTextReplacement("fixture exact query")
+        compose.onAllNodes(hasSetTextAction()).onFirst().performImeAction()
+        compose.waitUntil(15_000) { compose.onAllNodesWithText(peer.title).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() }
+        compose.onNodeWithText(peer.title).performTouchInput { longClick() }
+        compose.onNodeWithText("Save to Watch later").performClick()
+        compose.waitUntil(5000) { Graph.library.data.value.watchLater.any { it.url == peer.url } }
+        compose.onNodeWithText(peer.title).performClick()
+        compose.waitUntil(15_000) { Graph.player.state.value.current?.url == peer.url && Graph.player.state.value.startupMs > 0 }
+        assertNull(Graph.player.state.value.error)
+        instrumentation.runOnMainSync { Graph.player.play(commons) }
+        compose.waitUntil(15_000) { Graph.player.state.value.current?.url == commons.url && Graph.player.state.value.startupMs > 0 }
+        assertNull(Graph.player.state.value.error)
+        scenario!!.recreate()
+        compose.waitUntil(10_000) { Graph.player.state.value.current?.url == commons.url }
+        assertTrue(Graph.library.data.value.watchLater.any { it.url == peer.url })
+    }
+    @Test fun delayedWatchHistoryCheckStaysOnPlayerThreadAfterFifteenSeconds() {
+        val media = File(context.cacheDir, "synthetic-long.mp4")
+        instrumentation.context.assets.open("synthetic-long.mp4").use { input -> media.outputStream().use { input.copyTo(it) } }
+        Graph.streamOverride = {
+            StreamDetails(peer.copy(duration = 40), "Long offline thread-regression fixture", -1, -1,
+                listOf(VideoOption(media.toURI().toString(), 999, 90, 15, "90p", "video/mp4", "mp4", "avc1.42E01E", false, 0, media.length())),
+                emptyList(), null, null, emptyList(), emptyList(), emptyList(), null)
+        }
+        scenario = ActivityScenario.launch(MainActivity::class.java)
+        instrumentation.runOnMainSync { Graph.player.play(peer.copy(duration = 40)) }
+        compose.waitUntil(20_000) { Graph.player.state.value.isPlaying }
+        // Inspect the real scheduled job: a two-second fixture previously ended before
+        // this delay and missed the crash, even for guest playback.
+        val field = Graph.player.javaClass.getDeclaredField("historyReportJob").apply { isAccessible = true }
+        lateinit var report: kotlinx.coroutines.Job
+        instrumentation.runOnMainSync { report = field.get(Graph.player) as kotlinx.coroutines.Job }
+        compose.waitUntil(25_000) { report.isCompleted }
+        assertFalse("Delayed player access failed/cancelled before completing", report.isCancelled)
+        assertNull(Graph.player.state.value.error)
+        assertTrue(Graph.library.data.value.history.any { it.video.url == peer.url && it.actualWatchSeconds > 0 })
+    }
+
+    @Test fun calmHomeKeepsDownloadsLibrarySettingsAndShortsReachable() {
+        Graph.shortsOverride = ShortsRepository(browse = { PageResult(listOf(Entry.Video(peer.copy(isShort = true)))) }, search = { error("No search needed") })
+        scenario = ActivityScenario.launch(MainActivity::class.java)
+        compose.waitUntil(20_000) { compose.onAllNodesWithContentDescription("Search").fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() }
+        compose.onNodeWithContentDescription("Home options").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Library").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Settings").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Feed status").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Refresh feed").assertDoesNotExist()
+        compose.waitUntil(20_000) { compose.onAllNodesWithText(peer.title).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() }
+        compose.waitForIdle()
+        fun shell(command: String) = instrumentation.uiAutomation.executeShellCommand(command).use {
+            java.io.FileInputStream(it.fileDescriptor).bufferedReader().readText()
+        }
+        val directory = shell("mkdir -p /sdcard/Download/vidora-ui-snapshots")
+        // Capture as shell directly to its export folder: scoped storage on API 30
+        // prevents shell from copying the target app's Android/data external file.
+        val capture = shell("screencap -p /sdcard/Download/vidora-ui-snapshots/home-clean.png")
+        val exported = shell("ls /sdcard/Download/vidora-ui-snapshots/home-clean.png").trim()
+        assertTrue("Home capture/export failed: $directory $capture $exported", exported.endsWith("/home-clean.png"))
+        compose.onNodeWithText("Downloads").performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("Downloads").fetchSemanticsNodes(atLeastOneRootRequired = false).size >= 2 }
+        compose.onNodeWithText("You").performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithContentDescription("Settings").fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() }
+        compose.onNodeWithContentDescription("Settings").assertIsDisplayed()
+        compose.onNodeWithText("Shorts").performClick()
+        compose.waitUntil(20_000) { compose.onAllNodesWithContentDescription("Refresh Shorts").fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() }
+        compose.onNodeWithContentDescription("Refresh Shorts").assertIsDisplayed()
+        compose.onNodeWithText("Fill screen").performClick()
+        compose.waitUntil(5000) { Graph.settingsState.value.shortsFit }
+        compose.onNodeWithText("Fit video").assertIsDisplayed()
+        compose.onNodeWithText("Fit video").performClick()
+        compose.waitUntil(5000) { !Graph.settingsState.value.shortsFit }
+    }
+
+    @Test fun explicitRefreshActuallyRequestsNewFeedAndReportsSameResultsHonestly() {
+        val calls = java.util.concurrent.atomic.AtomicInteger()
+        val fresh = peer.copy(url = peer.url + "?fresh", title = "Fresh fixture result")
+        Graph.discoveryOverride = DiscoveryRepository(youtubeSearch = { _, _ ->
+            PageResult(listOf(Entry.Video(if (calls.incrementAndGet() == 1) peer else fresh)))
+        }, peerSearch = { PageResult(emptyList()) }, commonsSearch = { PageResult(emptyList()) }, peerHome = { PageResult(emptyList()) })
+        scenario = ActivityScenario.launch(MainActivity::class.java)
+        compose.waitUntil(20_000) { calls.get() > 0 && compose.onAllNodesWithText(peer.title).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() }
+        compose.onNodeWithText("Home").performClick()
+        compose.waitUntil(20_000) { compose.onAllNodesWithText(fresh.title).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() }
+        assertTrue(calls.get() >= 2)
+        compose.waitUntil(5000) { compose.onAllNodesWithText("Feed updated · fresh results loaded").fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() }
+        compose.onNodeWithText("Home").performClick()
+        compose.waitUntil(20_000) { compose.onAllNodesWithText("Checked just now · providers returned the same videos").fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() }
+    }
+    @Test fun searchFiltersAreReversibleAndKeyboardDoesNotCoverResults() {
+        scenario = ActivityScenario.launch(MainActivity::class.java)
+        compose.waitUntil(20_000) { compose.onAllNodesWithContentDescription("Search").fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() }
+        compose.onNodeWithContentDescription("Search").performClick()
+        compose.onAllNodes(hasSetTextAction()).onFirst().performTextReplacement("fixture")
+        compose.onAllNodes(hasSetTextAction()).onFirst().performImeAction()
+        compose.waitUntil(15_000) { compose.onAllNodesWithText("Filters").fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() }
+        compose.onNodeWithText("Filters").performClick()
+        compose.onNodeWithText("Hide live").performScrollTo().performClick()
+        compose.onNodeWithText("Clear all filters").performScrollTo().performClick()
+        compose.onNodeWithText("Show results").performScrollTo().performClick()
+        compose.onNodeWithText("Filters").assertIsDisplayed()
+    }
+    @Test fun homeKeepsVerboseFeedLabelsOutOfTheHeader() {
+        scenario = ActivityScenario.launch(MainActivity::class.java)
+        compose.waitUntil(20_000) { compose.onAllNodesWithText(peer.title).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() }
+        compose.onNodeWithText("Explore · US").assertDoesNotExist()
+        compose.onNodeWithText("Your YouTube recommendations").assertDoesNotExist()
+        compose.onNodeWithText("Source details & retry").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Search").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Check for updates").assertIsDisplayed()
+    }
+    @Test fun invalidatingAnActiveAccountPageMakesItReloadOnReturn() {
+        lateinit var page: com.vidora.app.ui.Paged
+        val calls = java.util.concurrent.atomic.AtomicInteger()
+        instrumentation.runOnMainSync {
+            page = UiCache.paged("home:true:fixture:acc") { calls.incrementAndGet(); PageResult(listOf(Entry.Video(peer))) }
+            page.ensureLoaded()
+        }
+        compose.waitUntil(5000) { page.items.isNotEmpty() && !page.loading }
+        instrumentation.runOnMainSync { UiCache.invalidate("home:true:"); page.ensureLoaded() }
+        compose.waitUntil(5000) { calls.get() == 2 && !page.refreshing }
+        assertEquals(2, calls.get())
+    }
+
+    @Test fun publicSnapshotsSurviveDatabaseReopenAndClear() = runBlocking {
+        val name = "release-gate-${System.nanoTime()}.db"
+        var store = FeedStore(context, name)
+        val rows = listOf(Entry.Video(peer), Entry.Video(commons))
+        store.write("home:public:US", rows); store.close()
+        store = FeedStore(context, name)
+        assertEquals(rows, store.read("home:public:US"))
+        store.clear(); assertTrue(store.read("home:public:US").isEmpty())
+        // Deterministically queue an old write behind the store lock, then request privacy clear.
+        val field = FeedStore::class.java.getDeclaredField("operations").apply { isAccessible = true }
+        val gate = field.get(store) as kotlinx.coroutines.sync.Mutex
+        gate.lock()
+        val staleWrite = launch(start = CoroutineStart.UNDISPATCHED) { store.write("search:old", rows) }
+        val privacyClear = launch(start = CoroutineStart.UNDISPATCHED) { store.clear() }
+        gate.unlock()
+        joinAll(staleWrite, privacyClear)
+        assertTrue(store.read("search:old").isEmpty())
+        store.close(); context.deleteDatabase(name)
+        Unit
+    }
+}

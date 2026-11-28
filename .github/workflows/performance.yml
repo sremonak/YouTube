@@ -1,0 +1,78 @@
+name: Performance and profile generation
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "benchmark/**"
+      - ".github/workflows/performance.yml"
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  measure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@4c125117fe7c5aed11272ec4213f602f012f89f2 # v5
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: bash tools/ci/performance-gate.sh
+      - name: Report emulator assertions
+        if: failure()
+        run: |
+          python3 - <<'PYASSERT'
+          import pathlib,xml.etree.ElementTree as ET
+          for path in pathlib.Path('benchmark/build/outputs').rglob('*.xml'):
+              try: root=ET.parse(path).getroot()
+              except ET.ParseError: continue
+              for case in root.iter('testcase'):
+                  for tag in ('failure','error'):
+                      err=case.find(tag)
+                      if err is not None:
+                          msg=((err.get('message') or '')+' '+(err.text or ''))[:5000]
+                          msg=msg.replace('%','%25').replace('\n','%0A').replace('\r','')
+                          print('::error title='+case.get('name','emulator')+'::'+msg)
+          PYASSERT
+
+      - name: Measured output and generated profiles
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: performance-${{ github.run_id }}
+          path: |
+            benchmark/build/outputs/
+            benchmark/build/reports/
+          retention-days: 14
+      - name: Return generated profile and measured summary for review
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PYPROFILE'
+          import pathlib,gzip,base64,json
+          files=list(pathlib.Path('benchmark/build').rglob('*baseline-prof*.txt'))
+          summaries=list(pathlib.Path('benchmark/build').rglob('*benchmarkData*.json'))
+          if not files: raise SystemExit('No generated baseline profile found: '+str([str(p) for p in pathlib.Path('benchmark/build').rglob('*.txt')]))
+          if not summaries: raise SystemExit('No measured benchmark JSON found')
+          profile=sorted(files, key=lambda p: (not p.name.endswith('-baseline-prof.txt'), str(p)))[0].read_bytes()
+          payload={'profile_gzip_base64':base64.b64encode(gzip.compress(profile)).decode(),
+                   'summaries':[json.loads(p.read_text()) for p in summaries]}
+          encoded=base64.b64encode(gzip.compress(json.dumps(payload).encode())).decode()
+          pathlib.Path('/tmp/profile-comment.txt').write_text('VIDORA_MEASURED_PROFILE\n'+encoded)
+          PYPROFILE
+          gh pr comment 1 --body-file /tmp/profile-comment.txt
